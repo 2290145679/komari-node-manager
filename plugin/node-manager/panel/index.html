@@ -286,6 +286,7 @@
     </div>
 
     <!-- TAB 3: Subscription & Routing Rules Section -->
+        <!-- TAB 3: Subscription & Routing Rules Section -->
     <div id="tabContentRules" class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hidden">
       <div class="p-3.5 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -307,12 +308,96 @@
         </div>
       </div>
 
-      <div class="p-3.5 sm:p-6 space-y-5 sm:space-y-6">
-        <!-- 核心常用分流预设 -->
+      <div class="p-3.5 sm:p-6 space-y-6">
+
+        <!-- 1. 常用热门服务一键分流 (小白推荐) -->
+        <div>
+          <div class="flex items-center justify-between mb-2.5">
+            <h3 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+              常用热门服务一键分流 (小白推荐)
+            </h3>
+            <span class="text-[10px] text-slate-400">一键启用，无需手动查域名</span>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
+            <!-- AI 服务代理 -->
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleProxyAi" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">🤖 AI 智能大模型服务</span>
+                  <span class="text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 rounded-full border border-purple-500/20">走代理</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  ChatGPT、Claude、Gemini、Copilot 等官方域名走代理，杜绝国内封锁与阻断。
+                </p>
+              </div>
+            </label>
+
+            <!-- Telegram 专线 -->
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleProxyTg" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">✈️ Telegram 社交专线</span>
+                  <span class="text-[10px] font-semibold bg-sky-500/10 text-sky-600 dark:text-sky-400 px-1.5 rounded-full border border-sky-500/20">走代理</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  Telegram 官方全部 IP 网段与域名走代理，秒解电脑与手机端转圈。
+                </p>
+              </div>
+            </label>
+
+            <!-- 海外流媒体 -->
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleProxyMedia" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">🎬 海外主流流媒体</span>
+                  <span class="text-[10px] font-semibold bg-rose-500/10 text-rose-600 dark:text-rose-400 px-1.5 rounded-full border border-rose-500/20">走代理</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  YouTube、Netflix、Disney+、Spotify 官方域名与视频流分流，畅享 4K。
+                </p>
+              </div>
+            </label>
+
+            <!-- 开发者加速 -->
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleProxyDev" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">💻 开发者常用服务加速</span>
+                  <span class="text-[10px] font-semibold bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 px-1.5 rounded-full border border-indigo-500/20">走代理</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  GitHub 源码、Docker Hub 镜像、Hugging Face 走代理，开发拉取零超时。
+                </p>
+              </div>
+            </label>
+
+            <!-- 游戏平台直连 -->
+            <label class="flex items-start gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleDirectGames" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-0.5 min-w-0">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">🎮 主流游戏平台直连</span>
+                  <span class="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 rounded-full border border-emerald-500/20">直连防锁</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  Steam、Epic Games、暴雪战网国区直连，极低延迟且避免节点变动被异地锁区。
+                </p>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <!-- 2. 基础核心网络分流 -->
         <div>
           <h3 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-            <i data-lucide="check-square" class="w-4 h-4 text-indigo-500"></i>
-            一键核心分流预设
+            <i data-lucide="shield-check" class="w-4 h-4 text-indigo-500"></i>
+            基础网络核心分流预设
           </h3>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3.5">
             <!-- BT/PT 强制直连 -->
@@ -401,32 +486,132 @@
           </div>
         </div>
 
-        <!-- 自定义规则编辑器 -->
-        <div>
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 mb-2">
+        <!-- 3. 自定义高级分流规则管理器 (全新双模式交互) -->
+        <div class="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
             <div>
               <h3 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <i data-lucide="edit-3" class="w-4 h-4 text-indigo-500"></i>
+                <i data-lucide="sliders-horizontal" class="w-4 h-4 text-indigo-500"></i>
                 自定义高级分流规则
               </h3>
-              <p class="text-[11px] text-slate-400 mt-0.5">一行一条，支持标准 Clash 规则，优先级最高（置于最顶部）</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">从上到下按序匹配，自定义规则优先级最高（置于所有预设之上）</p>
             </div>
-            <div class="flex items-center gap-1.5 flex-wrap">
-              <button type="button" onclick="insertRuleSnippet('DOMAIN-SUFFIX,themoviedb.org,PROXY')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
-                + 域名走代理
+
+            <!-- 模式切换：可视化模式 vs 代码模式 -->
+            <div class="inline-flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl self-start sm:self-auto text-xs font-medium">
+              <button type="button" id="ruleModeVisualBtn" onclick="switchRuleEditorMode('visual')" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-sm transition flex items-center gap-1.5">
+                <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+                <span>可视化模式</span>
               </button>
-              <button type="button" onclick="insertRuleSnippet('DOMAIN-KEYWORD,baidu,DIRECT')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
-                + 域名走直连
-              </button>
-              <button type="button" onclick="insertRuleSnippet('IP-CIDR,192.168.1.0/24,DIRECT,no-resolve')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
-                + IP段直连
+              <button type="button" id="ruleModeCodeBtn" onclick="switchRuleEditorMode('code')" class="px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center gap-1.5">
+                <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+                <span>代码模式</span>
               </button>
             </div>
           </div>
-          <textarea id="ruleCustomRules" rows="5" placeholder="# 在此处输入自定义规则，例如：&#10;DOMAIN-SUFFIX,themoviedb.org,PROXY&#10;DOMAIN-KEYWORD,douban,DIRECT&#10;IP-CIDR,18.136.66.215/32,PROXY" class="w-full text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"></textarea>
+
+          <!-- 可视化模式容器 -->
+          <div id="ruleVisualContainer" class="space-y-3.5">
+            <!-- 快速添加卡片 -->
+            <div class="p-3.5 sm:p-4 rounded-2xl bg-indigo-50/40 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+              <div class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center justify-between">
+                <span class="flex items-center gap-1.5 text-indigo-600 dark:text-indigo-400">
+                  <i data-lucide="plus-circle" class="w-4 h-4"></i>
+                  快速添加一条规则
+                </span>
+                <span class="text-[11px] text-slate-400 font-normal">支持直接粘贴完整网址，自动智能净化提取</span>
+              </div>
+
+              <!-- 输入与目标动作行 -->
+              <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                <div class="sm:col-span-7">
+                  <input type="text" id="quickRuleTargetInput" oninput="onQuickRuleInputChange()" placeholder="输入域名、关键词或 IP段 (例如 openai.com 或直接粘贴网址)..." class="w-full text-xs font-mono bg-white dark:bg-black/50 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div class="sm:col-span-3">
+                  <select id="quickRuleTypeSelect" onchange="onQuickRuleInputChange()" class="w-full text-xs font-medium bg-white dark:bg-black/50 border border-slate-200 dark:border-slate-700 rounded-xl px-2.5 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="AUTO">✨ 智能识别类型</option>
+                    <option value="DOMAIN-SUFFIX">🌐 域名后缀 (*.xxx.com)</option>
+                    <option value="DOMAIN">🎯 完全匹配域名 (精确)</option>
+                    <option value="DOMAIN-KEYWORD">🔍 包含关键词</option>
+                    <option value="IP-CIDR">🖥️ IP / CIDR 网段</option>
+                  </select>
+                </div>
+                <div class="sm:col-span-2">
+                  <button type="button" onclick="addVisualRuleFromInput()" class="w-full h-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    <span>添加</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- 动作选择单选按钮 & 智能提示 -->
+              <div class="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                <div class="flex items-center gap-1.5">
+                  <span class="text-slate-500 text-[11px] mr-1">路由走向:</span>
+                  <label class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/80 bg-white dark:bg-black/40 text-indigo-600 dark:text-indigo-400 font-semibold text-xs transition">
+                    <input type="radio" name="quickRuleAction" value="PROXY" checked class="w-3.5 h-3.5 text-indigo-600 focus:ring-indigo-500">
+                    <span>🚀 走代理</span>
+                  </label>
+                  <label class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 text-emerald-600 dark:text-emerald-400 font-semibold text-xs transition">
+                    <input type="radio" name="quickRuleAction" value="DIRECT" class="w-3.5 h-3.5 text-emerald-600 focus:ring-emerald-500">
+                    <span>⚡ 走直连</span>
+                  </label>
+                  <label class="cursor-pointer inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-black/40 text-rose-600 dark:text-rose-400 font-semibold text-xs transition">
+                    <input type="radio" name="quickRuleAction" value="REJECT" class="w-3.5 h-3.5 text-rose-600 focus:ring-rose-500">
+                    <span>🚫 拦截</span>
+                  </label>
+                </div>
+
+                <!-- 快捷填入示例小药丸 -->
+                <div class="flex items-center gap-1 flex-wrap text-[11px] text-slate-400">
+                  <span class="mr-0.5">常用快捷:</span>
+                  <button type="button" onclick="fillQuickPreset('themoviedb.org', 'DOMAIN-SUFFIX', 'PROXY')" class="px-1.5 py-0.5 bg-white dark:bg-black/40 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition">+ TMDB代理</button>
+                  <button type="button" onclick="fillQuickPreset('bilibili.com', 'DOMAIN-SUFFIX', 'DIRECT')" class="px-1.5 py-0.5 bg-white dark:bg-black/40 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition">+ B站直连</button>
+                  <button type="button" onclick="fillQuickPreset('10.0.0.0/8', 'IP-CIDR', 'DIRECT')" class="px-1.5 py-0.5 bg-white dark:bg-black/40 hover:bg-slate-100 dark:hover:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 transition">+ 10.0网段直连</button>
+                </div>
+              </div>
+
+              <!-- 智能识别提示文字 -->
+              <div id="quickRuleDetectMsg" class="text-[11px] text-slate-500 dark:text-slate-400 font-mono hidden pt-0.5"></div>
+            </div>
+
+            <!-- 可视化规则条目列表 -->
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <i data-lucide="list-checks" class="w-3.5 h-3.5 text-indigo-500"></i>
+                  已配置规则列表 (<span id="visualRulesCount">0</span> 条)
+                </span>
+                <button type="button" onclick="clearAllVisualRules()" class="text-[11px] text-rose-500 hover:text-rose-600 hover:underline transition">清空所有自定义规则</button>
+              </div>
+
+              <div id="visualRulesListContainer" class="space-y-2">
+                <!-- JS 动态渲染规则条目 -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 代码模式容器 (隐藏备用) -->
+          <div id="ruleCodeContainer" class="space-y-2.5 hidden">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <span class="text-[11px] text-slate-400">标准 Clash YAML 语法，一行一条规则，支持在任意客户端直接通用。</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <button type="button" onclick="insertRuleSnippet('DOMAIN-SUFFIX,themoviedb.org,PROXY')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                  + 域名走代理
+                </button>
+                <button type="button" onclick="insertRuleSnippet('DOMAIN-KEYWORD,baidu,DIRECT')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                  + 域名走直连
+                </button>
+                <button type="button" onclick="insertRuleSnippet('IP-CIDR,192.168.1.0/24,DIRECT,no-resolve')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                  + IP段直连
+                </button>
+              </div>
+            </div>
+            <textarea id="ruleCustomRules" rows="8" placeholder="# 在此处输入自定义规则，例如：&#10;DOMAIN-SUFFIX,themoviedb.org,PROXY&#10;DOMAIN-KEYWORD,douban,DIRECT&#10;IP-CIDR,18.136.66.215/32,PROXY" class="w-full text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"></textarea>
+          </div>
         </div>
 
-        <!-- 订阅链接入口与格式说明 -->
+        <!-- 4. 订阅链接入口与格式说明 -->
         <div class="p-3.5 sm:p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5">
           <div class="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
             <div class="flex items-center gap-1.5">
@@ -936,18 +1121,316 @@
       lucide.createIcons();
     }
 
+        // Global state for visual rules
+    let visualRules = [];
+
+    function parseCustomRules(text) {
+      const lines = (text || "").split("\n");
+      const items = [];
+      lines.forEach((line) => {
+        line = line.trim();
+        if (!line || line.startsWith("#")) return;
+        if (line.startsWith("-")) line = line.substring(1).trim();
+        const parts = line.split(",").map(p => p.trim());
+        if (parts.length >= 3) {
+          items.push({
+            type: parts[0].toUpperCase(),
+            value: parts[1],
+            target: parts[2].toUpperCase(),
+            extra: parts.slice(3).join(",")
+          });
+        } else if (parts.length === 2) {
+          items.push({
+            type: parts[0].toUpperCase(),
+            value: "",
+            target: parts[1].toUpperCase(),
+            extra: ""
+          });
+        } else {
+          items.push({
+            type: "RAW",
+            value: line,
+            target: "",
+            extra: ""
+          });
+        }
+      });
+      return items;
+    }
+
+    function serializeCustomRules(items) {
+      return items.map(item => {
+        if (item.type === "RAW") return item.value;
+        if (!item.value) return `${item.type},${item.target}`;
+        if (item.extra) return `${item.type},${item.value},${item.target},${item.extra}`;
+        return `${item.type},${item.value},${item.target}`;
+      }).join("\n");
+    }
+
+    function renderVisualRules() {
+      const container = document.getElementById("visualRulesListContainer");
+      const countEl = document.getElementById("visualRulesCount");
+      if (countEl) countEl.textContent = visualRules.length;
+
+      if (!container) return;
+
+      if (visualRules.length === 0) {
+        container.innerHTML = `
+          <div class="p-6 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center text-slate-400 space-y-1">
+            <i data-lucide="shield-alert" class="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600 mb-1"></i>
+            <p class="text-xs font-medium text-slate-600 dark:text-slate-300">暂无自定义规则</p>
+            <p class="text-[11px] text-slate-400">所有流量将按照上方开启的核心预设与兜底策略正常分流。可在上方添加您的第一条规则。</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      let html = "";
+      visualRules.forEach((rule, idx) => {
+        let typeName = rule.type;
+        let badgeClass = "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300";
+
+        if (rule.type === "DOMAIN-SUFFIX") {
+          typeName = "域名后缀";
+          badgeClass = "bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20";
+        } else if (rule.type === "DOMAIN") {
+          typeName = "完全域名";
+          badgeClass = "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border border-cyan-500/20";
+        } else if (rule.type === "DOMAIN-KEYWORD") {
+          typeName = "关键词";
+          badgeClass = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20";
+        } else if (rule.type === "IP-CIDR") {
+          typeName = "IP网段";
+          badgeClass = "bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20";
+        } else if (rule.type === "RAW") {
+          typeName = "高级原生";
+          badgeClass = "bg-slate-500/10 text-slate-600 dark:text-slate-400 border border-slate-500/20";
+        }
+
+        const valDisplay = rule.type === "RAW" ? rule.value : (rule.value || rule.type);
+        const extraDisplay = rule.extra ? `<span class="text-[10px] text-slate-400 font-mono ml-1">(${rule.extra})</span>` : "";
+
+        html += `
+          <div class="flex items-center justify-between gap-2 p-2.5 sm:p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-black/20 hover:border-slate-300 dark:hover:border-slate-700 transition">
+            <div class="flex items-center gap-2 min-w-0 flex-1">
+              <span class="text-[10px] font-semibold px-2 py-0.5 rounded-md ${badgeClass} shrink-0">
+                ${typeName}
+              </span>
+              <span class="text-xs font-mono font-bold text-slate-800 dark:text-slate-200 truncate">
+                ${valDisplay}${extraDisplay}
+              </span>
+            </div>
+
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${rule.type !== "RAW" ? `
+                <select onchange="updateVisualRuleAction(${idx}, this.value)" class="text-xs font-semibold rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-black/40 text-slate-700 dark:text-slate-200 focus:outline-none">
+                  <option value="PROXY" ${rule.target === "PROXY" ? "selected" : ""}>🚀 走代理</option>
+                  <option value="DIRECT" ${rule.target === "DIRECT" ? "selected" : ""}>⚡ 走直连</option>
+                  <option value="REJECT" ${rule.target === "REJECT" ? "selected" : ""}>🚫 拦截</option>
+                </select>
+              ` : `
+                <span class="text-[10px] font-mono px-2 py-1 text-slate-400">原生规则</span>
+              `}
+              <button type="button" onclick="deleteVisualRule(${idx})" title="删除规则" class="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      lucide.createIcons();
+    }
+
+    function updateVisualRuleAction(index, newTarget) {
+      if (visualRules[index]) {
+        visualRules[index].target = newTarget;
+        syncRulesToTextarea();
+      }
+    }
+
+    function deleteVisualRule(index) {
+      visualRules.splice(index, 1);
+      syncRulesToTextarea();
+      renderVisualRules();
+    }
+
+    function clearAllVisualRules() {
+      if (visualRules.length === 0) return;
+      if (!confirm("确定要清空所有自定义分流规则吗？")) return;
+      visualRules = [];
+      syncRulesToTextarea();
+      renderVisualRules();
+    }
+
+    function syncRulesToTextarea() {
+      const textarea = document.getElementById("ruleCustomRules");
+      if (textarea) {
+        textarea.value = serializeCustomRules(visualRules);
+      }
+    }
+
+    function detectInputType(raw) {
+      raw = (raw || "").trim();
+      if (!raw) return null;
+
+      // 1. URL cleaner
+      if (/^https?:\/\//i.test(raw)) {
+        try {
+          const u = new URL(raw);
+          let host = u.hostname;
+          if (host.startsWith("www.")) host = host.substring(4);
+          return { type: "DOMAIN-SUFFIX", value: host, note: "已自动净化 URL 为主域名" };
+        } catch(e) {}
+      }
+
+      // 2. IP or CIDR
+      if (/^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/.test(raw)) {
+        const isCidr = raw.includes("/");
+        return {
+          type: "IP-CIDR",
+          value: isCidr ? raw : `${raw}/32`,
+          extra: "no-resolve",
+          note: "识别为 IP/CIDR 地址"
+        };
+      }
+
+      // 3. Domain
+      if (/^[a-zA-Z0-9*_-]+(\.[a-zA-Z0-9*_-]+)+$/.test(raw)) {
+        let d = raw.replace(/^\*\./, "");
+        if (d.startsWith("www.")) d = d.substring(4);
+        return { type: "DOMAIN-SUFFIX", value: d, note: "识别为主域名后缀" };
+      }
+
+      // 4. Keyword
+      return { type: "DOMAIN-KEYWORD", value: raw, note: "识别为关键词匹配" };
+    }
+
+    function onQuickRuleInputChange() {
+      const inputEl = document.getElementById("quickRuleTargetInput");
+      const typeEl = document.getElementById("quickRuleTypeSelect");
+      const hintEl = document.getElementById("quickRuleDetectMsg");
+      const val = (inputEl.value || "").trim();
+
+      if (!val) {
+        hintEl.classList.add("hidden");
+        hintEl.textContent = "";
+        return;
+      }
+
+      const detected = detectInputType(val);
+      if (!detected) return;
+
+      hintEl.classList.remove("hidden");
+      const selectedType = typeEl.value;
+      if (selectedType === "AUTO") {
+        hintEl.innerHTML = `✨ 自动识别: <span class="font-bold text-indigo-500">${detected.type}</span> ➔ <span class="font-mono text-slate-700 dark:text-slate-200">${detected.value}</span> (${detected.note || "就绪"})`;
+      } else {
+        hintEl.innerHTML = `⚙️ 指定类型: <span class="font-bold text-indigo-500">${selectedType}</span> ➔ <span class="font-mono text-slate-700 dark:text-slate-200">${detected.value}</span>`;
+      }
+    }
+
+    function fillQuickPreset(value, type, action) {
+      document.getElementById("quickRuleTargetInput").value = value;
+      document.getElementById("quickRuleTypeSelect").value = type;
+      const radios = document.getElementsByName("quickRuleAction");
+      for (let r of radios) {
+        if (r.value === action) r.checked = true;
+      }
+      onQuickRuleInputChange();
+    }
+
+    function addVisualRuleFromInput() {
+      const inputEl = document.getElementById("quickRuleTargetInput");
+      const typeEl = document.getElementById("quickRuleTypeSelect");
+      const val = (inputEl.value || "").trim();
+
+      if (!val) {
+        showToast("请输入要分流的域名、IP 或关键词", "error");
+        return;
+      }
+
+      const detected = detectInputType(val);
+      const type = typeEl.value === "AUTO" ? detected.type : typeEl.value;
+      const ruleVal = detected.value;
+      const extra = detected.extra || "";
+
+      let action = "PROXY";
+      const radios = document.getElementsByName("quickRuleAction");
+      for (let r of radios) {
+        if (r.checked) { action = r.value; break; }
+      }
+
+      visualRules.unshift({
+        type: type,
+        value: ruleVal,
+        target: action,
+        extra: extra
+      });
+
+      syncRulesToTextarea();
+      renderVisualRules();
+
+      inputEl.value = "";
+      typeEl.value = "AUTO";
+      document.getElementById("quickRuleDetectMsg").classList.add("hidden");
+      showToast(`已添加规则: ${ruleVal} ➔ ${action}`, "success");
+    }
+
+    function switchRuleEditorMode(mode) {
+      const visualCont = document.getElementById("ruleVisualContainer");
+      const codeCont = document.getElementById("ruleCodeContainer");
+      const visualBtn = document.getElementById("ruleModeVisualBtn");
+      const codeBtn = document.getElementById("ruleModeCodeBtn");
+
+      if (mode === "visual") {
+        const textarea = document.getElementById("ruleCustomRules");
+        visualRules = parseCustomRules(textarea.value);
+        renderVisualRules();
+
+        visualCont.classList.remove("hidden");
+        codeCont.classList.add("hidden");
+
+        visualBtn.className = "px-3 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-sm transition flex items-center gap-1.5";
+        codeBtn.className = "px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center gap-1.5";
+      } else {
+        syncRulesToTextarea();
+
+        visualCont.classList.add("hidden");
+        codeCont.classList.remove("hidden");
+
+        codeBtn.className = "px-3 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 font-bold shadow-sm transition flex items-center gap-1.5";
+        visualBtn.className = "px-3 py-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center gap-1.5";
+      }
+      lucide.createIcons();
+    }
+
     async function loadSubRules() {
       try {
-        const res = await fetch('/api/node-mgr/sub/rules').then(r => r.json());
+        const res = await fetch("/api/node-mgr/sub/rules").then(r => r.json());
         if (res.ok && res.rules) {
           const r = res.rules;
-          document.getElementById('ruleDirectBt').checked = r.direct_bt !== false;
-          document.getElementById('ruleDirectCn').checked = r.direct_cn !== false;
-          document.getElementById('ruleDirectLan').checked = r.direct_lan !== false;
-          document.getElementById('ruleBlockAds').checked = !!r.block_ads;
-          document.getElementById('ruleEnableAuto').checked = r.enable_auto_group !== false;
-          document.getElementById('ruleFinalMatch').value = r.final_match || 'PROXY';
-          document.getElementById('ruleCustomRules').value = r.custom_rules || '';
+          // Core presets
+          document.getElementById("ruleDirectBt").checked = r.direct_bt !== false;
+          document.getElementById("ruleDirectCn").checked = r.direct_cn !== false;
+          document.getElementById("ruleDirectLan").checked = r.direct_lan !== false;
+          document.getElementById("ruleBlockAds").checked = !!r.block_ads;
+          document.getElementById("ruleEnableAuto").checked = r.enable_auto_group !== false;
+          document.getElementById("ruleFinalMatch").value = r.final_match || "PROXY";
+
+          // Popular presets
+          if (document.getElementById("ruleProxyAi")) document.getElementById("ruleProxyAi").checked = !!r.proxy_ai;
+          if (document.getElementById("ruleProxyTg")) document.getElementById("ruleProxyTg").checked = !!r.proxy_tg;
+          if (document.getElementById("ruleProxyMedia")) document.getElementById("ruleProxyMedia").checked = !!r.proxy_media;
+          if (document.getElementById("ruleProxyDev")) document.getElementById("ruleProxyDev").checked = !!r.proxy_dev;
+          if (document.getElementById("ruleDirectGames")) document.getElementById("ruleDirectGames").checked = !!r.direct_games;
+
+          // Custom rules
+          document.getElementById("ruleCustomRules").value = r.custom_rules || "";
+          visualRules = parseCustomRules(r.custom_rules || "");
+          renderVisualRules();
         }
       } catch (e) {
         console.error("加载规则失败:", e);
@@ -955,62 +1438,74 @@
     }
 
     async function saveSubRules() {
+      const visualCont = document.getElementById("ruleVisualContainer");
+      if (visualCont && !visualCont.classList.contains("hidden")) {
+        syncRulesToTextarea();
+      }
+
       const payload = {
-        direct_bt: document.getElementById('ruleDirectBt').checked,
-        direct_cn: document.getElementById('ruleDirectCn').checked,
-        direct_lan: document.getElementById('ruleDirectLan').checked,
-        block_ads: document.getElementById('ruleBlockAds').checked,
-        enable_auto_group: document.getElementById('ruleEnableAuto').checked,
-        final_match: document.getElementById('ruleFinalMatch').value,
-        custom_rules: document.getElementById('ruleCustomRules').value
+        direct_bt: document.getElementById("ruleDirectBt").checked,
+        direct_cn: document.getElementById("ruleDirectCn").checked,
+        direct_lan: document.getElementById("ruleDirectLan").checked,
+        block_ads: document.getElementById("ruleBlockAds").checked,
+        enable_auto_group: document.getElementById("ruleEnableAuto").checked,
+        final_match: document.getElementById("ruleFinalMatch").value,
+        proxy_ai: document.getElementById("ruleProxyAi") ? document.getElementById("ruleProxyAi").checked : false,
+        proxy_tg: document.getElementById("ruleProxyTg") ? document.getElementById("ruleProxyTg").checked : false,
+        proxy_media: document.getElementById("ruleProxyMedia") ? document.getElementById("ruleProxyMedia").checked : false,
+        proxy_dev: document.getElementById("ruleProxyDev") ? document.getElementById("ruleProxyDev").checked : false,
+        direct_games: document.getElementById("ruleDirectGames") ? document.getElementById("ruleDirectGames").checked : false,
+        custom_rules: document.getElementById("ruleCustomRules").value
       };
 
       try {
-        const res = await fetch('/api/node-mgr/sub/rules', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+        const res = await fetch("/api/node-mgr/sub/rules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload)
         }).then(r => r.json());
 
         if (res.ok) {
-          showToast('订阅规则已保存生效！客户端刷新即可获取新规则。', 'success');
+          showToast("订阅分流规则已保存生效！客户端刷新即可获取新规则。", "success");
         } else {
-          showToast(res.error || '保存失败', 'error');
+          showToast(res.error || "保存失败", "error");
         }
       } catch (e) {
-        showToast('保存失败: ' + e.message, 'error');
+        showToast("保存失败: " + e.message, "error");
       }
     }
 
     function insertRuleSnippet(text) {
-      const textarea = document.getElementById('ruleCustomRules');
+      const textarea = document.getElementById("ruleCustomRules");
       if (textarea.value.trim()) {
-        textarea.value += '\n' + text;
+        textarea.value += "\n" + text;
       } else {
         textarea.value = text;
       }
       textarea.focus();
+      visualRules = parseCustomRules(textarea.value);
+      renderVisualRules();
     }
 
     async function previewSubscriptionYaml() {
-      document.getElementById('yamlPreviewContent').textContent = "正在生成完整订阅配置...";
-      document.getElementById('yamlPreviewModal').classList.remove('hidden');
+      document.getElementById("yamlPreviewContent").textContent = "正在生成完整订阅配置...";
+      document.getElementById("yamlPreviewModal").classList.remove("hidden");
       lucide.createIcons();
 
       try {
-        const res = await fetch('/api/node-mgr/sub/rules/preview').then(r => r.json());
+        const res = await fetch("/api/node-mgr/sub/rules/preview").then(r => r.json());
         if (res.ok && res.yaml) {
-          document.getElementById('yamlPreviewContent').textContent = res.yaml;
+          document.getElementById("yamlPreviewContent").textContent = res.yaml;
         } else {
-          document.getElementById('yamlPreviewContent').textContent = "生成失败: " + (res.error || '未知错误');
+          document.getElementById("yamlPreviewContent").textContent = "生成失败: " + (res.error || "未知错误");
         }
       } catch (e) {
-        document.getElementById('yamlPreviewContent').textContent = "请求出错: " + e.message;
+        document.getElementById("yamlPreviewContent").textContent = "请求出错: " + e.message;
       }
     }
 
     function closeYamlPreviewModal() {
-      document.getElementById('yamlPreviewModal').classList.add('hidden');
+      document.getElementById("yamlPreviewModal").classList.add("hidden");
     }
 
     function copyElementText(elementId, successMsg) {

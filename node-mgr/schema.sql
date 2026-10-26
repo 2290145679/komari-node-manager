@@ -54,6 +54,11 @@ CREATE TABLE IF NOT EXISTS subscription_rules (
     enable_auto_group INTEGER DEFAULT 1,
     final_match TEXT DEFAULT 'PROXY',
     custom_rules TEXT DEFAULT '',
+    proxy_ai INTEGER DEFAULT 0,
+    proxy_tg INTEGER DEFAULT 0,
+    proxy_media INTEGER DEFAULT 0,
+    proxy_dev INTEGER DEFAULT 0,
+    direct_games INTEGER DEFAULT 0,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

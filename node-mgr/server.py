@@ -90,11 +90,24 @@ def init_db():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    extra_cols = [
+        ("proxy_ai", "INTEGER DEFAULT 0"),
+        ("proxy_tg", "INTEGER DEFAULT 0"),
+        ("proxy_media", "INTEGER DEFAULT 0"),
+        ("proxy_dev", "INTEGER DEFAULT 0"),
+        ("direct_games", "INTEGER DEFAULT 0")
+    ]
+    for col, ctype in extra_cols:
+        try:
+            c.execute(f"ALTER TABLE subscription_rules ADD COLUMN {col} {ctype}")
+        except Exception:
+            pass
+
     c.execute("SELECT id FROM subscription_rules WHERE id = 1")
     if not c.fetchone():
         c.execute("""
-            INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules)
-            VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '')
+            INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules, proxy_ai, proxy_tg, proxy_media, proxy_dev, direct_games)
+            VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '', 0, 0, 0, 0, 0)
         """)
     # Ensure default subscription
     c.execute("SELECT token FROM subscriptions LIMIT 1")
@@ -109,8 +122,9 @@ init_db()
 
 def get_subscription_rules():
     conn = sqlite3.connect(NODES_DB)
+    conn.row_factory = sqlite3.Row
     c = conn.cursor()
-    c.execute("SELECT direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules FROM subscription_rules WHERE id = 1")
+    c.execute("SELECT * FROM subscription_rules WHERE id = 1")
     row = c.fetchone()
     conn.close()
     if not row:
@@ -121,16 +135,27 @@ def get_subscription_rules():
             "block_ads": False,
             "enable_auto_group": True,
             "final_match": "PROXY",
-            "custom_rules": ""
+            "custom_rules": "",
+            "proxy_ai": False,
+            "proxy_tg": False,
+            "proxy_media": False,
+            "proxy_dev": False,
+            "direct_games": False
         }
+    d = dict(row)
     return {
-        "direct_bt": bool(row[0]),
-        "direct_cn": bool(row[1]),
-        "direct_lan": bool(row[2]),
-        "block_ads": bool(row[3]),
-        "enable_auto_group": bool(row[4]),
-        "final_match": row[5] or "PROXY",
-        "custom_rules": row[6] or ""
+        "direct_bt": bool(d.get("direct_bt", 1)),
+        "direct_cn": bool(d.get("direct_cn", 1)),
+        "direct_lan": bool(d.get("direct_lan", 1)),
+        "block_ads": bool(d.get("block_ads", 0)),
+        "enable_auto_group": bool(d.get("enable_auto_group", 1)),
+        "final_match": d.get("final_match") or "PROXY",
+        "custom_rules": d.get("custom_rules") or "",
+        "proxy_ai": bool(d.get("proxy_ai", 0)),
+        "proxy_tg": bool(d.get("proxy_tg", 0)),
+        "proxy_media": bool(d.get("proxy_media", 0)),
+        "proxy_dev": bool(d.get("proxy_dev", 0)),
+        "direct_games": bool(d.get("direct_games", 0))
     }
 
 def get_reality_keypair():
@@ -523,7 +548,69 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
                     line = f"- {line}"
                 rules_list.append(f"  {line}")
 
-    # 2. BT / PT Direct rule
+    # 2. AI services
+    if rules_cfg.get("proxy_ai"):
+        rules_list.append("  # === 🤖 AI 大模型服务代理 (ChatGPT / Claude / Gemini) ===")
+        rules_list.append("  - GEOSITE,openai,PROXY")
+        rules_list.append("  - GEOSITE,anthropic,PROXY")
+        rules_list.append("  - GEOSITE,google-gemini,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,chatgpt.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,openai.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,oaistatic.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,anthropic.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,claude.ai,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,gemini.google.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,copilot.microsoft.com,PROXY")
+
+    # 3. Telegram
+    if rules_cfg.get("proxy_tg"):
+        rules_list.append("  # === ✈️ Telegram 社交专线 ===")
+        rules_list.append("  - GEOSITE,telegram,PROXY")
+        rules_list.append("  - IP-CIDR,91.108.4.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,91.108.8.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,91.108.12.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,91.108.16.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,91.108.56.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,149.154.160.0/20,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,149.154.164.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,149.154.168.0/22,PROXY,no-resolve")
+        rules_list.append("  - IP-CIDR,149.154.172.0/22,PROXY,no-resolve")
+
+    # 4. Overseas Streaming Media
+    if rules_cfg.get("proxy_media"):
+        rules_list.append("  # === 🎬 海外主流流媒体 (YouTube / Netflix / Spotify) ===")
+        rules_list.append("  - GEOSITE,youtube,PROXY")
+        rules_list.append("  - GEOSITE,netflix,PROXY")
+        rules_list.append("  - GEOSITE,disney,PROXY")
+        rules_list.append("  - GEOSITE,spotify,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,youtube.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,googlevideo.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,netflix.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,nflxvideo.net,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,spotify.com,PROXY")
+
+    # 5. Developer Services
+    if rules_cfg.get("proxy_dev"):
+        rules_list.append("  # === 💻 开发者服务加速 (GitHub / Docker / Hugging Face) ===")
+        rules_list.append("  - GEOSITE,github,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,github.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,githubusercontent.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,docker.com,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,docker.io,PROXY")
+        rules_list.append("  - DOMAIN-SUFFIX,huggingface.co,PROXY")
+
+    # 6. Game Platforms Direct
+    if rules_cfg.get("direct_games"):
+        rules_list.append("  # === 🎮 主流游戏平台直连 (Steam / Epic / 暴雪) ===")
+        rules_list.append("  - GEOSITE,steam@cn,DIRECT")
+        rules_list.append("  - GEOSITE,epicgames,DIRECT")
+        rules_list.append("  - GEOSITE,blizzard,DIRECT")
+        rules_list.append("  - DOMAIN-SUFFIX,steamserver.net,DIRECT")
+        rules_list.append("  - DOMAIN-SUFFIX,steamcontent.com,DIRECT")
+        rules_list.append("  - DOMAIN-SUFFIX,epicgames.com,DIRECT")
+
+    # 7. BT / PT Direct rule
     if rules_cfg.get("direct_bt", True):
         rules_list.append("  # === BT / PT 下载直连防封与防跑流量 ===")
         rules_list.append("  - PROCESS-NAME,qbittorrent,DIRECT")
@@ -1102,14 +1189,23 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             enable_auto_group = 1 if body.get("enable_auto_group", True) else 0
             final_match = body.get("final_match") or "PROXY"
             custom_rules = body.get("custom_rules", "")
+            proxy_ai = 1 if body.get("proxy_ai", False) else 0
+            proxy_tg = 1 if body.get("proxy_tg", False) else 0
+            proxy_media = 1 if body.get("proxy_media", False) else 0
+            proxy_dev = 1 if body.get("proxy_dev", False) else 0
+            direct_games = 1 if body.get("direct_games", False) else 0
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             c.execute("""
                 UPDATE subscription_rules
-                SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?, final_match=?, custom_rules=?, updated_at=CURRENT_TIMESTAMP
+                SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?,
+                    final_match=?, custom_rules=?, proxy_ai=?, proxy_tg=?, proxy_media=?,
+                    proxy_dev=?, direct_games=?, updated_at=CURRENT_TIMESTAMP
                 WHERE id = 1
-            """, (direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules))
+            """, (direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group,
+                  final_match, custom_rules, proxy_ai, proxy_tg, proxy_media,
+                  proxy_dev, direct_games))
             conn.commit()
             conn.close()
             self._send_json({"ok": True, "msg": "订阅规则已保存生效"})
