@@ -1,0 +1,1247 @@
+#!/usr/bin/env python3
+import os
+import sys
+import json
+import uuid
+import sqlite3
+import secrets
+import base64
+import time
+import subprocess
+import urllib.parse
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
+
+KOMARI_DB = "/opt/komari/data/komari.db"
+NODES_DB = "/opt/komari/data/nodes.db"
+METRICS_DB = "/opt/komari/data/metrics.db"
+CERT_DIR = "/opt/komari/data/certs"
+PORT = 25775
+DOMAIN = "komari.yohoo.xyz"
+
+os.makedirs(CERT_DIR, exist_ok=True)
+os.makedirs("/opt/komari/data", exist_ok=True)
+
+def init_db():
+    conn = sqlite3.connect(NODES_DB)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            server_uuid TEXT NOT NULL,
+            server_name TEXT,
+            server_ip TEXT,
+            name TEXT NOT NULL,
+            protocol TEXT NOT NULL,
+            port INTEGER NOT NULL,
+            uuid_or_passwd TEXT NOT NULL,
+            sni TEXT,
+            public_key TEXT,
+            private_key TEXT,
+            short_id TEXT,
+            flow TEXT,
+            ws_path TEXT,
+            raw_link TEXT DEFAULT '',
+            is_external INTEGER DEFAULT 0,
+            enabled INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute("PRAGMA table_info(nodes)")
+    cols = [r[1] for r in c.fetchall()]
+    if 'raw_link' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN raw_link TEXT DEFAULT ''")
+    if 'is_external' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN is_external INTEGER DEFAULT 0")
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT UNIQUE NOT NULL,
+            name TEXT DEFAULT 'default',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS agent_heartbeats (
+            token TEXT PRIMARY KEY,
+            last_seen INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS server_traffic_baselines (
+            uuid TEXT PRIMARY KEY,
+            baseline_up INTEGER DEFAULT 0,
+            baseline_down INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS subscription_rules (
+            id INTEGER PRIMARY KEY,
+            direct_bt INTEGER DEFAULT 1,
+            direct_cn INTEGER DEFAULT 1,
+            direct_lan INTEGER DEFAULT 1,
+            block_ads INTEGER DEFAULT 0,
+            enable_auto_group INTEGER DEFAULT 1,
+            final_match TEXT DEFAULT 'PROXY',
+            custom_rules TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute("SELECT id FROM subscription_rules WHERE id = 1")
+    if not c.fetchone():
+        c.execute("""
+            INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules)
+            VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '')
+        """)
+    # Ensure default subscription
+    c.execute("SELECT token FROM subscriptions LIMIT 1")
+    row = c.fetchone()
+    if not row:
+        token = secrets.token_hex(16)
+        c.execute("INSERT INTO subscriptions (token, name) VALUES (?, 'default')", (token,))
+    conn.commit()
+    conn.close()
+
+init_db()
+
+def get_subscription_rules():
+    conn = sqlite3.connect(NODES_DB)
+    c = conn.cursor()
+    c.execute("SELECT direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules FROM subscription_rules WHERE id = 1")
+    row = c.fetchone()
+    conn.close()
+    if not row:
+        return {
+            "direct_bt": True,
+            "direct_cn": True,
+            "direct_lan": True,
+            "block_ads": False,
+            "enable_auto_group": True,
+            "final_match": "PROXY",
+            "custom_rules": ""
+        }
+    return {
+        "direct_bt": bool(row[0]),
+        "direct_cn": bool(row[1]),
+        "direct_lan": bool(row[2]),
+        "block_ads": bool(row[3]),
+        "enable_auto_group": bool(row[4]),
+        "final_match": row[5] or "PROXY",
+        "custom_rules": row[6] or ""
+    }
+
+def get_reality_keypair():
+    try:
+        res = subprocess.run(["sing-box", "generate", "reality-keypair"], capture_output=True, text=True, check=True)
+        priv, pub = "", ""
+        for line in res.stdout.splitlines():
+            if line.startswith("PrivateKey:"):
+                priv = line.split(":", 1)[1].strip()
+            elif line.startswith("PublicKey:"):
+                pub = line.split(":", 1)[1].strip()
+        return priv, pub
+    except Exception as e:
+        return "", ""
+
+def get_short_id():
+    return secrets.token_hex(4) # 8 chars hex
+
+def parse_proxy_link(link):
+    link = link.strip()
+    if not link:
+        return None
+    node = {
+        "server_uuid": "external",
+        "server_name": "外部导入",
+        "server_ip": "",
+        "name": "外部节点",
+        "protocol": "custom",
+        "port": 443,
+        "uuid_or_passwd": "",
+        "sni": "",
+        "public_key": "",
+        "private_key": "",
+        "short_id": "",
+        "flow": "",
+        "ws_path": "",
+        "raw_link": link,
+        "is_external": 1,
+        "enabled": 1
+    }
+    try:
+        if link.startswith("vmess://"):
+            b64_str = link[8:]
+            b64_str += '=' * (-len(b64_str) % 4)
+            data = json.loads(base64.b64decode(b64_str).decode('utf-8', errors='ignore'))
+            node["name"] = data.get("ps") or "VMess 节点"
+            node["server_ip"] = data.get("add") or ""
+            node["port"] = int(data.get("port") or 443)
+            node["uuid_or_passwd"] = data.get("id") or ""
+            node["protocol"] = "vmess_ws" if data.get("net") == "ws" else "vmess"
+            node["ws_path"] = data.get("path") or ""
+            node["sni"] = data.get("sni") or data.get("host") or ""
+            return node
+
+        parsed = urlparse(link)
+        scheme = parsed.scheme.lower()
+        node["name"] = urllib.parse.unquote(parsed.fragment) if parsed.fragment else f"{scheme.upper()} 节点"
+        node["server_ip"] = parsed.hostname or ""
+        node["port"] = parsed.port or 443
+        node["uuid_or_passwd"] = urllib.parse.unquote(parsed.username or "")
+        
+        qs = parse_qs(parsed.query)
+        node["sni"] = qs.get("sni", [""])[0] or qs.get("peer", [""])[0] or ""
+        node["flow"] = qs.get("flow", [""])[0]
+        node["public_key"] = qs.get("pbk", [""])[0]
+        node["short_id"] = qs.get("sid", [""])[0]
+        node["ws_path"] = qs.get("path", [""])[0]
+
+        if scheme in ["vless"]:
+            security = qs.get("security", [""])[0]
+            if security == "reality" or node["public_key"]:
+                node["protocol"] = "vless_reality"
+            else:
+                node["protocol"] = "vless"
+        elif scheme in ["hysteria2", "hy2"]:
+            node["protocol"] = "hysteria2"
+            if not node["uuid_or_passwd"] and parsed.password:
+                node["uuid_or_passwd"] = parsed.password
+        elif scheme in ["tuic"]:
+            node["protocol"] = "tuic"
+        elif scheme in ["trojan"]:
+            node["protocol"] = "trojan"
+        elif scheme in ["ss"]:
+            node["protocol"] = "shadowsocks"
+        else:
+            node["protocol"] = scheme
+
+        return node
+    except Exception as e:
+        node["name"] = "外部节点"
+        node["protocol"] = "custom"
+        return node
+
+def get_servers_with_stats():
+    servers = []
+    if not os.path.exists(KOMARI_DB):
+        return {"ok": True, "servers": [], "singbox_online_count": 0, "total_servers": 0, "total_traffic": 0, "total_raw_traffic": 0}
+
+    conn_k = sqlite3.connect(KOMARI_DB)
+    c_k = conn_k.cursor()
+    c_k.execute("SELECT uuid, name, ipv4, ipv6, os, arch, token, updated_at FROM clients ORDER BY name ASC")
+    clients = c_k.fetchall()
+    conn_k.close()
+
+    conn_n = sqlite3.connect(NODES_DB)
+    c_n = conn_n.cursor()
+    c_n.execute("SELECT token, last_seen FROM agent_heartbeats")
+    heartbeats = dict(c_n.fetchall())
+    c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
+    baselines = {r[0]: (r[1], r[2]) for r in c_n.fetchall()}
+    conn_n.close()
+
+    metrics_by_uuid = {}
+    first_seen_by_uuid = {}
+    if os.path.exists(METRICS_DB):
+        try:
+            conn_m = sqlite3.connect(METRICS_DB)
+            c_m = conn_m.cursor()
+            # Latest instantaneous reading (use last_val for live rates and latest counter)
+            c_m.execute("""
+                SELECT s.entity_id, s.metric_name, r.last_val
+                FROM metric_series s
+                JOIN metric_rollups r ON s.id = r.series_id
+                WHERE s.metric_name IN ('net.total.up', 'net.total.down', 'net.in.rate', 'net.out.rate')
+                ORDER BY r.bucket_milli DESC
+            """)
+            for eid, mname, val in c_m.fetchall():
+                if eid not in metrics_by_uuid:
+                    metrics_by_uuid[eid] = {}
+                if mname not in metrics_by_uuid[eid]:
+                    metrics_by_uuid[eid][mname] = val
+
+            # First recorded value by Komari
+            c_m.execute("""
+                SELECT s.entity_id, s.metric_name, min(r.first_val)
+                FROM metric_series s
+                JOIN metric_rollups r ON s.id = r.series_id
+                WHERE s.metric_name IN ('net.total.up', 'net.total.down')
+                GROUP BY s.entity_id, s.metric_name
+            """)
+            for eid, mname, val in c_m.fetchall():
+                if eid not in first_seen_by_uuid:
+                    first_seen_by_uuid[eid] = {}
+                first_seen_by_uuid[eid][mname] = val
+            conn_m.close()
+        except Exception as e:
+            pass
+
+    # Auto-initialize missing baselines
+    new_baselines = []
+    for row in clients:
+        uuid_val = row[0]
+        m = metrics_by_uuid.get(uuid_val, {})
+        cur_up = int(m.get('net.total.up', 0))
+        cur_down = int(m.get('net.total.down', 0))
+
+        if uuid_val not in baselines:
+            first_m = first_seen_by_uuid.get(uuid_val, {})
+            base_up = int(first_m.get('net.total.up', cur_up))
+            base_down = int(first_m.get('net.total.down', cur_down))
+            new_baselines.append((uuid_val, base_up, base_down))
+            baselines[uuid_val] = (base_up, base_down)
+
+    if new_baselines:
+        try:
+            conn_b = sqlite3.connect(NODES_DB)
+            conn_b.executemany("INSERT OR REPLACE INTO server_traffic_baselines (uuid, baseline_up, baseline_down) VALUES (?, ?, ?)", new_baselines)
+            conn_b.commit()
+            conn_b.close()
+        except Exception:
+            pass
+
+    now = int(time.time())
+    online_count = 0
+    total_traffic = 0
+    total_raw_traffic = 0
+
+    for row in clients:
+        uuid_val, name, ip4, ip6, os_name, arch, token, updated_at = row
+        last_seen = heartbeats.get(token, 0)
+        is_online = (now - last_seen) <= 35 if last_seen > 0 else False
+        if is_online:
+            online_count += 1
+
+        m = metrics_by_uuid.get(uuid_val, {})
+        cur_up = int(m.get('net.total.up', 0))
+        cur_down = int(m.get('net.total.down', 0))
+        raw_tot = cur_up + cur_down
+        total_raw_traffic += raw_tot
+
+        base_up, base_down = baselines.get(uuid_val, (0, 0))
+        # Handle reboot (if interface reset below baseline)
+        if cur_up < base_up:
+            base_up = 0
+        if cur_down < base_down:
+            base_down = 0
+
+        delta_up = max(0, cur_up - base_up)
+        delta_down = max(0, cur_down - base_down)
+        delta_tot = delta_up + delta_down
+        total_traffic += delta_tot
+
+        servers.append({
+            "uuid": uuid_val,
+            "name": name or ip4 or "Server-" + uuid_val[:6],
+            "ipv4": ip4 or "",
+            "ipv6": ip6 or "",
+            "os": os_name or "",
+            "arch": arch or "",
+            "token": token or "",
+            "updated_at": str(updated_at) if updated_at else "",
+            "singbox_online": is_online,
+            "singbox_installed": last_seen > 0,
+            "last_seen": last_seen,
+            "last_seen_ago": (now - last_seen) if last_seen > 0 else None,
+            "traffic_up": delta_up,
+            "traffic_down": delta_down,
+            "traffic_total": delta_tot,
+            "raw_up": cur_up,
+            "raw_down": cur_down,
+            "raw_total": raw_tot,
+            "baseline_up": base_up,
+            "baseline_down": base_down,
+            "in_rate": int(m.get('net.in.rate', 0)),
+            "out_rate": int(m.get('net.out.rate', 0))
+        })
+
+    return {
+        "ok": True,
+        "servers": servers,
+        "singbox_online_count": online_count,
+        "total_servers": len(servers),
+        "total_traffic": total_traffic,
+        "total_raw_traffic": total_raw_traffic
+    }
+
+def get_servers():
+    return get_servers_with_stats().get("servers", [])
+
+def build_node_share_link(node):
+    if node.get("raw_link"):
+        return node["raw_link"]
+
+    proto = node.get("protocol")
+    ip = node.get("server_ip") or DOMAIN
+    port = node.get("port")
+    name = node.get("name")
+    u = node.get("uuid_or_passwd")
+    sni = node.get("sni") or "addons.mozilla.org"
+    
+    if proto == "vless_reality":
+        pbk = node.get("public_key")
+        sid = node.get("short_id") or ""
+        flow = node.get("flow") or "xtls-rprx-vision"
+        return f"vless://{u}@{ip}:{port}?encryption=none&flow={flow}&security=reality&sni={sni}&fp=chrome&pbk={pbk}&sid={sid}&type=tcp#{name}"
+    elif proto == "hysteria2":
+        return f"hysteria2://{u}@{ip}:{port}/?insecure=1&sni={sni}#{name}"
+    elif proto == "tuic":
+        return f"tuic://{u}:{u}@{ip}:{port}?congestion_control=bbr&alpn=h3&sni={sni}&allow_insecure=1#{name}"
+    elif proto == "trojan":
+        return f"trojan://{u}@{ip}:{port}?security=tls&sni={sni}&allowInsecure=1#{name}"
+    elif proto == "vmess_ws":
+        ws_path = node.get("ws_path") or "/vmess"
+        vj = {
+            "v": "2",
+            "ps": name,
+            "add": ip,
+            "port": port,
+            "id": u,
+            "aid": "0",
+            "scy": "auto",
+            "net": "ws",
+            "type": "none",
+            "host": "",
+            "path": ws_path,
+            "tls": ""
+        }
+        b64 = base64.b64encode(json.dumps(vj).encode()).decode()
+        return f"vmess://{b64}"
+    return ""
+
+def build_clash_meta_yaml(nodes, rules_cfg=None):
+    if rules_cfg is None:
+        rules_cfg = get_subscription_rules()
+
+    proxies = []
+    names = []
+    for n in nodes:
+        proto = n.get("protocol")
+        name = n.get("name")
+        ip = n.get("server_ip")
+        port = n.get("port")
+        u = n.get("uuid_or_passwd")
+        sni = n.get("sni") or "addons.mozilla.org"
+
+        if not ip or not port:
+            continue
+
+        names.append(name)
+        if proto == "vless_reality" or (proto == "vless" and n.get("public_key")):
+            proxies.append(f"""  - name: "{name}"
+    type: vless
+    server: {ip}
+    port: {port}
+    uuid: {u}
+    network: tcp
+    tls: true
+    udp: true
+    flow: {n.get('flow') or 'xtls-rprx-vision'}
+    servername: {sni}
+    reality-opts:
+      public-key: {n.get('public_key')}
+      short-id: "{n.get('short_id') or ''}"
+    client-fingerprint: chrome""")
+        elif proto == "hysteria2":
+            proxies.append(f"""  - name: "{name}"
+    type: hysteria2
+    server: {ip}
+    port: {port}
+    password: "{u}"
+    sni: {sni}
+    skip-cert-verify: true""")
+        elif proto == "tuic":
+            proxies.append(f"""  - name: "{name}"
+    type: tuic
+    server: {ip}
+    port: {port}
+    uuid: {u}
+    password: {u}
+    sni: {sni}
+    skip-cert-verify: true
+    congestion-controller: bbr
+    alpn: [h3]""")
+        elif proto == "trojan":
+            proxies.append(f"""  - name: "{name}"
+    type: trojan
+    server: {ip}
+    port: {port}
+    password: "{u}"
+    sni: {sni}
+    skip-cert-verify: true
+    udp: true""")
+        elif proto in ["vmess", "vmess_ws"]:
+            proxies.append(f"""  - name: "{name}"
+    type: vmess
+    server: {ip}
+    port: {port}
+    uuid: {u}
+    alterId: 0
+    cipher: auto
+    network: ws
+    ws-opts:
+      path: {n.get('ws_path') or '/vmess'}""")
+
+    proxies_text = "\n".join(proxies) if proxies else "  - name: DIRECT\n    type: direct"
+    proxy_names = "\n".join([f'      - "{x}"' for x in names]) if names else '      - DIRECT'
+
+    proxy_groups = []
+    # 1. Main Proxy selection group
+    auto_tag = "      - 自动优选\n" if rules_cfg.get("enable_auto_group") and names else ""
+    proxy_groups.append(f"""  - name: PROXY
+    type: select
+    proxies:
+{auto_tag}{proxy_names}
+      - DIRECT""")
+
+    # 2. Auto group
+    if rules_cfg.get("enable_auto_group") and names:
+        proxy_groups.append(f"""  - name: 自动优选
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+{proxy_names}""")
+
+    groups_text = "\n".join(proxy_groups)
+
+    # Build rules list
+    rules_list = []
+
+    # 1. User custom rules
+    custom = rules_cfg.get("custom_rules", "").strip()
+    if custom:
+        rules_list.append("  # === 自定义分流规则 ===")
+        for line in custom.splitlines():
+            line = line.strip()
+            if line:
+                if not line.startswith("-") and not line.startswith("#"):
+                    line = f"- {line}"
+                rules_list.append(f"  {line}")
+
+    # 2. BT / PT Direct rule
+    if rules_cfg.get("direct_bt", True):
+        rules_list.append("  # === BT / PT 下载直连防封与防跑流量 ===")
+        rules_list.append("  - PROCESS-NAME,qbittorrent,DIRECT")
+        rules_list.append("  - PROCESS-NAME,qbittorrent-nox,DIRECT")
+        rules_list.append("  - PROCESS-NAME,Transmission,DIRECT")
+        rules_list.append("  - PROCESS-NAME,transmission-daemon,DIRECT")
+        rules_list.append("  - PROCESS-NAME,aria2c,DIRECT")
+        rules_list.append("  - PROCESS-NAME,fdm,DIRECT")
+        rules_list.append("  - GEOSITE,category-pt,DIRECT")
+        rules_list.append("  - DOMAIN-KEYWORD,tracker,DIRECT")
+        rules_list.append("  - DOMAIN-KEYWORD,torrent,DIRECT")
+        rules_list.append("  - DOMAIN-KEYWORD,peer,DIRECT")
+
+    # 3. LAN Direct rule
+    if rules_cfg.get("direct_lan", True):
+        rules_list.append("  # === 本地局域网与私有 IP 直连 ===")
+        rules_list.append("  - GEOIP,LAN,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR6,::1/128,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
+        rules_list.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
+
+    # 4. Ad blocking
+    if rules_cfg.get("block_ads", False):
+        rules_list.append("  # === 广告拦截 ===")
+        rules_list.append("  - GEOSITE,category-ads-all,REJECT")
+
+    # 5. China Direct rule
+    if rules_cfg.get("direct_cn", True):
+        rules_list.append("  # === 中国大陆域名与 IP 直连 ===")
+        rules_list.append("  - GEOSITE,cn,DIRECT")
+        rules_list.append("  - GEOIP,CN,DIRECT,no-resolve")
+
+    # 6. Final match
+    final = rules_cfg.get("final_match") or "PROXY"
+    rules_list.append(f"  - MATCH,{final}")
+
+    rules_yaml = "\n".join(rules_list)
+
+    return f"""port: 7890
+socks-port: 7891
+allow-lan: true
+mode: rule
+log-level: info
+ipv6: false
+
+proxies:
+{proxies_text}
+
+proxy-groups:
+{groups_text}
+
+rules:
+{rules_yaml}
+"""
+
+def build_sing_box_config(nodes_for_server):
+    inbounds = []
+    cert_path = "/etc/sing-box/cert.pem"
+    key_path = "/etc/sing-box/cert.key"
+    
+    for n in nodes_for_server:
+        if not n.get("enabled"):
+            continue
+        if n.get("is_external") or n.get("server_uuid") == "external":
+            continue
+        proto = n.get("protocol")
+        port = n.get("port")
+        tag = f"{proto}-{n.get('id')}"
+        u = n.get("uuid_or_passwd")
+        sni = n.get("sni") or "addons.mozilla.org"
+        
+        if proto == "vless_reality":
+            inbounds.append({
+                "type": "vless",
+                "tag": tag,
+                "listen": "::",
+                "listen_port": port,
+                "users": [
+                    {
+                        "uuid": u,
+                        "flow": n.get("flow") or "xtls-rprx-vision"
+                    }
+                ],
+                "tls": {
+                    "enabled": True,
+                    "server_name": sni,
+                    "reality": {
+                        "enabled": True,
+                        "handshake": {
+                            "server": sni,
+                            "server_port": 443
+                        },
+                        "private_key": n.get("private_key"),
+                        "short_id": [n.get("short_id") or ""]
+                    }
+                }
+            })
+        elif proto == "hysteria2":
+            inbounds.append({
+                "type": "hysteria2",
+                "tag": tag,
+                "listen": "::",
+                "listen_port": port,
+                "users": [{"password": u}],
+                "tls": {
+                    "enabled": True,
+                    "certificate_path": cert_path,
+                    "key_path": key_path
+                }
+            })
+        elif proto == "tuic":
+            inbounds.append({
+                "type": "tuic",
+                "tag": tag,
+                "listen": "::",
+                "listen_port": port,
+                "users": [{"uuid": u, "password": u}],
+                "congestion_control": "bbr",
+                "tls": {
+                    "enabled": True,
+                    "certificate_path": cert_path,
+                    "key_path": key_path
+                }
+            })
+        elif proto == "trojan":
+            inbounds.append({
+                "type": "trojan",
+                "tag": tag,
+                "listen": "::",
+                "listen_port": port,
+                "users": [{"password": u}],
+                "tls": {
+                    "enabled": True,
+                    "certificate_path": cert_path,
+                    "key_path": key_path
+                }
+            })
+        elif proto == "vmess_ws":
+            inbounds.append({
+                "type": "vmess",
+                "tag": tag,
+                "listen": "::",
+                "listen_port": port,
+                "users": [{"uuid": u}],
+                "transport": {
+                    "type": "ws",
+                    "path": n.get("ws_path") or "/vmess"
+                }
+            })
+            
+    return {
+        "log": {"level": "warn", "timestamp": True},
+        "inbounds": inbounds,
+        "outbounds": [{"type": "direct", "tag": "direct"}]
+    }
+
+INSTALL_SCRIPT_TEMPLATE = '''#!/bin/bash
+set -e
+
+# Komari & Sing-box All-In-One Installer (Universal: systemd & OpenRC/Alpine musl/glibc)
+# Domain: {DOMAIN}
+
+TOKEN=""
+MASTER_URL="https://{DOMAIN}"
+
+EXTRA_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --token|-t)
+      TOKEN="$2"
+      shift 2
+      ;;
+    -e|--endpoint)
+      MASTER_URL="$2"
+      shift 2
+      ;;
+    *)
+      EXTRA_ARGS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$TOKEN" ]; then
+  echo "[Error] --token is required!"
+  echo "Usage: curl -fsSL $MASTER_URL/install-node.sh | bash -s -- --token <KOMARI_SERVER_TOKEN>"
+  exit 1
+fi
+
+echo "======================================================"
+echo " Starting Komari + Sing-box Node Agent Installation   "
+echo "======================================================"
+
+# Detect init system & libc type
+INIT_SYSTEM="systemd"
+if [ -f /etc/alpine-release ] || (command -v rc-service >/dev/null 2>&1 && ! command -v systemctl >/dev/null 2>&1); then
+  INIT_SYSTEM="openrc"
+fi
+echo "[Info] Detected init system: $INIT_SYSTEM"
+
+# 1. Install prerequisites
+echo "[1/4] Installing system dependencies..."
+if [ -x "$(command -v apt-get)" ]; then
+  apt-get update -qq && apt-get install -y -qq curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+elif [ -x "$(command -v yum)" ]; then
+  yum install -y curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+elif [ -x "$(command -v dnf)" ]; then
+  dnf install -y curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+elif [ -x "$(command -v apk)" ]; then
+  apk update >/dev/null 2>&1 || true
+  apk add --no-cache curl wget tar openssl jq bash ca-certificates gcompat >/dev/null 2>&1 || true
+fi
+
+# 2. Install Sing-box core
+echo "[2/4] Installing Sing-box high performance core..."
+ARCH=$(uname -m)
+case $ARCH in
+  x86_64) SING_ARCH="amd64" ;;
+  aarch64|arm64) SING_ARCH="arm64" ;;
+  *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+esac
+
+MUSL_SUFFIX=""
+if [ -f /etc/alpine-release ] || (ldd --version 2>&1 | grep -qi musl); then
+  MUSL_SUFFIX="-musl"
+  echo "[Info] Musl libc detected (Alpine), using musl binary build"
+fi
+
+mkdir -p /etc/sing-box
+if [ ! -f /etc/sing-box/cert.key ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 -subj "/CN=bing.com" >/dev/null 2>&1 || true
+  fi
+fi
+
+# Ensure sing-box binary is valid and runnable
+if [ ! -f /usr/local/bin/sing-box ] || ! /usr/local/bin/sing-box version >/dev/null 2>&1; then
+  echo "Downloading Sing-box binary (${SING_ARCH}${MUSL_SUFFIX})..."
+  mkdir -p /usr/local/bin
+  TAR_URL="https://github.com/SagerNet/sing-box/releases/download/v1.14.4/sing-box-1.14.4-linux-${SING_ARCH}${MUSL_SUFFIX}.tar.gz"
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$TAR_URL" -o /tmp/sing-box.tar.gz
+  elif command -v wget >/dev/null 2>&1; then
+    wget -qO /tmp/sing-box.tar.gz "$TAR_URL"
+  fi
+  tar -xzf /tmp/sing-box.tar.gz -C /tmp
+  cp /tmp/sing-box-*/sing-box /usr/local/bin/sing-box
+  chmod +x /usr/local/bin/sing-box
+  rm -rf /tmp/sing-box*
+fi
+
+# Ensure base empty config
+if [ ! -f /etc/sing-box/config.json ]; then
+  echo '{"log":{"level":"warn"},"inbounds":[],"outbounds":[{"type":"direct","tag":"direct"}]}' > /etc/sing-box/config.json
+fi
+
+# Configure Sing-box Service
+if [ "$INIT_SYSTEM" = "openrc" ]; then
+  cat << 'EOF' > /etc/init.d/sing-box
+#!/sbin/openrc-run
+name="Sing-box Service"
+description="Sing-box Service"
+command="/usr/local/bin/sing-box"
+command_args="run -c /etc/sing-box/config.json"
+pidfile="/run/sing-box.pid"
+supervisor=supervise-daemon
+
+depend() {
+    need net
+    after network
+}
+EOF
+  chmod +x /etc/init.d/sing-box
+  rc-update add sing-box default >/dev/null 2>&1 || true
+  rc-service sing-box restart >/dev/null 2>&1 || rc-service sing-box start >/dev/null 2>&1 || true
+else
+  mkdir -p /etc/systemd/system
+  cat << EOF > /etc/systemd/system/sing-box.service
+[Unit]
+Description=Sing-box Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now sing-box.service || true
+fi
+
+# 3. Install Komari Monitor Agent using official installer
+echo "[3/4] Installing Komari Monitor Agent..."
+DOWNLOADER=""
+if command -v curl >/dev/null 2>&1; then
+  DOWNLOADER="curl -fsSL"
+elif command -v wget >/dev/null 2>&1; then
+  DOWNLOADER="wget -qO-"
+fi
+$DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh | bash -s -- -e "$MASTER_URL" -t "$TOKEN" "${EXTRA_ARGS[@]}"
+
+# 4. Install Node-Sync Agent Daemon
+echo "[4/4] Installing Node Configuration Sync Daemon..."
+cat << 'EOF' > /usr/local/bin/komari-node-sync.sh
+#!/bin/bash
+MASTER_URL="''' + f"https://{DOMAIN}" + '''"
+TOKEN="''' + '$TOKEN' + '''"
+CONFIG_FILE="/etc/sing-box/config.json"
+MD5_FILE="/etc/sing-box/config.md5"
+
+restart_sing_box() {
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl restart sing-box.service >/dev/null 2>&1 || true
+  elif command -v rc-service >/dev/null 2>&1; then
+    rc-service sing-box restart >/dev/null 2>&1 || true
+  fi
+}
+
+while true; do
+  RES=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
+  if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
+    NEW_MD5=$(echo "$RES" | md5sum | awk '{print $1}')
+    OLD_MD5=$(cat "$MD5_FILE" 2>/dev/null || true)
+    if [ "$NEW_MD5" != "$OLD_MD5" ]; then
+      echo "[NodeSync] New config received, validating..."
+      echo "$RES" > /tmp/new_config.json
+      if /usr/local/bin/sing-box check -c /tmp/new_config.json >/dev/null 2>&1; then
+        mv /tmp/new_config.json "$CONFIG_FILE"
+        echo "$NEW_MD5" > "$MD5_FILE"
+        restart_sing_box
+        echo "[NodeSync] Sing-box restarted successfully!"
+      else
+        echo "[NodeSync] Invalid config from master, skipping."
+      fi
+    fi
+  fi
+  sleep 10
+done
+EOF
+
+sed -i "s|\$TOKEN|$TOKEN|g" /usr/local/bin/komari-node-sync.sh
+chmod +x /usr/local/bin/komari-node-sync.sh
+
+# Fetch and apply initial config immediately
+echo "Fetching initial proxy configuration..."
+INIT_CFG=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
+if [ -n "$INIT_CFG" ] && echo "$INIT_CFG" | grep -q '"inbounds"'; then
+  echo "$INIT_CFG" > /etc/sing-box/config.json
+  echo "$INIT_CFG" | md5sum | awk '{print $1}' > /etc/sing-box/config.md5
+  if [ "$INIT_SYSTEM" = "openrc" ]; then
+    rc-service sing-box restart >/dev/null 2>&1 || rc-service sing-box start >/dev/null 2>&1 || true
+  else
+    systemctl restart sing-box.service >/dev/null 2>&1 || true
+  fi
+  echo "[Success] Sing-box initial configuration applied!"
+fi
+
+if [ "$INIT_SYSTEM" = "openrc" ]; then
+  cat << 'EOF' > /etc/init.d/komari-node-sync
+#!/sbin/openrc-run
+name="Komari Node Sync Service"
+description="Komari Node Sync Service"
+command="/bin/bash"
+command_args="/usr/local/bin/komari-node-sync.sh"
+pidfile="/run/komari-node-sync.pid"
+supervisor=supervise-daemon
+
+depend() {
+    need net
+    after network sing-box
+}
+EOF
+  chmod +x /etc/init.d/komari-node-sync
+  rc-update add komari-node-sync default >/dev/null 2>&1 || true
+  rc-service komari-node-sync restart >/dev/null 2>&1 || rc-service komari-node-sync start >/dev/null 2>&1 || true
+else
+  cat << EOF > /etc/systemd/system/komari-node-sync.service
+[Unit]
+Description=Komari Node Configuration Sync Service
+After=network.target sing-box.service
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/local/bin/komari-node-sync.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable --now komari-node-sync.service
+fi
+
+echo ""
+echo "======================================================"
+echo " Installation Complete! Node is connected to Master!  "
+echo "======================================================"
+'''
+class NodeMgrHandler(BaseHTTPRequestHandler):
+    def _send_json(self, data, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode("utf-8"))
+
+    def _send_text(self, text, status=200, content_type="text/plain; charset=utf-8"):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(text.encode("utf-8"))
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        self.end_headers()
+
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+
+        if path == "/install-node.sh":
+            script = INSTALL_SCRIPT_TEMPLATE.replace("{DOMAIN}", DOMAIN)
+            self._send_text(script, 200, "text/x-shellscript")
+            return
+
+        if path.startswith("/sub/"):
+            token = path.split("/sub/")[1].strip("/")
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id FROM subscriptions WHERE token = ?", (token,))
+            sub = c.fetchone()
+            if not sub:
+                conn.close()
+                self._send_text("Invalid Subscription Token", 404)
+                return
+            
+            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            cols = [d[0] for d in c.description]
+            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+
+            rules_cfg = get_subscription_rules()
+            ua = self.headers.get("User-Agent", "").lower()
+            fmt = query.get("format", [""])[0].lower()
+            clash_flag = query.get("clash", [""])[0]
+
+            if fmt == "clash" or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]):
+                yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
+                self._send_text(yaml_data, 200, "text/yaml; charset=utf-8")
+            elif fmt == "raw":
+                links = [build_node_share_link(n) for n in nodes if build_node_share_link(n)]
+                self._send_text("\n".join(links), 200, "text/plain; charset=utf-8")
+            else:
+                links = [build_node_share_link(n) for n in nodes if build_node_share_link(n)]
+                b64 = base64.b64encode("\n".join(links).encode()).decode()
+                self._send_text(b64, 200, "text/plain; charset=utf-8")
+            return
+
+        # API routes:
+        if path in ["/api/sub/rules", "/api/node-mgr/sub/rules"]:
+            rules = get_subscription_rules()
+            self._send_json({"ok": True, "rules": rules})
+            return
+
+        if path in ["/api/sub/rules/preview", "/api/node-mgr/sub/rules/preview"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            cols = [d[0] for d in c.description]
+            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+            rules_cfg = get_subscription_rules()
+            yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
+            self._send_json({"ok": True, "yaml": yaml_data})
+            return
+
+        if path == "/api/servers" or path == "/api/node-mgr/servers":
+            servers_data = get_servers_with_stats()
+            self._send_json(servers_data)
+            return
+
+        if path == "/api/nodes" or path == "/api/node-mgr/nodes":
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT * FROM nodes ORDER BY is_external ASC, id DESC")
+            cols = [d[0] for d in c.description]
+            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+            for n in nodes:
+                n["link"] = build_node_share_link(n)
+            self._send_json({"ok": True, "nodes": nodes})
+            return
+
+        if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT token FROM subscriptions LIMIT 1")
+            row = c.fetchone()
+            conn.close()
+            token = row[0] if row else ""
+            self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}"})
+            return
+
+        # Agent config sync endpoint
+        if path == "/api/agent/config" or path == "/api/node-mgr/agent/config":
+            token = query.get("token", [""])[0]
+            if not token:
+                self._send_json({"error": "missing token"}, 400)
+                return
+            
+            # Record heartbeat
+            try:
+                conn_hb = sqlite3.connect(NODES_DB)
+                c_hb = conn_hb.cursor()
+                c_hb.execute("INSERT OR REPLACE INTO agent_heartbeats (token, last_seen) VALUES (?, ?)", (token, int(time.time())))
+                conn_hb.commit()
+                conn_hb.close()
+            except Exception as e:
+                pass
+
+            # Find client by token in komari.db
+            servers = get_servers()
+            matched = None
+            for s in servers:
+                if s["token"] == token or s["uuid"] == token:
+                    matched = s
+                    break
+            
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if matched:
+                c.execute("SELECT * FROM nodes WHERE server_uuid = ? AND enabled = 1", (matched["uuid"],))
+            else:
+                # Fallback: token might directly match server_uuid
+                c.execute("SELECT * FROM nodes WHERE server_uuid = ? AND enabled = 1", (token,))
+            
+            cols = [d[0] for d in c.description]
+            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+
+            config = build_sing_box_config(nodes)
+            self._send_json(config)
+            return
+
+        self._send_json({"error": "not found"}, 404)
+
+    def do_POST(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+
+        # Save subscription rules
+        if path in ["/api/sub/rules", "/api/node-mgr/sub/rules"]:
+            direct_bt = 1 if body.get("direct_bt", True) else 0
+            direct_cn = 1 if body.get("direct_cn", True) else 0
+            direct_lan = 1 if body.get("direct_lan", True) else 0
+            block_ads = 1 if body.get("block_ads", False) else 0
+            enable_auto_group = 1 if body.get("enable_auto_group", True) else 0
+            final_match = body.get("final_match") or "PROXY"
+            custom_rules = body.get("custom_rules", "")
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("""
+                UPDATE subscription_rules
+                SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?, final_match=?, custom_rules=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id = 1
+            """, (direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True, "msg": "订阅规则已保存生效"})
+            return
+
+        # Reset traffic baselines (calibrate to current)
+        if path == "/api/traffic/reset" or path == "/api/node-mgr/traffic/reset":
+            target_uuid = body.get("uuid", "")
+            metrics_by_uuid = {}
+            if os.path.exists(METRICS_DB):
+                try:
+                    conn_m = sqlite3.connect(METRICS_DB)
+                    c_m = conn_m.cursor()
+                    c_m.execute("""
+                        SELECT s.entity_id, s.metric_name, r.last_val
+                        FROM metric_series s
+                        JOIN metric_rollups r ON s.id = r.series_id
+                        WHERE s.metric_name IN ('net.total.up', 'net.total.down')
+                        ORDER BY r.bucket_milli DESC
+                    """)
+                    for eid, mname, val in c_m.fetchall():
+                        if eid not in metrics_by_uuid:
+                            metrics_by_uuid[eid] = {}
+                        if mname not in metrics_by_uuid[eid]:
+                            metrics_by_uuid[eid][mname] = val
+                    conn_m.close()
+                except Exception:
+                    pass
+
+            conn_b = sqlite3.connect(NODES_DB)
+            if target_uuid == "all" or not target_uuid:
+                for eid, vals in metrics_by_uuid.items():
+                    conn_b.execute("INSERT OR REPLACE INTO server_traffic_baselines (uuid, baseline_up, baseline_down) VALUES (?, ?, ?)",
+                                   (eid, int(vals.get('net.total.up', 0)), int(vals.get('net.total.down', 0))))
+            else:
+                vals = metrics_by_uuid.get(target_uuid, {})
+                conn_b.execute("INSERT OR REPLACE INTO server_traffic_baselines (uuid, baseline_up, baseline_down) VALUES (?, ?, ?)",
+                               (target_uuid, int(vals.get('net.total.up', 0)), int(vals.get('net.total.down', 0))))
+            conn_b.commit()
+            conn_b.close()
+            self._send_json({"ok": True, "msg": "流量统计已重置归零"})
+            return
+
+        # Import external nodes
+        if path == "/api/nodes/import" or path == "/api/node-mgr/nodes/import":
+            raw_text = body.get("content", "")
+            lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+            imported_count = 0
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            for line in lines:
+                parsed_node = parse_proxy_link(line)
+                if parsed_node:
+                    c.execute('''
+                        INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
+                                          uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ''', (
+                        parsed_node["server_uuid"], parsed_node["server_name"], parsed_node["server_ip"], parsed_node["name"],
+                        parsed_node["protocol"], parsed_node["port"], parsed_node["uuid_or_passwd"], parsed_node["sni"],
+                        parsed_node["public_key"], parsed_node["private_key"], parsed_node["short_id"], parsed_node["flow"],
+                        parsed_node["ws_path"], parsed_node["raw_link"], parsed_node["is_external"]
+                    ))
+                    imported_count += 1
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True, "count": imported_count})
+            return
+
+        if path == "/api/nodes" or path == "/api/node-mgr/nodes":
+            server_uuid = body.get("server_uuid", "")
+            server_name = body.get("server_name", "")
+            server_ip = body.get("server_ip", "")
+            name = body.get("name", "Node")
+            protocol = body.get("protocol", "vless_reality")
+            port = int(body.get("port") or secrets.randbelow(45000) + 15000)
+            u = body.get("uuid_or_passwd") or str(uuid.uuid4())
+            sni = body.get("sni") or "addons.mozilla.org"
+            flow = body.get("flow", "xtls-rprx-vision") if protocol == "vless_reality" else ""
+            ws_path = body.get("ws_path", "/vmess")
+            
+            pub_key = body.get("public_key", "")
+            priv_key = body.get("private_key", "")
+            short_id = body.get("short_id", "")
+            
+            if protocol == "vless_reality" and (not pub_key or not priv_key):
+                priv, pub = get_reality_keypair()
+                priv_key, pub_key = priv, pub
+                short_id = get_short_id()
+                
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
+                                  uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1)
+            ''', (server_uuid, server_name, server_ip, name, protocol, port, u, sni, pub_key, priv_key, short_id, flow, ws_path))
+            node_id = c.lastrowid
+            conn.commit()
+            conn.close()
+
+            self._send_json({"ok": True, "id": node_id})
+            return
+
+        if path.startswith("/api/nodes/") and path.endswith("/toggle") or path.startswith("/api/node-mgr/nodes/") and path.endswith("/toggle"):
+            parts = path.split("/")
+            node_id = parts[-2]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE nodes SET enabled = (1 - enabled) WHERE id = ?", (node_id,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        self._send_json({"error": "not found"}, 404)
+
+    def do_DELETE(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/"):
+            node_id = path.rstrip("/").split("/")[-1]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+        self._send_json({"error": "not found"}, 404)
+
+if __name__ == "__main__":
+    print(f"Starting Node Manager server on 127.0.0.1:{PORT}...")
+    server = HTTPServer(("127.0.0.1", PORT), NodeMgrHandler)
+    server.serve_forever()

@@ -24,25 +24,35 @@
     .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
     .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.4); border-radius: 3px; }
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.92); }
+    }
+    .animate-pulse-slow { animation: pulse-slow 2.5s infinite; }
   </style>
 </head>
 <body class="bg-slate-50 dark:bg-[#121212] text-slate-800 dark:text-slate-100 min-h-screen p-4 sm:p-6 transition-colors duration-200">
 
   <div class="max-w-7xl mx-auto space-y-6">
+    <!-- Top Header -->
     <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
       <div>
         <h1 class="text-2xl font-bold flex items-center gap-2.5">
           <span class="p-2 bg-indigo-500/10 text-indigo-500 rounded-xl">
             <i data-lucide="network" class="w-6 h-6"></i>
           </span>
-          多服务器节点管理
+          多服务器节点与流量管理
         </h1>
-        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">管理各服务器的 Xray / Sing-box 代理节点，实时同步配置并自动生成订阅链接</p>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Sing-box 代理核心自动同步 · 外部节点统一订阅 · 服务器实时流量监控</p>
       </div>
 
       <div class="flex flex-wrap items-center gap-2.5">
-        <button onclick="openServerGuide()" class="px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition">
-          <i data-lucide="server" class="w-4 h-4"></i> 添加服务器指南
+        <button onclick="openClientImportModal()" class="px-4 py-2 text-sm font-semibold rounded-xl bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:from-indigo-700 hover:to-pink-600 text-white shadow-md shadow-indigo-500/20 flex items-center gap-2 transition hover:scale-[1.02] active:scale-[0.98]">
+          <i data-lucide="smartphone" class="w-4 h-4"></i>
+          一键导入 / 扫码
+        </button>
+        <button onclick="openImportModal()" class="px-3.5 py-2 text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition">
+          <i data-lucide="download" class="w-4 h-4 text-amber-500"></i> 导入节点
         </button>
         <button onclick="openCreateModal()" class="px-4 py-2 text-sm font-medium rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center gap-1.5 transition">
           <i data-lucide="plus" class="w-4 h-4"></i> 创建节点
@@ -50,51 +60,96 @@
       </div>
     </div>
 
-    <!-- Quick Stats & Subscription Card -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
+    <!-- Quick Stats Cards (4 Columns) -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Sing-box Status Card -->
+      <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3.5 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold relative">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+          <span class="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+        </div>
+        <div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">Sing-box 核心在线</div>
+          <div class="text-2xl font-bold mt-0.5 flex items-baseline gap-1.5">
+            <span id="singboxOnlineCount" class="text-emerald-600 dark:text-emerald-400">0</span>
+            <span class="text-xs text-slate-400 font-normal">/ <span id="serverTotalCount">0</span> 台服务器</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network Total Traffic Card -->
+      <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3.5 shadow-sm">
         <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
-          <i data-lucide="server" class="w-6 h-6"></i>
+          <i data-lucide="arrow-up-down" class="w-6 h-6"></i>
         </div>
         <div>
-          <div class="text-xs text-slate-500 dark:text-slate-400">已接入服务器</div>
-          <div class="text-2xl font-bold mt-0.5" id="serverCount">0</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">接入后消耗总流量</div>
+          <div class="text-2xl font-bold mt-0.5 text-blue-600 dark:text-blue-400" id="totalTrafficDisplay">0 B</div>
         </div>
       </div>
 
-      <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-4 shadow-sm">
-        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
-          <i data-lucide="activity" class="w-6 h-6"></i>
+      <!-- Nodes Total Card -->
+      <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-3.5 shadow-sm">
+        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold">
+          <i data-lucide="layers" class="w-6 h-6"></i>
         </div>
         <div>
-          <div class="text-xs text-slate-500 dark:text-slate-400">运行中节点</div>
-          <div class="text-2xl font-bold mt-0.5" id="nodeCount">0</div>
+          <div class="text-xs text-slate-500 dark:text-slate-400">托管节点总数</div>
+          <div class="text-2xl font-bold mt-0.5 flex items-baseline gap-1.5">
+            <span id="nodeTotalCount">0</span>
+            <span class="text-xs text-slate-400 font-normal">(自建 <span id="nativeNodeCount">0</span> · 导入 <span id="externalNodeCount">0</span>)</span>
+          </div>
         </div>
       </div>
 
+      <!-- Subscription Link Card -->
       <div class="bg-white dark:bg-[#1a1a1a] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-sm">
         <div class="flex items-center justify-between">
           <div class="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
-            <i data-lucide="link" class="w-3.5 h-3.5"></i> 统一订阅链接
+            <i data-lucide="link" class="w-3.5 h-3.5 text-indigo-500"></i> 统一订阅链接
           </div>
-          <span class="text-[10px] bg-emerald-500/10 text-emerald-500 font-medium px-2 py-0.5 rounded-full">自适应客户端</span>
+          <button onclick="switchTab('rules')" class="text-[11px] bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold px-2 py-0.5 rounded-full transition">
+            <i data-lucide="sliders" class="w-3 h-3"></i> 分流规则配置
+          </button>
         </div>
-        <div class="flex items-center gap-2 mt-2">
-          <input type="text" id="subUrlInput" readonly class="text-xs bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
-          <button onclick="copySubUrl()" class="px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 text-xs font-medium rounded-lg whitespace-nowrap transition">
+        <div class="flex items-center gap-1.5 mt-2">
+          <input type="text" id="subUrlInput" readonly class="text-xs bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
+          <button onclick="copySubUrl()" class="px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 text-xs font-medium rounded-lg whitespace-nowrap transition">
             复制
+          </button>
+          <button onclick="openClientImportModal()" class="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg whitespace-nowrap flex items-center gap-1 transition shadow-sm">
+            <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 扫码导入
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Node List Section -->
-    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+    <!-- Navigation Tabs -->
+    <div class="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <button id="tabBtnNodes" onclick="switchTab('nodes')" class="px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-2 transition">
+        <i data-lucide="list" class="w-4 h-4"></i>
+        节点列表
+      </button>
+      <button id="tabBtnTraffic" onclick="switchTab('traffic')" class="px-4 py-2 text-sm font-semibold rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-2 transition">
+        <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+        服务器流量监控
+      </button>
+      <button id="tabBtnRules" onclick="switchTab('rules')" class="px-4 py-2 text-sm font-semibold rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-2 transition">
+        <i data-lucide="git-fork" class="w-4 h-4"></i>
+        订阅规则配置
+      </button>
+    </div>
+
+    <!-- TAB 1: Node List Section -->
+    <div id="tabContentNodes" class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
       <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <h2 class="font-bold text-base flex items-center gap-2">
-          <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
-          节点列表
-        </h2>
+        <div class="flex items-center gap-2">
+          <h2 class="font-bold text-base flex items-center gap-2">
+            <i data-lucide="layers" class="w-4 h-4 text-indigo-500"></i>
+            所有节点
+          </h2>
+          <span class="text-xs text-slate-400">(包含自建 Sing-box 节点与外部导入节点)</span>
+        </div>
         <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="刷新列表">
           <i data-lucide="rotate-cw" class="w-4 h-4"></i>
         </button>
@@ -105,10 +160,10 @@
           <thead class="bg-slate-50 dark:bg-black/20 text-slate-500 dark:text-slate-400 text-xs border-b border-slate-200 dark:border-slate-800">
             <tr>
               <th class="py-3 px-4">节点名称</th>
-              <th class="py-3 px-4">服务器</th>
+              <th class="py-3 px-4">所属服务器</th>
               <th class="py-3 px-4">协议类型</th>
               <th class="py-3 px-4">端口</th>
-              <th class="py-3 px-4">伪装 / SNI</th>
+              <th class="py-3 px-4">伪装 / 域名</th>
               <th class="py-3 px-4">状态</th>
               <th class="py-3 px-4 text-right">操作</th>
             </tr>
@@ -123,10 +178,233 @@
           <i data-lucide="radio" class="w-8 h-8"></i>
         </div>
         <p class="text-base font-semibold text-slate-700 dark:text-slate-300">暂无任何节点</p>
-        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">选择已接入的服务器，立即创建你的第一个 VLESS-Reality 或 Hysteria2 节点</p>
-        <button onclick="openCreateModal()" class="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium shadow-sm hover:bg-indigo-700 transition">
-          立即创建节点
-        </button>
+        <p class="text-xs text-slate-400 mt-1 max-w-sm mx-auto">选择已接入的服务器创建节点，或直接导入外部现有节点链接</p>
+        <div class="flex items-center justify-center gap-2.5 mt-4">
+          <button onclick="openImportModal()" class="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+            导入外部节点
+          </button>
+          <button onclick="openCreateModal()" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium shadow-sm hover:bg-indigo-700 transition">
+            创建自建节点
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Server Traffic Monitor Section -->
+    <div id="tabContentTraffic" class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hidden">
+      <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2.5">
+            <h2 class="font-bold text-base flex items-center gap-2">
+              <i data-lucide="activity" class="w-4 h-4 text-indigo-500"></i>
+              各服务器流量消耗统计
+            </h2>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              实时动态 (3s)
+            </span>
+          </div>
+          <p class="text-xs text-slate-400 mt-0.5">展示探针接入后的实际流量增量（新服务器从 0 起算）；支持随时校准归零或查看底层物理网卡开机累计</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="resetAllTraffic()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-medium flex items-center gap-1.5 transition">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            全部归零
+          </button>
+          <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="立即刷新">
+            <i data-lucide="rotate-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto custom-scrollbar">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 dark:bg-black/20 text-slate-500 dark:text-slate-400 text-xs border-b border-slate-200 dark:border-slate-800">
+            <tr>
+              <th class="py-3 px-4">服务器名称</th>
+              <th class="py-3 px-4">IP 地址 / 系统</th>
+              <th class="py-3 px-4">Sing-box 代理状态</th>
+              <th class="py-3 px-4">实时网速 (下行 / 上行)</th>
+              <th class="py-3 px-4">接入后消耗流量</th>
+              <th class="py-3 px-4">物理网卡开机累计</th>
+              <th class="py-3 px-4 text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="trafficTableBody" class="divide-y divide-slate-100 dark:divide-slate-800/60 font-medium">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- TAB 3: Subscription & Routing Rules Section -->
+    <div id="tabContentRules" class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm hidden">
+      <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="font-bold text-base flex items-center gap-2">
+            <i data-lucide="git-fork" class="w-4 h-4 text-indigo-500"></i>
+            统一订阅分流与规则配置
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">自定义 Clash / Mihomo / 客户端订阅的分流逻辑。修改并保存后，客户端刷新订阅即可立即生效。</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="previewSubscriptionYaml()" class="px-3.5 py-1.5 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition">
+            <i data-lucide="code" class="w-3.5 h-3.5 text-indigo-500"></i>
+            预览订阅 YAML
+          </button>
+          <button onclick="saveSubRules()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition">
+            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+            保存规则生效
+          </button>
+        </div>
+      </div>
+
+      <div class="p-5 sm:p-6 space-y-6">
+        <!-- 核心常用分流预设 -->
+        <div>
+          <h3 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+            <i data-lucide="check-square" class="w-4 h-4 text-indigo-500"></i>
+            一键核心分流预设
+          </h3>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <!-- BT/PT 强制直连 -->
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleDirectBt" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">BT / PT 下载强制直连</span>
+                  <span class="text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.2 rounded-full border border-emerald-500/20">强烈推荐</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  强制 qBittorrent、Transmission、Aria2 及 Tracker/Torrent 关键字直连本地宽带。<strong>防止大文件视频下载烧空 VPS 流量并杜绝 PT 站异地封号！</strong>
+                </p>
+              </div>
+            </label>
+
+            <!-- 国内域名与 IP 直连 -->
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleDirectCn" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">中国大陆域名与 IP 直连 (绕过大陆)</span>
+                  <span class="text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.2 rounded-full border border-blue-500/20">推荐</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  国内主流应用、网站和中国大陆 IP（GEOIP:CN）直连不走节点，节省节点带宽并保证国内网站高速访问。
+                </p>
+              </div>
+            </label>
+
+            <!-- 局域网直连 -->
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleDirectLan" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">局域网与私有 IP 直连</span>
+                  <span class="text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.2 rounded-full border border-blue-500/20">推荐</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  192.168.x.x、10.x.x.x、172.16.x.x、路由器管理页面、NAS 本地服务走直连。
+                </p>
+              </div>
+            </label>
+
+            <!-- 自动优选策略组 -->
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleEnableAuto" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">生成「自动优选」延迟测速策略组</span>
+                  <span class="text-[10px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400 px-1.5 py-0.2 rounded-full border border-purple-500/20">智能</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  在 Clash 订阅中生成「自动优选」分组（url-test），自动探测并切换到当前延迟最低的可用节点。
+                </p>
+              </div>
+            </label>
+
+            <!-- 广告拦截 -->
+            <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-indigo-400 dark:hover:border-indigo-500/50 bg-slate-50/50 dark:bg-black/20 cursor-pointer transition">
+              <input type="checkbox" id="ruleBlockAds" class="mt-0.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500">
+              <div class="space-y-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-800 dark:text-slate-200">过滤常见广告与追踪 (REJECT)</span>
+                  <span class="text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 px-1.5 py-0.2 rounded-full border border-amber-500/20">可选</span>
+                </div>
+                <p class="text-[11px] text-slate-400 leading-relaxed">
+                  自动拦截主流网页与 APP 广告域名（category-ads-all），保持页面清爽并节省流量。
+                </p>
+              </div>
+            </label>
+
+            <!-- 兜底规则选择 -->
+            <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 flex flex-col justify-between">
+              <div>
+                <span class="text-xs font-bold text-slate-800 dark:text-slate-200">漏网之鱼兜底策略 (MATCH)</span>
+                <p class="text-[11px] text-slate-400 mt-1">未匹配上述任何规则的其他国外流量走哪里：</p>
+              </div>
+              <div class="mt-2 flex items-center gap-2">
+                <select id="ruleFinalMatch" class="w-full text-xs font-semibold bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                  <option value="PROXY">走代理 (PROXY) - 推荐国外流量全代理</option>
+                  <option value="DIRECT">走直连 (DIRECT) - 仅命中规则代理，其余直连</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 自定义规则编辑器 -->
+        <div>
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div>
+              <h3 class="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <i data-lucide="edit-3" class="w-4 h-4 text-indigo-500"></i>
+                自定义高级分流规则
+              </h3>
+              <p class="text-[11px] text-slate-400 mt-0.5">一行一条，支持标准 Clash / Mihomo 规则，优先级最高（置于规则最顶部）</p>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" onclick="insertRuleSnippet('DOMAIN-SUFFIX,themoviedb.org,PROXY')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                + 域名走代理
+              </button>
+              <button type="button" onclick="insertRuleSnippet('DOMAIN-KEYWORD,baidu,DIRECT')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                + 域名走直连
+              </button>
+              <button type="button" onclick="insertRuleSnippet('IP-CIDR,192.168.1.0/24,DIRECT,no-resolve')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[11px] transition">
+                + IP段直连
+              </button>
+            </div>
+          </div>
+          <textarea id="ruleCustomRules" rows="6" placeholder="# 在此处输入自定义规则，例如：&#10;DOMAIN-SUFFIX,themoviedb.org,PROXY&#10;DOMAIN-KEYWORD,douban,DIRECT&#10;IP-CIDR,18.136.66.215/32,PROXY" class="w-full text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 leading-relaxed"></textarea>
+        </div>
+
+        <!-- 订阅链接入口与格式说明 -->
+        <div class="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5">
+          <div class="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <i data-lucide="link" class="w-4 h-4"></i>
+              不同客户端订阅专属链接
+            </div>
+            <button onclick="openClientImportModal()" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-2.5 py-1 rounded-lg flex items-center gap-1 transition shadow-sm">
+              <i data-lucide="smartphone" class="w-3.5 h-3.5"></i> 一键导入客户端 / 扫码
+            </button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+              <div class="text-slate-500 dark:text-slate-400 text-[11px] mb-1">Clash / Mihomo / Verge 专属（含策略组与上述完整分流规则）：</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="subClashUrlInput" readonly class="text-xs bg-white dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
+                <button onclick="copyElementText('subClashUrlInput', 'Clash 订阅链接已复制！')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg whitespace-nowrap transition text-xs font-medium">复制</button>
+              </div>
+            </div>
+            <div>
+              <div class="text-slate-500 dark:text-slate-400 text-[11px] mb-1">通用 Base64 订阅（Shadowrocket / V2RayN / Sing-box / 纯节点）：</div>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="subB64UrlInput" readonly class="text-xs bg-white dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1.5 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
+                <button onclick="copyElementText('subB64UrlInput', '通用 Base64 订阅链接已复制！')" class="px-3 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-800 dark:text-slate-200 rounded-lg whitespace-nowrap transition text-xs font-medium">复制</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -150,7 +428,7 @@
           <select id="serverSelect" required class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
             <option value="">加载服务器列表中...</option>
           </select>
-          <p class="text-[11px] text-slate-400 mt-1">服务器列表自动与 Komari 探针同步</p>
+          <p class="text-[11px] text-slate-400 mt-1">优先选择标记为 🟢 Sing-box 在线的服务器</p>
         </div>
 
         <div>
@@ -200,248 +478,772 @@
           <input type="number" id="nodePortInput" min="1" max="65535" required class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
         </div>
 
-        <div id="sniContainer">
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">伪装域名 (SNI)</label>
-          <input type="text" id="sniInput" value="addons.mozilla.org" class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
-          <p class="text-[11px] text-slate-400 mt-1">Reality 可选：addons.mozilla.org / gateway.icloud.com / swdist.apple.com</p>
+        <!-- Reality SNI field -->
+        <div id="realitySniGroup">
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">Reality 伪装域名 (SNI)</label>
+          <input type="text" id="nodeSniInput" value="addons.mozilla.org" class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          <p class="text-[11px] text-slate-400 mt-1">推荐: addons.mozilla.org, gateway.icloud.com, www.apple.com</p>
         </div>
 
-        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-          <button type="button" onclick="closeCreateModal()" class="px-4 py-2 text-xs font-medium rounded-xl text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800">取消</button>
-          <button type="submit" id="submitBtn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl shadow-sm transition">立即创建并下发</button>
+        <div class="pt-2 flex justify-end gap-2.5">
+          <button type="button" onclick="closeCreateModal()" class="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            取消
+          </button>
+          <button type="submit" id="submitBtn" class="px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-medium shadow-sm hover:bg-indigo-700 transition flex items-center gap-1.5">
+            <span>立即创建</span>
+          </button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Server Add Guide Modal -->
-  <div id="guideModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+  <!-- Import Node Modal -->
+  <div id="importModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
       <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <h3 class="font-bold text-lg flex items-center gap-2">
-          <i data-lucide="terminal" class="w-5 h-5 text-indigo-500"></i>
-          添加新服务器说明
+          <i data-lucide="download" class="w-5 h-5 text-amber-500"></i>
+          导入外部节点
         </h3>
-        <button onclick="closeServerGuide()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
 
-      <div class="space-y-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-        <div class="flex items-start gap-2.5">
-          <span class="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold flex items-center justify-center shrink-0 mt-0.5">1</span>
-          <div>
-            在 Komari 顶部或后台点击 <strong>「服务器」</strong> -> <strong>「添加服务器」</strong>，填入服务器名称并生成获取一个 <strong>Token</strong>。
-          </div>
+      <form id="importForm" onsubmit="submitImportNodes(event)" class="space-y-4 text-sm">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">
+            节点分享链接 (支持多行批量粘贴)
+          </label>
+          <textarea id="importContentInput" rows="7" required placeholder="请粘贴节点分享链接，每行一个：&#10;vless://uuid@1.2.3.4:443?...#香港节点&#10;hysteria2://pass@5.6.7.8:443?...#美国节点&#10;vmess://eyJhZGQiOi...&#10;trojan://pass@9.9.9.9:443...#日本节点" class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-slate-700 dark:text-slate-200 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 custom-scrollbar"></textarea>
+          <p class="text-[11px] text-slate-400 mt-1">支持常见协议链接（VLESS、VMess、Hysteria2、TUIC、Trojan、SS）。导入后将自动整合进您的统一订阅，客户端更新即可直接拉取使用。</p>
         </div>
 
-        <div class="flex items-start gap-2.5">
-          <span class="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold flex items-center justify-center shrink-0 mt-0.5">2</span>
-          <div>
-            SSH 登录你的目标 VPS，以 root 权限执行以下一键安装指令：
-            <div class="mt-2 bg-black/80 text-emerald-400 p-3 rounded-xl font-mono text-[11px] break-all relative group">
-              curl -fsSL https://komari.yohoo.xyz/install-node.sh | bash -s -- --token <span class="text-yellow-400">&lt;你的服务器Token&gt;</span>
+        <div class="pt-2 flex justify-end gap-2.5">
+          <button type="button" onclick="closeImportModal()" class="px-4 py-2 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl text-xs font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+            取消
+          </button>
+          <button type="submit" id="importSubmitBtn" class="px-5 py-2 bg-amber-600 text-white rounded-xl text-xs font-medium shadow-sm hover:bg-amber-700 transition flex items-center gap-1.5">
+            <span>开始导入</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Client Import & Universal QR Modal -->
+  <div id="clientImportModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto custom-scrollbar">
+      
+      <!-- Modal Header -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <div>
+          <h3 class="font-bold text-lg flex items-center gap-2">
+            <span class="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-500">
+              <i data-lucide="smartphone" class="w-5 h-5"></i>
+            </span>
+            一键导入客户端 & 二维码扫码
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">支持全平台主流客户端一键唤起自动配置，或使用手机相机/客户端扫码即刻导入</p>
+        </div>
+        <button onclick="closeClientImportModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Modal Tab Switcher -->
+      <div class="flex items-center gap-2 bg-slate-100 dark:bg-black/30 p-1 rounded-xl">
+        <button id="importTabBtnClients" onclick="switchImportTab('clients')" class="flex-1 py-2 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm transition flex items-center justify-center gap-1.5">
+          <i data-lucide="zap" class="w-3.5 h-3.5"></i> 一键唤起客户端
+        </button>
+        <button id="importTabBtnQr" onclick="switchImportTab('qr')" class="flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center justify-center gap-1.5">
+          <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 二维码扫码导入
+        </button>
+      </div>
+
+      <!-- Tab Content 1: One-Click Launch Clients -->
+      <div id="importContentClients" class="space-y-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+          
+          <!-- Clash / Mihomo / Verge / Party -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold">
+                  <i data-lucide="cat" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Clash / Mihomo / Verge</div>
+                  <div class="text-[11px] text-slate-400">Windows · macOS · Android</div>
+                </div>
+              </div>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium">推荐</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('clash')" class="flex-1 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyClashSubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
             </div>
           </div>
+
+          <!-- Shadowrocket (小火箭) -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold">
+                  <i data-lucide="rocket" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Shadowrocket (小火箭)</div>
+                  <div class="text-[11px] text-slate-400">iOS · iPadOS · macOS M</div>
+                </div>
+              </div>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-medium">iOS首选</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('shadowrocket')" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyB64SubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Sing-box -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold">
+                  <i data-lucide="box" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Sing-box 客户端</div>
+                  <div class="text-[11px] text-slate-400">Windows · macOS · iOS · Android</div>
+                </div>
+              </div>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium">官方内核</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('singbox')" class="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyClashSubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Surge -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center font-bold">
+                  <i data-lucide="zap" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Surge</div>
+                  <div class="text-[11px] text-slate-400">macOS · iOS</div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('surge')" class="flex-1 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyClashSubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Quantumult X (圈X) -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center font-bold">
+                  <i data-lucide="disc" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Quantumult X (圈X)</div>
+                  <div class="text-[11px] text-slate-400">iOS</div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('quantumultx')" class="flex-1 py-1.5 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyClashSubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Stash (Clash for iOS) -->
+          <div class="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-black/20 hover:border-indigo-500/50 dark:hover:border-indigo-500/50 transition flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold">
+                  <i data-lucide="shield" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="font-bold text-slate-800 dark:text-slate-100 text-xs">Stash</div>
+                  <div class="text-[11px] text-slate-400">iOS · macOS</div>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button onclick="launchClient('stash')" class="flex-1 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition shadow-sm">
+                <i data-lucide="external-link" class="w-3.5 h-3.5"></i> 一键导入
+              </button>
+              <button onclick="copyClashSubUrl()" class="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-lg text-xs transition" title="复制订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+
         </div>
 
-        <div class="flex items-start gap-2.5">
-          <span class="w-5 h-5 rounded-full bg-indigo-500/10 text-indigo-500 font-bold flex items-center justify-center shrink-0 mt-0.5">3</span>
-          <div>
-            脚本会自动配置：
-            <ul class="list-disc list-inside mt-1 space-y-0.5 text-slate-500 dark:text-slate-400">
-              <li><strong>Komari Agent</strong>（监控上报，秒级呈现到探针主页）</li>
-              <li><strong>Sing-box 最新高性能核心</strong>（处理 VLESS/Reality/Hy2/Trojan 等各种协议）</li>
-              <li><strong>配置同步守护进程</strong>（建立后台连接，主控一键创建节点即刻秒级生效）</li>
-            </ul>
+        <div class="p-3 rounded-xl bg-amber-500/5 border border-amber-500/10 text-[11px] text-amber-700 dark:text-amber-400 flex items-center gap-2">
+          <i data-lucide="info" class="w-4 h-4 shrink-0"></i>
+          <span>点击「一键导入」将调用对应客户端协议自动打开客户端并下载配置。若您的设备尚未安装对应客户端，请先安装或使用【二维码扫码】导入。</span>
+        </div>
+      </div>
+
+      <!-- Tab Content 2: Universal & Node QR Code -->
+      <div id="importContentQr" class="space-y-4 hidden">
+        <!-- QR Mode Selector -->
+        <div class="flex flex-wrap items-center justify-between gap-2.5 p-3 rounded-xl bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-slate-800 text-xs">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="flex items-center gap-1.5 cursor-pointer font-medium">
+              <input type="radio" name="qrMode" value="sub_b64" checked onchange="updateQrDisplay()" class="text-indigo-600">
+              <span>通用 Base64 (小火箭 / 推荐扫码)</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer font-medium">
+              <input type="radio" name="qrMode" value="sub_clash" onchange="updateQrDisplay()" class="text-indigo-600">
+              <span>全量 Clash 规则订阅</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer font-medium">
+              <input type="radio" name="qrMode" value="single_node" onchange="updateQrDisplay()" class="text-indigo-600">
+              <span>单个节点直连</span>
+            </label>
+          </div>
+          
+          <div id="singleNodeSelectContainer" class="hidden w-full sm:w-auto">
+            <select id="singleNodeSelect" onchange="updateQrDisplay()" class="w-full sm:w-auto bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+            </select>
+          </div>
+        </div>
+
+        <!-- QR Display Canvas -->
+        <div class="text-center py-2">
+          <div class="p-4 bg-white rounded-2xl inline-block shadow-lg border border-slate-200 dark:border-slate-700 mx-auto" id="universalQrcode"></div>
+          <div class="mt-3">
+            <div id="qrTypeBadge" class="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mb-1">
+              全量通用 Base64 (小火箭 / v2rayN) 二维码
+            </div>
+            <p class="text-xs text-slate-400">使用手机相机、Shadowrocket（小火箭）、v2rayN 或 Sing-box 扫一扫即刻导入</p>
+          </div>
+        </div>
+
+        <!-- Content URL Input & Copy -->
+        <div class="space-y-1.5">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>当前二维码承载内容：</span>
+            <span id="qrCharCount"></span>
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="text" id="universalQrTextInput" readonly class="text-xs bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
+            <button onclick="copyUniversalQrContent()" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold whitespace-nowrap flex items-center gap-1 transition shadow-sm">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i> 复制内容
+            </button>
           </div>
         </div>
       </div>
 
-      <div class="flex justify-end pt-2">
-        <button onclick="closeServerGuide()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-xl">我明白了</button>
-      </div>
     </div>
   </div>
 
   <!-- QR Code Modal -->
   <div id="qrModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
-    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 text-center space-y-4">
-      <h3 class="font-bold text-base" id="qrNodeName">扫码导入节点</h3>
-      <div id="qrcode" class="p-3 bg-white rounded-xl inline-block shadow-inner mx-auto"></div>
-      <p class="text-xs text-slate-400 break-all" id="qrLinkText"></p>
-      <button onclick="closeQrModal()" class="w-full py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-xs font-medium rounded-xl transition">关闭</button>
+    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 text-center">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+        <h3 class="font-bold text-sm" id="qrTitle">节点二维码</h3>
+        <button onclick="closeQrModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="p-4 bg-white rounded-xl inline-block shadow-inner mx-auto" id="qrcode"></div>
+      
+      <div>
+        <p class="text-xs text-slate-400 break-all select-all font-mono" id="qrLinkText"></p>
+        <button onclick="copyCurrentQrLink()" class="mt-3 w-full py-2 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-xs font-semibold rounded-xl hover:bg-indigo-100 transition">
+          复制分享链接
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- YAML Preview Modal -->
+  <div id="yamlPreviewModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4 max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+        <h3 class="font-bold text-base flex items-center gap-2">
+          <i data-lucide="code" class="w-5 h-5 text-indigo-500"></i>
+          订阅配置预览 (Clash / Mihomo YAML)
+        </h3>
+        <button onclick="closeYamlPreviewModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto custom-scrollbar bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-xs leading-relaxed select-all">
+        <pre id="yamlPreviewContent">加载中...</pre>
+      </div>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <button onclick="copyElementText('yamlPreviewContent', '完整 YAML 配置已复制！')" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-sm">
+          <i data-lucide="copy" class="w-4 h-4"></i> 复制配置
+        </button>
+        <button onclick="closeYamlPreviewModal()" class="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-semibold transition">
+          关闭
+        </button>
+      </div>
     </div>
   </div>
 
   <script>
-    let currentServers = [];
     let currentNodes = [];
-    let currentSubUrl = '';
+    let currentServers = [];
+    let currentSubUrl = "";
+    let activeQrLink = "";
 
-    document.addEventListener("DOMContentLoaded", () => {
-      randomizePort();
-      loadData();
+    function switchTab(tab) {
+      const btnNodes = document.getElementById('tabBtnNodes');
+      const btnTraffic = document.getElementById('tabBtnTraffic');
+      const btnRules = document.getElementById('tabBtnRules');
+      const contentNodes = document.getElementById('tabContentNodes');
+      const contentTraffic = document.getElementById('tabContentTraffic');
+      const contentRules = document.getElementById('tabContentRules');
+
+      [btnNodes, btnTraffic, btnRules].forEach(b => {
+        if (b) b.className = "px-4 py-2 text-sm font-semibold rounded-xl text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-2 transition";
+      });
+      [contentNodes, contentTraffic, contentRules].forEach(c => {
+        if (c) c.classList.add('hidden');
+      });
+
+      if (tab === 'nodes') {
+        btnNodes.className = "px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-2 transition";
+        contentNodes.classList.remove('hidden');
+      } else if (tab === 'traffic') {
+        btnTraffic.className = "px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-2 transition";
+        contentTraffic.classList.remove('hidden');
+      } else if (tab === 'rules') {
+        btnRules.className = "px-4 py-2 text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-2 transition";
+        contentRules.classList.remove('hidden');
+        loadSubRules();
+      }
       lucide.createIcons();
-    });
+    }
 
-    function randomizePort() {
-      const port = Math.floor(Math.random() * (60000 - 15000 + 1)) + 15000;
-      document.getElementById('nodePortInput').value = port;
+    async function loadSubRules() {
+      try {
+        const res = await fetch('/api/node-mgr/sub/rules').then(r => r.json());
+        if (res.ok && res.rules) {
+          const r = res.rules;
+          document.getElementById('ruleDirectBt').checked = r.direct_bt !== false;
+          document.getElementById('ruleDirectCn').checked = r.direct_cn !== false;
+          document.getElementById('ruleDirectLan').checked = r.direct_lan !== false;
+          document.getElementById('ruleBlockAds').checked = !!r.block_ads;
+          document.getElementById('ruleEnableAuto').checked = r.enable_auto_group !== false;
+          document.getElementById('ruleFinalMatch').value = r.final_match || 'PROXY';
+          document.getElementById('ruleCustomRules').value = r.custom_rules || '';
+        }
+      } catch (e) {
+        console.error("加载规则失败:", e);
+      }
+    }
+
+    async function saveSubRules() {
+      const payload = {
+        direct_bt: document.getElementById('ruleDirectBt').checked,
+        direct_cn: document.getElementById('ruleDirectCn').checked,
+        direct_lan: document.getElementById('ruleDirectLan').checked,
+        block_ads: document.getElementById('ruleBlockAds').checked,
+        enable_auto_group: document.getElementById('ruleEnableAuto').checked,
+        final_match: document.getElementById('ruleFinalMatch').value,
+        custom_rules: document.getElementById('ruleCustomRules').value
+      };
+
+      try {
+        const res = await fetch('/api/node-mgr/sub/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        if (res.ok) {
+          showToast('订阅规则已保存生效！客户端刷新订阅即可获取新规则。', 'success');
+        } else {
+          showToast(res.error || '保存失败', 'error');
+        }
+      } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+      }
+    }
+
+    function insertRuleSnippet(text) {
+      const textarea = document.getElementById('ruleCustomRules');
+      if (textarea.value.trim()) {
+        textarea.value += '\n' + text;
+      } else {
+        textarea.value = text;
+      }
+      textarea.focus();
+    }
+
+    async function previewSubscriptionYaml() {
+      document.getElementById('yamlPreviewContent').textContent = "正在生成完整订阅配置...";
+      document.getElementById('yamlPreviewModal').classList.remove('hidden');
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/node-mgr/sub/rules/preview').then(r => r.json());
+        if (res.ok && res.yaml) {
+          document.getElementById('yamlPreviewContent').textContent = res.yaml;
+        } else {
+          document.getElementById('yamlPreviewContent').textContent = "生成失败: " + (res.error || '未知错误');
+        }
+      } catch (e) {
+        document.getElementById('yamlPreviewContent').textContent = "请求出错: " + e.message;
+      }
+    }
+
+    function closeYamlPreviewModal() {
+      document.getElementById('yamlPreviewModal').classList.add('hidden');
+    }
+
+    function copyElementText(elementId, successMsg) {
+      const el = document.getElementById(elementId);
+      const val = el.value !== undefined ? el.value : el.textContent;
+      navigator.clipboard.writeText(val).then(() => {
+        showToast(successMsg || '已复制到剪贴板！', 'success');
+      });
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
     }
 
     async function loadData() {
       try {
-        const subRes = await fetch('/api/node-mgr/sub/token').then(r => r.json());
-        if (subRes.ok) {
-          currentSubUrl = subRes.sub_url;
-          document.getElementById('subUrlInput').value = currentSubUrl;
+        const [resNodes, resServers, resSub] = await Promise.all([
+          fetch('/api/node-mgr/nodes').then(r => r.json()),
+          fetch('/api/node-mgr/servers').then(r => r.json()),
+          fetch('/api/node-mgr/sub/token').then(r => r.json())
+        ]);
+
+        currentNodes = resNodes.nodes || [];
+        currentServers = resServers.servers || [];
+
+        // Update Stat Cards
+        document.getElementById('singboxOnlineCount').textContent = resServers.singbox_online_count || 0;
+        document.getElementById('serverTotalCount').textContent = resServers.total_servers || currentServers.length;
+        document.getElementById('totalTrafficDisplay').textContent = formatBytes(resServers.total_traffic || 0);
+        document.getElementById('nodeTotalCount').textContent = currentNodes.length;
+
+        const nativeCount = currentNodes.filter(n => !n.is_external && n.server_uuid !== 'external').length;
+        const externalCount = currentNodes.filter(n => n.is_external || n.server_uuid === 'external').length;
+        document.getElementById('nativeNodeCount').textContent = nativeCount;
+        document.getElementById('externalNodeCount').textContent = externalCount;
+
+        if (resSub.sub_url) {
+          currentSubUrl = resSub.sub_url;
+          document.getElementById('subUrlInput').value = resSub.sub_url;
+          const clashEl = document.getElementById('subClashUrlInput');
+          if (clashEl) clashEl.value = resSub.sub_url + '?clash=1';
+          const b64El = document.getElementById('subB64UrlInput');
+          if (b64El) b64El.value = resSub.sub_url + '?format=b64';
         }
 
-        const serverRes = await fetch('/api/node-mgr/servers').then(r => r.json());
-        if (serverRes.ok) {
-          currentServers = serverRes.servers || [];
-          document.getElementById('serverCount').innerText = currentServers.length;
-          updateServerSelect();
-        }
-
-        const nodeRes = await fetch('/api/node-mgr/nodes').then(r => r.json());
-        if (nodeRes.ok) {
-          currentNodes = nodeRes.nodes || [];
-          renderNodes();
-        }
+        renderNodeTable();
+        renderTrafficTable(resServers.total_traffic || 0);
+        updateServerSelect();
+        lucide.createIcons();
       } catch (e) {
-        console.error("Failed to load data:", e);
+        console.error("加载数据失败:", e);
       }
     }
 
-    function updateServerSelect() {
-      const sel = document.getElementById('serverSelect');
-      sel.innerHTML = '';
-      if (currentServers.length === 0) {
-        sel.innerHTML = '<option value="">暂无服务器 (请先添加服务器)</option>';
+    function renderNodeTable() {
+      const tbody = document.getElementById('nodeTableBody');
+      const emptyState = document.getElementById('emptyState');
+      tbody.innerHTML = '';
+
+      if (currentNodes.length === 0) {
+        emptyState.classList.remove('hidden');
         return;
       }
-      currentServers.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s.uuid;
-        opt.innerText = `${s.name} (${s.ipv4 || '暂无IP'})`;
-        opt.dataset.ip = s.ipv4;
-        opt.dataset.name = s.name;
-        sel.appendChild(opt);
+      emptyState.classList.add('hidden');
+
+      currentNodes.forEach(node => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition";
+
+        const isExt = node.is_external || node.server_uuid === 'external';
+        const serverBadge = isExt
+          ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+               <i data-lucide="download" class="w-3 h-3"></i> 外部导入
+             </span>`
+          : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+               <i data-lucide="server" class="w-3 h-3 text-indigo-500"></i> ${node.server_name || '自建服务器'}
+             </span>`;
+
+        let protoBadgeClass = "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400";
+        if (node.protocol.includes('hysteria')) protoBadgeClass = "bg-pink-500/10 text-pink-600 dark:text-pink-400";
+        if (node.protocol.includes('tuic')) protoBadgeClass = "bg-purple-500/10 text-purple-600 dark:text-purple-400";
+        if (node.protocol.includes('trojan')) protoBadgeClass = "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400";
+
+        tr.innerHTML = `
+          <td class="py-3 px-4">
+            <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+              ${node.name}
+            </div>
+          </td>
+          <td class="py-3 px-4">
+            ${serverBadge}
+            ${node.server_ip ? `<div class="text-[11px] font-mono text-slate-400 mt-0.5">${node.server_ip}</div>` : ''}
+          </td>
+          <td class="py-3 px-4">
+            <span class="px-2 py-0.5 rounded-lg text-xs font-semibold ${protoBadgeClass}">
+              ${node.protocol.toUpperCase()}
+            </span>
+          </td>
+          <td class="py-3 px-4 font-mono text-slate-600 dark:text-slate-300 text-xs">
+            ${node.port || '-'}
+          </td>
+          <td class="py-3 px-4 font-mono text-slate-400 text-xs">
+            ${node.sni || '-'}
+          </td>
+          <td class="py-3 px-4">
+            <button onclick="toggleNode(${node.id})" class="px-2.5 py-1 rounded-full text-xs font-medium flex items-center gap-1.5 transition ${node.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20' : 'bg-slate-200 dark:bg-slate-800 text-slate-400 hover:bg-slate-300'}">
+              <span class="w-1.5 h-1.5 rounded-full ${node.enabled ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
+              ${node.enabled ? '已启用' : '已暂停'}
+            </button>
+          </td>
+          <td class="py-3 px-4 text-right">
+            <div class="flex items-center justify-end gap-1.5">
+              <button onclick="copyNodeLink('${node.link}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition" title="复制链接">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+              </button>
+              <button onclick="showQrModal('${node.name}', '${node.link}')" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition" title="二维码">
+                <i data-lucide="qr-code" class="w-4 h-4"></i>
+              </button>
+              <button onclick="deleteNode(${node.id})" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-800 rounded-lg transition" title="删除">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
       });
     }
 
-    function renderNodes() {
-      const tbody = document.getElementById('nodeTableBody');
-      const empty = document.getElementById('emptyState');
+    function renderTrafficTable(totalNetworkTraffic) {
+      const tbody = document.getElementById('trafficTableBody');
       tbody.innerHTML = '';
 
-      const activeNodes = currentNodes.filter(n => n.enabled);
-      document.getElementById('nodeCount').innerText = activeNodes.length;
-
-      if (currentNodes.length === 0) {
-        empty.classList.remove('hidden');
+      if (currentServers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-400 text-xs">暂无服务器数据</td></tr>`;
         return;
       }
-      empty.classList.add('hidden');
 
-      currentNodes.forEach(n => {
+      currentServers.forEach(server => {
         const tr = document.createElement('tr');
-        tr.className = "hover:bg-slate-50 dark:hover:bg-black/10 transition";
+        tr.className = "hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition";
 
-        let protoBadge = '';
-        if (n.protocol === 'vless_reality') {
-          protoBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-purple-500/10 text-purple-600 dark:text-purple-400 font-semibold">VLESS Reality</span>';
-        } else if (n.protocol === 'hysteria2') {
-          protoBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold">Hysteria 2</span>';
-        } else if (n.protocol === 'tuic') {
-          protoBadge = '<span class="px-2 py-0.5 rounded-full text-[11px] bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 font-semibold">TUIC v5</span>';
+        // Singbox badge
+        let statusBadge = "";
+        if (server.singbox_online) {
+          const agoText = server.last_seen_ago !== null ? `${server.last_seen_ago}s 前活跃` : '在线';
+          statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                           <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+                           在线 (${agoText})
+                         </span>`;
+        } else if (server.singbox_installed) {
+          statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                           <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                           离线 / 重启中
+                         </span>`;
         } else {
-          protoBadge = `<span class="px-2 py-0.5 rounded-full text-[11px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 font-semibold">${n.protocol.toUpperCase()}</span>`;
+          statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-400">
+                           <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                           未安装核心
+                         </span>`;
         }
 
+        // Traffic percent
+        const percent = totalNetworkTraffic > 0 ? ((server.traffic_total / totalNetworkTraffic) * 100).toFixed(1) : 0;
+
         tr.innerHTML = `
-          <td class="py-3.5 px-4 font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full ${n.enabled ? 'bg-emerald-500' : 'bg-slate-400'}"></span>
-            ${n.name}
+          <td class="py-3.5 px-4 font-bold text-slate-800 dark:text-slate-100">
+            <div class="flex items-center gap-2">
+              <i data-lucide="server" class="w-4 h-4 text-indigo-500"></i>
+              ${server.name}
+            </div>
           </td>
-          <td class="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-            <div class="text-xs font-medium">${n.server_name || '默认服务器'}</div>
-            <div class="text-[10px] text-slate-400 font-mono">${n.server_ip || '-'}</div>
-          </td>
-          <td class="py-3.5 px-4">${protoBadge}</td>
-          <td class="py-3.5 px-4 font-mono text-xs">${n.port}</td>
-          <td class="py-3.5 px-4 text-xs text-slate-500 font-mono">${n.sni || '-'}</td>
           <td class="py-3.5 px-4">
-            <button onclick="toggleNode(${n.id})" class="text-xs font-semibold px-2.5 py-1 rounded-lg transition ${n.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'}">
-              ${n.enabled ? '已启用' : '已停用'}
-            </button>
+            <div class="font-mono text-xs text-slate-700 dark:text-slate-200">${server.ipv4 || server.ipv6 || '-'}</div>
+            <div class="text-[11px] text-slate-400 mt-0.5">${server.os || 'Linux'} · ${server.arch || 'amd64'}</div>
           </td>
-          <td class="py-3.5 px-4 text-right space-x-1 whitespace-nowrap">
-            <button onclick="copyShareLink('${n.link}')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-indigo-600 transition" title="复制节点链接">
-              <i data-lucide="copy" class="w-4 h-4 inline"></i>
-            </button>
-            <button onclick="showQr('${n.name}', '${n.link}')" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 hover:text-indigo-600 transition" title="二维码">
-              <i data-lucide="qr-code" class="w-4 h-4 inline"></i>
-            </button>
-            <button onclick="deleteNode(${n.id})" class="p-1.5 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg text-slate-400 hover:text-rose-500 transition" title="删除节点">
-              <i data-lucide="trash-2" class="w-4 h-4 inline"></i>
+          <td class="py-3.5 px-4">
+            ${statusBadge}
+          </td>
+          <td class="py-3.5 px-4 font-mono text-xs">
+            <div class="text-emerald-600 dark:text-emerald-400">↓ ${formatBytes(server.in_rate)}/s</div>
+            <div class="text-blue-600 dark:text-blue-400 text-[11px]">↑ ${formatBytes(server.out_rate)}/s</div>
+          </td>
+          <td class="py-3.5 px-4">
+            <div class="font-bold text-slate-900 dark:text-slate-100 text-sm font-mono">${formatBytes(server.traffic_total)}</div>
+            <div class="w-28 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 mt-1.5 overflow-hidden">
+              <div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${Math.max(4, percent)}%"></div>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1 font-mono">
+              ↑ ${formatBytes(server.traffic_up)} · ↓ ${formatBytes(server.traffic_down)}
+            </div>
+          </td>
+          <td class="py-3.5 px-4">
+            <div class="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">${formatBytes(server.raw_total || 0)}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5">开机物理计数</div>
+          </td>
+          <td class="py-3.5 px-4 text-right">
+            <button onclick="resetServerTraffic('${server.uuid}', '${server.name}')" class="px-2.5 py-1 text-xs border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-300 inline-flex items-center gap-1 transition" title="将当前用量作为基准起点归零重计">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+              归零
             </button>
           </td>
         `;
         tbody.appendChild(tr);
       });
-      lucide.createIcons();
     }
 
-    async function toggleNode(id) {
-      await fetch(`/api/node-mgr/nodes/${id}/toggle`, { method: 'POST' });
-      loadData();
+    async function resetServerTraffic(uuid, name) {
+      if (!confirm(`确定要将【${name || '该服务器'}】的流量统计归零重置吗？\n（系统将以当前网卡数值作为基线起点，从 0 开始重新累计）`)) return;
+      try {
+        const res = await fetch('/api/node-mgr/traffic/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('流量已归零重置！', 'success');
+          loadData();
+        } else {
+          showToast(data.error || '重置失败', 'error');
+        }
+      } catch (e) {
+        showToast('请求失败: ' + e.message, 'error');
+      }
     }
 
-    async function deleteNode(id) {
-      if (!confirm("确定要删除此节点吗？")) return;
-      await fetch(`/api/node-mgr/nodes/${id}`, { method: 'DELETE' });
-      loadData();
+    async function resetAllTraffic() {
+      if (!confirm('确定要将所有服务器的流量统计统一归零吗？\n（适用于每月出账日新账期重置）')) return;
+      try {
+        const res = await fetch('/api/node-mgr/traffic/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid: 'all' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('所有服务器流量已归零重置！', 'success');
+          loadData();
+        } else {
+          showToast(data.error || '重置失败', 'error');
+        }
+      } catch (e) {
+        showToast('请求失败: ' + e.message, 'error');
+      }
+    }
+
+    function updateServerSelect() {
+      const sel = document.getElementById('serverSelect');
+      if (currentServers.length === 0) {
+        sel.innerHTML = '<option value="">暂无服务器 (请先在服务器列表添加)</option>';
+        return;
+      }
+      sel.innerHTML = '';
+      currentServers.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.uuid;
+        const onlineTag = s.singbox_online ? '🟢 Sing-box 在线' : '⚪ 未安装核心';
+        opt.textContent = `${s.name} (${s.ipv4 || s.ipv6 || '无IP'}) [${onlineTag}]`;
+        sel.appendChild(opt);
+      });
+    }
+
+    function randomizePort() {
+      const port = Math.floor(Math.random() * (45000 - 15000 + 1)) + 15000;
+      document.getElementById('nodePortInput').value = port;
     }
 
     function onProtocolChange(val) {
-      const sniCont = document.getElementById('sniContainer');
-      const sniInput = document.getElementById('sniInput');
-      if (val === 'vless_reality') {
-        sniCont.style.display = 'block';
-        sniInput.value = 'addons.mozilla.org';
-      } else if (val === 'hysteria2' || val === 'tuic' || val === 'trojan') {
-        sniCont.style.display = 'block';
-        sniInput.value = 'bing.com';
-      } else {
-        sniCont.style.display = 'none';
-      }
+      const sniGroup = document.getElementById('realitySniGroup');
+      sniGroup.classList.remove('hidden');
+    }
+
+    function openCreateModal() {
+      randomizePort();
+      document.getElementById('createModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeCreateModal() {
+      document.getElementById('createModal').classList.add('hidden');
+    }
+
+    function openImportModal() {
+      document.getElementById('importContentInput').value = '';
+      document.getElementById('importModal').classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal').classList.add('hidden');
     }
 
     async function submitCreateNode(e) {
       e.preventDefault();
       const sel = document.getElementById('serverSelect');
-      const opt = sel.options[sel.selectedIndex];
+      const selectedServer = currentServers[sel.selectedIndex];
       if (!sel.value) {
-        alert("请先选择一个目标服务器！若尚未添加服务器，请参考右上角【添加服务器指南】。");
+        alert("请先选择目标服务器！");
         return;
       }
 
       const btn = document.getElementById('submitBtn');
       btn.disabled = true;
-      btn.innerText = "正在下发节点配置...";
+      btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> 创建中...`;
+      lucide.createIcons();
 
       const proto = document.querySelector('input[name="protocol"]:checked').value;
       const payload = {
-        server_uuid: sel.value,
-        server_name: opt.dataset.name || opt.innerText,
-        server_ip: opt.dataset.ip || window.location.hostname,
-        name: document.getElementById('nodeNameInput').value,
+        server_uuid: selectedServer.uuid,
+        server_name: selectedServer.name,
+        server_ip: selectedServer.ipv4 || selectedServer.ipv6 || '',
+        name: document.getElementById('nodeNameInput').value.trim(),
         protocol: proto,
         port: parseInt(document.getElementById('nodePortInput').value),
-        sni: document.getElementById('sniInput').value
+        sni: document.getElementById('nodeSniInput').value.trim() || 'addons.mozilla.org'
       };
 
       try {
@@ -453,46 +1255,276 @@
 
         if (res.ok) {
           closeCreateModal();
-          loadData();
-          randomizePort();
-          document.getElementById('nodeNameInput').value = '';
+          await loadData();
         } else {
-          alert("创建失败: " + (res.error || '未知错误'));
+          alert("创建失败: " + (res.error || "未知错误"));
         }
       } catch (err) {
-        alert("请求失败: " + err.message);
+        alert("网络请求异常: " + err);
       } finally {
         btn.disabled = false;
-        btn.innerText = "立即创建并下发";
+        btn.innerHTML = `<span>立即创建</span>`;
       }
     }
 
-    function copySubUrl() {
-      navigator.clipboard.writeText(currentSubUrl).then(() => {
-        alert("统一订阅链接已复制到剪贴板！\n可直接导入 Clash Meta / Sing-box / Shadowrocket / v2rayN 等客户端。");
-      });
+    async function submitImportNodes(e) {
+      e.preventDefault();
+      const content = document.getElementById('importContentInput').value.trim();
+      if (!content) {
+        alert("请输入要导入的节点分享链接！");
+        return;
+      }
+
+      const btn = document.getElementById('importSubmitBtn');
+      btn.disabled = true;
+      btn.innerHTML = `<i data-lucide="loader" class="w-4 h-4 animate-spin"></i> 正在导入...`;
+      lucide.createIcons();
+
+      try {
+        const res = await fetch('/api/node-mgr/nodes/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: content })
+        }).then(r => r.json());
+
+        if (res.ok) {
+          alert(`成功导入 ${res.count} 个外部节点！已合并进统一订阅链接。`);
+          closeImportModal();
+          await loadData();
+        } else {
+          alert("导入失败: " + (res.error || "未知错误"));
+        }
+      } catch (err) {
+        alert("网络请求异常: " + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<span>开始导入</span>`;
+      }
     }
 
-    function copyShareLink(link) {
+    async function toggleNode(id) {
+      try {
+        const res = await fetch(`/api/node-mgr/nodes/${id}/toggle`, { method: 'POST' }).then(r => r.json());
+        if (res.ok) loadData();
+      } catch (err) {
+        alert("操作失败: " + err);
+      }
+    }
+
+    async function deleteNode(id) {
+      if (!confirm("确定要删除这个节点吗？")) return;
+      try {
+        const res = await fetch(`/api/node-mgr/nodes/${id}`, { method: 'DELETE' }).then(r => r.json());
+        if (res.ok) loadData();
+      } catch (err) {
+        alert("删除失败: " + err);
+      }
+    }
+
+    function copyNodeLink(link) {
       navigator.clipboard.writeText(link).then(() => {
-        alert("节点分享链接已复制！");
+        alert("节点链接已复制到剪贴板！");
       });
     }
 
-    function showQr(name, link) {
-      document.getElementById('qrNodeName').innerText = name;
-      document.getElementById('qrLinkText').innerText = link;
-      const qrDiv = document.getElementById('qrcode');
-      qrDiv.innerHTML = '';
-      new QRCode(qrDiv, { text: link, width: 180, height: 180 });
-      document.getElementById('qrModal').classList.remove('hidden');
+    function copySubUrl() {
+      if (!currentSubUrl) return;
+      navigator.clipboard.writeText(currentSubUrl).then(() => {
+        alert("统一订阅链接已复制到剪贴板！");
+      });
     }
 
-    function closeQrModal() { document.getElementById('qrModal').classList.add('hidden'); }
-    function openCreateModal() { document.getElementById('createModal').classList.remove('hidden'); }
-    function closeCreateModal() { document.getElementById('createModal').classList.add('hidden'); }
-    function openServerGuide() { document.getElementById('guideModal').classList.remove('hidden'); }
-    function closeServerGuide() { document.getElementById('guideModal').classList.add('hidden'); }
+    function openClientImportModal(initialTab = 'clients', targetNodeLink = null) {
+      populateSingleNodeDropdown(targetNodeLink);
+      if (targetNodeLink) {
+        switchImportTab('qr');
+        const nodeRadio = document.querySelector('input[name="qrMode"][value="single_node"]');
+        if (nodeRadio) nodeRadio.checked = true;
+      } else {
+        switchImportTab(initialTab);
+        const b64Radio = document.querySelector('input[name="qrMode"][value="sub_b64"]');
+        if (b64Radio) b64Radio.checked = true;
+      }
+      document.getElementById('clientImportModal').classList.remove('hidden');
+      updateQrDisplay();
+      lucide.createIcons();
+    }
+
+    function closeClientImportModal() {
+      document.getElementById('clientImportModal').classList.add('hidden');
+    }
+
+    function switchImportTab(tab) {
+      const btnClients = document.getElementById('importTabBtnClients');
+      const btnQr = document.getElementById('importTabBtnQr');
+      const contentClients = document.getElementById('importContentClients');
+      const contentQr = document.getElementById('importContentQr');
+
+      if (tab === 'clients') {
+        btnClients.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm transition flex items-center justify-center gap-1.5";
+        btnQr.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center justify-center gap-1.5";
+        contentClients.classList.remove('hidden');
+        contentQr.classList.add('hidden');
+      } else {
+        btnQr.className = "flex-1 py-2 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-sm transition flex items-center justify-center gap-1.5";
+        btnClients.className = "flex-1 py-2 text-xs font-semibold rounded-lg text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition flex items-center justify-center gap-1.5";
+        contentClients.classList.add('hidden');
+        contentQr.classList.remove('hidden');
+        setTimeout(updateQrDisplay, 50);
+      }
+      lucide.createIcons();
+    }
+
+    function getClashSubUrl() {
+      return currentSubUrl ? `${currentSubUrl}?clash=1` : '';
+    }
+
+    function getB64SubUrl() {
+      return currentSubUrl ? `${currentSubUrl}?format=b64` : '';
+    }
+
+    function copyClashSubUrl() {
+      const url = getClashSubUrl();
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(() => {
+        alert("Clash 订阅链接已复制到剪贴板！");
+      });
+    }
+
+    function copyB64SubUrl() {
+      const url = getB64SubUrl();
+      if (!url) return;
+      navigator.clipboard.writeText(url).then(() => {
+        alert("通用 Base64 / 小火箭订阅链接已复制到剪贴板！");
+      });
+    }
+
+    function launchClient(clientType) {
+      const clashUrl = getClashSubUrl();
+      const b64Url = getB64SubUrl();
+      const title = 'Komari';
+
+      if (!clashUrl) {
+        alert("正在获取订阅信息，请稍候...");
+        return;
+      }
+
+      let scheme = '';
+      if (clientType === 'clash') {
+        scheme = `clash://install-config?url=${encodeURIComponent(clashUrl)}&name=${encodeURIComponent(title)}`;
+      } else if (clientType === 'shadowrocket') {
+        const b64Sub = btoa(unescape(encodeURIComponent(b64Url)));
+        scheme = `shadowrocket://add/sub://${encodeURIComponent(b64Sub)}?title=${encodeURIComponent(title)}`;
+      } else if (clientType === 'singbox') {
+        scheme = `sing-box://import-remote-profile?url=${encodeURIComponent(clashUrl)}#${encodeURIComponent(title)}`;
+      } else if (clientType === 'surge') {
+        scheme = `surge:///install-config?url=${encodeURIComponent(clashUrl)}`;
+      } else if (clientType === 'quantumultx') {
+        const res = JSON.stringify({ server_remote: [`${clashUrl}, tag=${title}`] });
+        scheme = `quantumult-x:///add-resource?remote-resource=${encodeURIComponent(res)}`;
+      } else if (clientType === 'stash') {
+        scheme = `stash://install-config?url=${encodeURIComponent(clashUrl)}&name=${encodeURIComponent(title)}`;
+      }
+
+      if (scheme) {
+        window.location.href = scheme;
+      }
+    }
+
+    function populateSingleNodeDropdown(selectedLink = null) {
+      const sel = document.getElementById('singleNodeSelect');
+      if (!sel) return;
+      sel.innerHTML = '';
+      currentNodes.forEach((node) => {
+        const opt = document.createElement('option');
+        opt.value = node.link;
+        opt.textContent = `${node.name} (${node.protocol.toUpperCase()} · ${node.server_name || '自建'})`;
+        if (selectedLink && node.link === selectedLink) {
+          opt.selected = true;
+        }
+        sel.appendChild(opt);
+      });
+    }
+
+    function updateQrDisplay() {
+      const mode = document.querySelector('input[name="qrMode"]:checked')?.value || 'sub_b64';
+      const selectContainer = document.getElementById('singleNodeSelectContainer');
+      const badge = document.getElementById('qrTypeBadge');
+      const textInput = document.getElementById('universalQrTextInput');
+      const charCount = document.getElementById('qrCharCount');
+      const qrel = document.getElementById('universalQrcode');
+
+      if (!qrel) return;
+
+      let targetContent = '';
+
+      if (mode === 'sub_b64') {
+        if (selectContainer) selectContainer.classList.add('hidden');
+        targetContent = getB64SubUrl();
+        if (badge) {
+          badge.textContent = "全量通用 Base64 (小火箭 / v2rayN 扫码推荐)";
+          badge.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 mb-1";
+        }
+      } else if (mode === 'sub_clash') {
+        if (selectContainer) selectContainer.classList.add('hidden');
+        targetContent = getClashSubUrl();
+        if (badge) {
+          badge.textContent = "全量 Clash / Mihomo 规则订阅二维码";
+          badge.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 mb-1";
+        }
+      } else if (mode === 'single_node') {
+        if (selectContainer) selectContainer.classList.remove('hidden');
+        const sel = document.getElementById('singleNodeSelect');
+        targetContent = (sel && sel.value) ? sel.value : (currentNodes[0]?.link || '');
+        const nodeName = (sel && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : '单个节点';
+        if (badge) {
+          badge.textContent = `单节点：${nodeName}`;
+          badge.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 mb-1";
+        }
+      }
+
+      if (textInput) textInput.value = targetContent;
+      if (charCount) charCount.textContent = `${targetContent.length} 字符`;
+
+      qrel.innerHTML = '';
+      if (targetContent) {
+        new QRCode(qrel, {
+          text: targetContent,
+          width: 210,
+          height: 210,
+          colorDark: "#000000",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+    }
+
+    function copyUniversalQrContent() {
+      const val = document.getElementById('universalQrTextInput').value;
+      if (!val) return;
+      navigator.clipboard.writeText(val).then(() => {
+        alert("二维码承载内容已成功复制到剪贴板！");
+      });
+    }
+
+    function showQrModal(name, link) {
+      openClientImportModal('qr', link);
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+    }
+
+    function copyCurrentQrLink() {
+      if (!activeQrLink) return;
+      navigator.clipboard.writeText(activeQrLink).then(() => {
+        alert("节点链接已复制到剪贴板！");
+      });
+    }
+
+    // Auto Refresh every 3 seconds for live traffic & speed updates
+    loadData();
+    setInterval(loadData, 3000);
   </script>
 </body>
 </html>

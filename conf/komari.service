@@ -1,0 +1,15 @@
+[Unit]
+Description=Komari Monitor Service
+After=network.target
+
+[Service]
+Type=simple
+Environment=GODEBUG=disablethp=1
+ExecStart=/opt/komari/komari server -l 0.0.0.0:25774
+WorkingDirectory=/opt/komari
+Restart=always
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

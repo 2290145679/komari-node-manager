@@ -1,0 +1,1 @@
+console.log("[Node Manager] Plugin loaded successfully");

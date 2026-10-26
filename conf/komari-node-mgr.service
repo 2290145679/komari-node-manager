@@ -1,0 +1,13 @@
+[Unit]
+Description=Komari Node Manager Service
+After=network.target komari.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/komari/node-mgr/server.py
+WorkingDirectory=/opt/komari/node-mgr
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

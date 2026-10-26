@@ -1,0 +1,18 @@
+{
+  "name": "节点管理",
+  "short": "node-manager",
+  "description": "Xray and Sing-box 节点管理与统一订阅",
+  "version": "1.0.0",
+  "entry": "script.js",
+  "pages": [
+    {
+      "file": "panel/index.html",
+      "title": {
+        "zh-CN": "节点管理",
+        "en": "Node Manager"
+      },
+      "type": "iframe",
+      "visibility": "public"
+    }
+  ]
+}
