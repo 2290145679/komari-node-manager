@@ -16,7 +16,7 @@ function ensureFreshIframes() {
     try {
       var src = iframe.getAttribute('src');
       if (src && src.indexOf('/api/admin/plugin/node-manager/') !== -1 && src.indexOf('v=') === -1) {
-        iframe.src = src + (src.indexOf('?') !== -1 ? '&' : '?') + 'v=1.1';
+        iframe.src = src + (src.indexOf('?') !== -1 ? '&' : '?') + 'v=1.2';
       }
     } catch (e) {}
   });
