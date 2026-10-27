@@ -257,25 +257,25 @@
       <!-- View 2: 4 Balanced Traffic Stats Cards -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         <!-- Card 1: 接入消耗总流量 -->
-        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold shrink-0">
-            <i data-lucide="arrow-up-down" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 sm:gap-3.5 shadow-sm">
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center font-bold shrink-0">
+            <i data-lucide="arrow-up-down" class="w-4 h-4 sm:w-6 sm:h-6"></i>
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">接入消耗总流量</div>
-            <div class="text-base sm:text-2xl font-bold mt-0.5 text-blue-600 dark:text-blue-400 truncate" id="totalTrafficDisplay">0 B</div>
+            <div class="text-base sm:text-2xl font-bold mt-0.5 text-blue-600 dark:text-blue-400 truncate font-mono" id="totalTrafficDisplay">0 B</div>
           </div>
         </div>
 
         <!-- Card 2: Sing-box 在线核心 -->
-        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold relative shrink-0">
-            <i data-lucide="shield-check" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 sm:gap-3.5 shadow-sm">
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center font-bold relative shrink-0">
+            <i data-lucide="shield-check" class="w-4 h-4 sm:w-6 sm:h-6"></i>
             <span class="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-2 sm:w-2.5 h-2 sm:h-2.5 rounded-full bg-emerald-500 animate-pulse-slow"></span>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">Sing-box 在线核心</div>
-            <div class="text-base sm:text-2xl font-bold mt-0.5 flex items-baseline gap-1">
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">Sing-box 在线</div>
+            <div class="text-base sm:text-2xl font-bold mt-0.5 flex items-baseline gap-1 font-mono">
               <span id="trafficSingboxOnline" class="text-emerald-600 dark:text-emerald-400">0</span>
               <span class="text-[10px] sm:text-xs text-slate-400 font-normal">/ <span id="trafficServerTotal">0</span> 台</span>
             </div>
@@ -283,24 +283,37 @@
         </div>
 
         <!-- Card 3: 监控接入服务器 -->
-        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold shrink-0">
-            <i data-lucide="hard-drive" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 sm:gap-3.5 shadow-sm">
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-indigo-500/10 text-indigo-500 flex items-center justify-center font-bold shrink-0">
+            <i data-lucide="hard-drive" class="w-4 h-4 sm:w-6 sm:h-6"></i>
           </div>
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">监控服务器总数</div>
-            <div class="text-base sm:text-2xl font-bold mt-0.5 text-slate-800 dark:text-slate-100"><span id="trafficServerCountDirect">0</span> 台</div>
+            <div class="text-base sm:text-2xl font-bold mt-0.5 text-slate-800 dark:text-slate-100 flex items-baseline gap-1 font-mono">
+              <span id="trafficServerCountDirect">0</span>
+              <span class="text-[10px] sm:text-xs text-slate-400 font-normal">台</span>
+            </div>
           </div>
         </div>
 
         <!-- Card 4: 全网实时吞吐速率 -->
-        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold shrink-0">
-            <i data-lucide="zap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2 sm:gap-3.5 shadow-sm">
+          <div class="w-9 h-9 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold shrink-0">
+            <i data-lucide="zap" class="w-4 h-4 sm:w-6 sm:h-6"></i>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">全网实时速率</div>
-            <div class="text-sm sm:text-lg font-bold mt-0.5 text-purple-600 dark:text-purple-400 font-mono truncate" id="trafficLiveThroughput">↓ 0 B/s · ↑ 0 B/s</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 flex items-center justify-between">
+              <span class="truncate">全网实时速率</span>
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0 ml-1"></span>
+            </div>
+            <div class="mt-0.5 flex flex-col font-mono leading-tight">
+              <div class="text-xs sm:text-base font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 whitespace-nowrap">
+                <span class="text-[10px] sm:text-xs text-emerald-500">↓</span><span id="trafficLiveInRate">0 B/s</span>
+              </div>
+              <div class="text-[10px] sm:text-xs font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-0.5 whitespace-nowrap mt-0.5">
+                <span class="text-[9px] sm:text-[10px] text-blue-500">↑</span><span id="trafficLiveOutRate">0 B/s</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2009,6 +2022,10 @@
           sumInRate += (s.in_rate || 0);
           sumOutRate += (s.out_rate || 0);
         });
+        const elIn = document.getElementById('trafficLiveInRate');
+        if (elIn) elIn.textContent = `${formatBytes(sumInRate)}/s`;
+        const elOut = document.getElementById('trafficLiveOutRate');
+        if (elOut) elOut.textContent = `${formatBytes(sumOutRate)}/s`;
         const elThroughput = document.getElementById('trafficLiveThroughput');
         if (elThroughput) {
           elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
@@ -2305,10 +2322,15 @@
 
               <!-- Speed & Physical Stats Grid -->
               <div class="grid grid-cols-2 gap-2 text-xs">
-                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-black/25 font-mono">
-                  <div class="text-[10px] text-slate-400 font-sans">实时网速</div>
-                  <div class="text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">↓ ${formatBytes(server.in_rate)}/s</div>
-                  <div class="text-blue-600 dark:text-blue-400 text-[11px]">↑ ${formatBytes(server.out_rate)}/s</div>
+                <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-black/25 font-mono flex flex-col justify-between">
+                  <div class="text-[10px] text-slate-400 font-sans flex items-center justify-between">
+                    <span>实时网速</span>
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  </div>
+                  <div class="mt-1 space-y-0.5">
+                    <div class="text-xs font-bold text-emerald-600 dark:text-emerald-400 leading-tight">↓ ${formatBytes(server.in_rate)}/s</div>
+                    <div class="text-[11px] font-semibold text-blue-600 dark:text-blue-400 leading-tight">↑ ${formatBytes(server.out_rate)}/s</div>
+                  </div>
                 </div>
                 <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-black/25 font-mono flex flex-col justify-between">
                   <div>
