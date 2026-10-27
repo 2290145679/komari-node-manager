@@ -940,6 +940,7 @@
     }
 
     function switchTab(tab) {
+      if (!tab) tab = 'nodes';
       const btnNodes = document.getElementById('tabBtnNodes');
       const btnTraffic = document.getElementById('tabBtnTraffic');
       const btnRules = document.getElementById('tabBtnRules');
@@ -955,18 +956,61 @@
       });
 
       if (tab === 'nodes') {
-        btnNodes.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
-        contentNodes.classList.remove('hidden');
+        if (btnNodes) btnNodes.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
+        if (contentNodes) contentNodes.classList.remove('hidden');
       } else if (tab === 'traffic') {
-        btnTraffic.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
-        contentTraffic.classList.remove('hidden');
+        if (btnTraffic) btnTraffic.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
+        if (contentTraffic) contentTraffic.classList.remove('hidden');
       } else if (tab === 'rules') {
-        btnRules.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
-        contentRules.classList.remove('hidden');
+        if (btnRules) btnRules.className = "px-3.5 sm:px-4 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 sm:gap-2 transition shrink-0";
+        if (contentRules) contentRules.classList.remove('hidden');
         loadSubRules();
       }
-      lucide.createIcons();
+      if (window.lucide) lucide.createIcons();
+
+      // Sync URL parameter in panel and parent window
+      try {
+        const u = new URL(window.location.href);
+        if (u.searchParams.get('tab') !== tab) {
+          u.searchParams.set('tab', tab);
+          window.history.replaceState({}, '', u.toString());
+        }
+        if (window.parent && window.parent !== window) {
+          const pu = new URL(window.parent.location.href);
+          if (pu.searchParams.get('tab') !== tab) {
+            pu.searchParams.set('tab', tab);
+            window.parent.history.replaceState({}, '', pu.toString());
+            window.parent.dispatchEvent(new PopStateEvent('popstate'));
+          }
+        }
+      } catch (err) {}
     }
+
+    function getActiveTabFromUrl() {
+      try {
+        if (window.parent && window.parent !== window) {
+          const pu = new URLSearchParams(window.parent.location.search);
+          const pTab = pu.get('tab');
+          if (pTab === 'traffic' || pTab === 'rules' || pTab === 'nodes') return pTab;
+        }
+      } catch (e) {}
+      try {
+        const u = new URLSearchParams(window.location.search);
+        const lTab = u.get('tab');
+        if (lTab === 'traffic' || lTab === 'rules' || lTab === 'nodes') return lTab;
+      } catch (e) {}
+      return 'nodes';
+    }
+
+    window.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.type === 'switchTab') {
+        switchTab(ev.data.tab);
+      }
+    });
+
+    window.addEventListener('popstate', () => {
+      switchTab(getActiveTabFromUrl());
+    });
 
         // Global state for visual rules
         // Global state for visual rules & decision table
@@ -2553,6 +2597,11 @@
     // Auto Refresh every 3 seconds for live traffic & speed updates
     loadData();
     setInterval(loadData, 3000);
+
+    // Initialize tab from URL query params
+    setTimeout(() => {
+      switchTab(getActiveTabFromUrl());
+    }, 50);
   </script>
 </body>
 </html>
