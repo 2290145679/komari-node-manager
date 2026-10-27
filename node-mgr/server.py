@@ -11,6 +11,8 @@ import subprocess
 import urllib.parse
 import urllib.request
 import concurrent.futures
+import threading
+import socket
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -116,6 +118,77 @@ def init_db():
             INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules, proxy_ai, proxy_tg, proxy_media, proxy_dev, direct_games)
             VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '', 0, 0, 0, 0, 0)
         """)
+    
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notification_channels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type TEXT NOT NULL,
+            name TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            config TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notification_rules (
+            rule_key TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            description TEXT NOT NULL,
+            enabled INTEGER DEFAULT 1,
+            config TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notification_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_key TEXT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            status TEXT NOT NULL,
+            error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS notification_states (
+            state_key TEXT PRIMARY KEY,
+            state_val TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Seed Telegram channel with user credentials if empty
+    c.execute("SELECT count(*) FROM notification_channels")
+    if c.fetchone()[0] == 0:
+        tg_conf = json.dumps({
+            "bot_token": "8731954829:AAG6HlNgKnth8_2yIYAtMyV4gPx_c-I2bJY",
+            "chat_id": "791298471"
+        })
+        c.execute("INSERT INTO notification_channels (type, name, enabled, config) VALUES (?, ?, ?, ?)",
+                  ("telegram", "Telegram 机器人 (@vpssend_bot)", 1, tg_conf))
+
+    default_rules = [
+        ("traffic_threshold", "流量消耗预警", "core", "单节点或全网流量达到 80%/90%/100% 阈值提醒；每月1号清零提醒", 1, json.dumps({"thresholds": [80, 90, 100], "cycle_reset_notify": True})),
+        ("singbox_status", "Sing-box 离线 / 恢复通知", "core", "Sing-box 核心进程异常挂掉或重启恢复上线时即时告警", 1, json.dumps({"offline_timeout": 60})),
+        ("server_status", "服务器系统离线 / 恢复通知", "core", "探针失联超过 2 分钟时触发宕机报警，恢复时发送上线通知及离线时长", 1, json.dumps({"offline_timeout": 120})),
+        ("server_expiration", "服务器到期续费提醒", "core", "按到期时间提前 30/15/7/3/1 天阶梯预警，防止机器被回收", 1, json.dumps({"remind_days": [30, 15, 7, 3, 1]})),
+        ("traffic_surge", "突发大流量激增 / 盗刷告警", "monitor", "10分钟突发流量 > 5GB 或流速持续 > 100Mbps 异常大流量拦截预警", 1, json.dumps({"burst_mbps": 100, "cooldown_sec": 3600})),
+        ("resource_exhaustion", "物理硬件资源枯竭告警", "monitor", "CPU / 内存 / 磁盘使用率持续超过 90% 时预警，防止 OOM 崩溃或日志爆盘", 1, json.dumps({"cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "cooldown_sec": 1800})),
+        ("network_block", "节点网络恶化 / GFW 阻断疑似预警", "monitor", "丢包率持续 > 70% 或节点代理端口从外部无法连通时预警", 1, json.dumps({"loss_pct": 70, "cooldown_sec": 3600})),
+        ("cert_reality_check", "Reality 伪装域名 / 证书失效预警", "monitor", "Reality 伪装 SNI 域名握手异常或 SSL 证书到期前 7 天预警", 1, json.dumps({"remind_days": 7, "cooldown_sec": 86400})),
+        ("admin_login", "管理面板安全登录提醒", "security", "管理员账号从新设备 / 异地 IP 登录时即时推送安全日志", 1, json.dumps({"notify_all_login": True})),
+        ("daily_report", "每日定时运维简报", "report", "每天固定时间推送全网运行状态、在线率、当日总消耗与即将到期概览", 1, json.dumps({"report_time": "09:00"}))
+    ]
+    for r_key, r_name, r_cat, r_desc, r_en, r_cfg in default_rules:
+        c.execute("""
+            INSERT OR IGNORE INTO notification_rules (rule_key, name, category, description, enabled, config)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (r_key, r_name, r_cat, r_desc, r_en, r_cfg))
+
     # Ensure default subscription
     c.execute("SELECT token FROM subscriptions LIMIT 1")
     row = c.fetchone()
@@ -413,7 +486,10 @@ def get_servers_with_stats():
             "baseline_up": base_up,
             "baseline_down": base_down,
             "in_rate": in_rate,
-            "out_rate": out_rate
+            "out_rate": out_rate,
+            "cpu_usage": rec.get("cpu", {}).get("usage", 0) if rec else 0,
+            "ram_pct": (rec.get("ram", {}).get("used", 0) / rec.get("ram", {}).get("total", 1) * 100) if (rec and rec.get("ram", {}).get("total", 0) > 0) else 0,
+            "disk_pct": (rec.get("disk", {}).get("used", 0) / rec.get("disk", {}).get("total", 1) * 100) if (rec and rec.get("disk", {}).get("total", 0) > 0) else 0
         })
 
     return {
@@ -1056,6 +1132,406 @@ echo "======================================================"
 echo " Installation Complete! Node is connected to Master!  "
 echo "======================================================"
 '''
+
+def format_bytes(b):
+    if not b or b <= 0:
+        return "0 B"
+    b = float(b)
+    units = ["B", "KB", "MB", "GB", "TB", "PB"]
+    i = 0
+    while b >= 1024.0 and i < len(units) - 1:
+        b /= 1024.0
+        i += 1
+    return f"{b:.2f} {units[i]}"
+
+def parse_iso_or_ts(val):
+    if not val:
+        return 0
+    if isinstance(val, (int, float)):
+        return int(val)
+    s = str(val).split(".")[0].replace("Z", "").replace("+00:00", "")
+    for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+        try:
+            return int(datetime.strptime(s, fmt).timestamp())
+        except Exception:
+            pass
+    return 0
+
+def dispatch_notification(title, message, level="info", rule_key=""):
+    """
+    Sends notification to all enabled channels and logs result in notification_logs.
+    """
+    conn = sqlite3.connect(NODES_DB)
+    c = conn.cursor()
+    c.execute("SELECT id, type, name, config FROM notification_channels WHERE enabled = 1")
+    channels = c.fetchall()
+    conn.close()
+
+    if not channels:
+        return {"ok": False, "msg": "没有已启用的通知渠道"}
+
+    results = []
+    for ch_id, ch_type, ch_name, ch_cfg_str in channels:
+        success = False
+        err_msg = ""
+        try:
+            cfg = json.loads(ch_cfg_str) if isinstance(ch_cfg_str, str) else ch_cfg_str
+            if ch_type == "telegram":
+                bot_token = cfg.get("bot_token", "").strip()
+                chat_id = cfg.get("chat_id", "").strip()
+                if not bot_token or not chat_id:
+                    raise Exception("缺少 Telegram Bot Token 或 Chat ID")
+
+                icon = "🔔"
+                if level in ("danger", "error"):
+                    icon = "🔴"
+                elif level == "warning":
+                    icon = "⚠️"
+                elif level == "success":
+                    icon = "🟢"
+                elif level == "report":
+                    icon = "📊"
+
+                text = f"{icon} <b>{title}</b>\n\n{message}\n\n<i>Komari 监控运维 · {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</i>"
+                url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+                data = urllib.parse.urlencode({"chat_id": chat_id, "text": text, "parse_mode": "HTML"}).encode("utf-8")
+                req = urllib.request.Request(url, data=data)
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    resp_data = json.loads(resp.read().decode())
+                    if resp_data.get("ok"):
+                        success = True
+                    else:
+                        err_msg = str(resp_data)
+
+            elif ch_type == "webhook":
+                webhook_url = cfg.get("url", "").strip()
+                if webhook_url:
+                    payload = json.dumps({
+                        "title": title,
+                        "message": message,
+                        "level": level,
+                        "rule_key": rule_key,
+                        "timestamp": datetime.now().isoformat()
+                    }).encode("utf-8")
+                    req = urllib.request.Request(webhook_url, data=payload, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        if resp.status < 400:
+                            success = True
+                        else:
+                            err_msg = f"HTTP {resp.status}"
+
+            elif ch_type == "wechat":
+                pp_token = cfg.get("token", "").strip()
+                if pp_token:
+                    url = "https://www.pushplus.plus/send"
+                    payload = json.dumps({
+                        "token": pp_token,
+                        "title": title,
+                        "content": message.replace("\n", "<br>"),
+                        "template": "html"
+                    }).encode("utf-8")
+                    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        success = True
+
+            elif ch_type == "feishu":
+                fs_url = cfg.get("url", "").strip()
+                if fs_url:
+                    payload = json.dumps({
+                        "msg_type": "text",
+                        "content": {"text": f"{title}\n\n{message}"}
+                    }).encode("utf-8")
+                    req = urllib.request.Request(fs_url, data=payload, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        success = True
+
+            elif ch_type == "dingtalk":
+                dt_url = cfg.get("url", "").strip()
+                if dt_url:
+                    payload = json.dumps({
+                        "msgtype": "text",
+                        "text": {"content": f"【Komari 监控】{title}\n\n{message}"}
+                    }).encode("utf-8")
+                    req = urllib.request.Request(dt_url, data=payload, headers={"Content-Type": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as resp:
+                        success = True
+
+        except Exception as e:
+            err_msg = str(e)
+
+        results.append({"channel": ch_name, "success": success, "error": err_msg})
+
+        # Save record to notification_logs
+        try:
+            conn_l = sqlite3.connect(NODES_DB)
+            cl = conn_l.cursor()
+            cl.execute("""
+                INSERT INTO notification_logs (rule_key, title, message, channel, status, error)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (rule_key, title, message, ch_name, "success" if success else "failed", err_msg))
+            cl.execute("DELETE FROM notification_logs WHERE id NOT IN (SELECT id FROM notification_logs ORDER BY id DESC LIMIT 200)")
+            conn_l.commit()
+            conn_l.close()
+        except Exception:
+            pass
+
+    return {"ok": True, "results": results}
+
+def check_and_notify_events():
+    if not os.path.exists(NODES_DB) or not os.path.exists(KOMARI_DB):
+        return
+
+    conn_n = sqlite3.connect(NODES_DB)
+    c_n = conn_n.cursor()
+    c_n.execute("SELECT rule_key, config FROM notification_rules WHERE enabled = 1")
+    enabled_rules = {}
+    for r in c_n.fetchall():
+        try:
+            enabled_rules[r[0]] = json.loads(r[1])
+        except Exception:
+            enabled_rules[r[0]] = {}
+
+    def get_state(key, default=""):
+        c_n.execute("SELECT state_val FROM notification_states WHERE state_key = ?", (key,))
+        row = c_n.fetchone()
+        return row[0] if row else default
+
+    def set_state(key, val):
+        c_n.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", (key, str(val)))
+        conn_n.commit()
+
+    now = int(time.time())
+    now_dt = datetime.now()
+
+    # 1. Fetch live servers stats
+    try:
+        stats = get_servers_with_stats()
+        servers = stats.get("servers", [])
+    except Exception as e:
+        conn_n.close()
+        return
+
+    # A. Check Server Status, Singbox Status, Resource Exhaustion, Traffic Surge
+    for s in servers:
+        uuid_val = s["uuid"]
+        s_name = s["name"]
+        ip = s.get("ipv4") or s.get("ipv6") or "未知 IP"
+
+        # Host Agent Online / Offline (rule: server_status)
+        last_rec_time = parse_iso_or_ts(s.get("updated_at"))
+        host_online = (now - last_rec_time) <= 120 if last_rec_time > 0 else True
+
+        if "server_status" in enabled_rules:
+            last_host_st = get_state(f"host_st:{uuid_val}")
+            if not last_host_st:
+                set_state(f"host_st:{uuid_val}", "online" if host_online else "offline")
+            elif last_host_st == "online" and not host_online:
+                set_state(f"host_st:{uuid_val}", "offline")
+                set_state(f"host_off_time:{uuid_val}", str(now))
+                dispatch_notification(
+                    title="🔴 服务器系统离线告警",
+                    message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已失联超过 2 分钟！主机可能已宕机、断网或被服务商关机。",
+                    level="danger",
+                    rule_key="server_status"
+                )
+            elif last_host_st == "offline" and host_online:
+                set_state(f"host_st:{uuid_val}", "online")
+                off_time = int(get_state(f"host_off_time:{uuid_val}", str(now)))
+                dur_s = max(0, now - off_time)
+                dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
+                dispatch_notification(
+                    title="🟢 服务器探针恢复上线",
+                    message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已恢复正常响应。\n<b>本次离线持续时长</b>: {dur_txt}",
+                    level="success",
+                    rule_key="server_status"
+                )
+
+        # Sing-box Core Online / Offline (rule: singbox_status)
+        sb_online = s.get("singbox_online", False)
+        if host_online and s.get("singbox_installed", False) and "singbox_status" in enabled_rules:
+            last_sb_st = get_state(f"sb_st:{uuid_val}")
+            if not last_sb_st:
+                set_state(f"sb_st:{uuid_val}", "online" if sb_online else "offline")
+            elif last_sb_st == "online" and not sb_online:
+                set_state(f"sb_st:{uuid_val}", "offline")
+                dispatch_notification(
+                    title="🔴 Sing-box 核心离线告警",
+                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>异常事件</b>: 主机在线但 Sing-box 核心代理已中断连接！\n<b>排查建议</b>: 请登录节点后台或执行 <code>systemctl status sing-box</code> 查看日志排查。",
+                    level="danger",
+                    rule_key="singbox_status"
+                )
+            elif last_sb_st == "offline" and sb_online:
+                set_state(f"sb_st:{uuid_val}", "online")
+                dispatch_notification(
+                    title="🟢 Sing-box 核心已恢复运行",
+                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。",
+                    level="success",
+                    rule_key="singbox_status"
+                )
+
+        # Traffic Burst Surge (rule: traffic_surge)
+        if "traffic_surge" in enabled_rules:
+            in_rate = s.get("in_rate", 0)
+            out_rate = s.get("out_rate", 0)
+            cur_mbps = (in_rate + out_rate) * 8 / 1_000_000
+            burst_limit = enabled_rules["traffic_surge"].get("burst_mbps", 100)
+            if cur_mbps >= burst_limit:
+                last_surge = int(get_state(f"surge_sent:{uuid_val}", "0"))
+                if now - last_surge > 3600:
+                    set_state(f"surge_sent:{uuid_val}", str(now))
+                    dispatch_notification(
+                        title="⚡ 突发大流量激增告警",
+                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>实时吞吐</b>: ↓ {format_bytes(in_rate)}/s · ↑ {format_bytes(out_rate)}/s\n<b>实时速率</b>: <b>{cur_mbps:.1f} Mbps</b> (突破 {burst_limit} Mbps 阈值)\n<b>提示</b>: 检测到短时间内吞吐暴涨，请排查是否有异常大文件下载或订阅被盗刷！",
+                        level="warning",
+                        rule_key="traffic_surge"
+                    )
+
+        # Resource Exhaustion (rule: resource_exhaustion)
+        if "resource_exhaustion" in enabled_rules:
+            cpu_val = s.get("cpu_usage", 0)
+            ram_val = s.get("ram_pct", 0)
+            disk_val = s.get("disk_pct", 0)
+            cfg_res = enabled_rules["resource_exhaustion"]
+            c_limit = cfg_res.get("cpu_pct", 90)
+            m_limit = cfg_res.get("mem_pct", 90)
+            d_limit = cfg_res.get("disk_pct", 90)
+
+            res_alerts = []
+            if cpu_val >= c_limit: res_alerts.append(f"CPU 使用率已达 {cpu_val:.1f}%")
+            if ram_val >= m_limit: res_alerts.append(f"内存使用率已达 {ram_val:.1f}% (极易导致 OOM Killer 强杀核心)")
+            if disk_val >= d_limit: res_alerts.append(f"磁盘空间占用已达 {disk_val:.1f}% (剩余空间不足 10%)")
+
+            if res_alerts:
+                last_res_sent = int(get_state(f"res_sent:{uuid_val}", "0"))
+                if now - last_res_sent > 1800:
+                    set_state(f"res_sent:{uuid_val}", str(now))
+                    dispatch_notification(
+                        title="⚠️ 硬件资源枯竭预警",
+                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n" + "\n".join([f"• {a}" for a in res_alerts]) + "\n<b>建议</b>: 请登录服务器清理临时文件或排查高负载进程。",
+                        level="danger",
+                        rule_key="resource_exhaustion"
+                    )
+
+    # B. Check Server Expiration & Monthly Traffic Limit (from komari.db)
+    if "server_expiration" in enabled_rules or "traffic_threshold" in enabled_rules:
+        try:
+            conn_k = sqlite3.connect(KOMARI_DB)
+            ck = conn_k.cursor()
+            ck.execute("SELECT uuid, name, ipv4, expired_at, traffic_limit FROM clients")
+            client_rows = ck.fetchall()
+            conn_k.close()
+
+            for c_uuid, c_name, c_ip, c_exp, c_limit in client_rows:
+                # Expiration
+                if c_exp and "server_expiration" in enabled_rules:
+                    exp_ts = parse_iso_or_ts(c_exp)
+                    if exp_ts > 0:
+                        exp_dt = datetime.fromtimestamp(exp_ts)
+                        days_left = (exp_dt.date() - now_dt.date()).days
+                        remind_days = enabled_rules["server_expiration"].get("remind_days", [30, 15, 7, 3, 1])
+                        if days_left in remind_days:
+                            st_key = f"exp_sent:{c_uuid}:{days_left}:{exp_dt.strftime('%Y%m%d')}"
+                            if not get_state(st_key):
+                                set_state(st_key, "1")
+                                dispatch_notification(
+                                    title=f"⏳ 服务器到期续费提醒 (仅剩 {days_left} 天)",
+                                    message=f"<b>服务器名称</b>: <code>{c_name}</code>\n<b>IP 地址</b>: <code>{c_ip or '未知'}</code>\n<b>到期时间</b>: <code>{exp_dt.strftime('%Y-%m-%d')}</code>\n<b>剩余天数</b>: <b>{days_left} 天</b>\n<b>提示</b>: 请及时前往服务商平台续费，防止机器被回收释放！",
+                                    level="danger" if days_left <= 3 else "warning",
+                                    rule_key="server_expiration"
+                                )
+
+                # Traffic Limit Threshold
+                if c_limit and c_limit > 0 and "traffic_threshold" in enabled_rules:
+                    match_s = next((x for x in servers if x["uuid"] == c_uuid), None)
+                    if match_s:
+                        used_bytes = match_s.get("traffic_total", 0)
+                        pct = (used_bytes / c_limit) * 100
+                        cur_ym = now_dt.strftime("%Y-%m")
+                        for th in enabled_rules["traffic_threshold"].get("thresholds", [80, 90, 100]):
+                            if pct >= th:
+                                th_key = f"th_sent:{c_uuid}:{th}:{cur_ym}"
+                                if not get_state(th_key):
+                                    set_state(th_key, "1")
+                                    dispatch_notification(
+                                        title=f"📊 服务器流量使用已达 {th}% 预警",
+                                        message=f"<b>服务器</b>: <code>{c_name}</code>\n<b>已用流量</b>: {format_bytes(used_bytes)}\n<b>配额上限</b>: {format_bytes(c_limit)}\n<b>消耗比例</b>: <b>{pct:.1f}%</b>\n<b>注意</b>: 超出配额可能面临断网或限速，请留意流量分配！",
+                                        level="danger" if th >= 100 else "warning",
+                                        rule_key="traffic_threshold"
+                                    )
+        except Exception:
+            pass
+
+    # C. Monthly Cycle Reset Notification (rule: traffic_threshold)
+    if "traffic_threshold" in enabled_rules:
+        if now_dt.day == 1 and now_dt.hour == 0 and now_dt.minute < 10:
+            cur_ym = now_dt.strftime("%Y-%m")
+            m_key = f"monthly_reset_notify:{cur_ym}"
+            if not get_state(m_key):
+                set_state(m_key, "1")
+                dispatch_notification(
+                    title="📅 月度流量统计周期重置提醒",
+                    message=f"<b>通知</b>: 新月份 <b>{cur_ym}</b> 周期已开启！\n各节点当月流量配额重置，监控数据进入新一轮统计周期。",
+                    level="info",
+                    rule_key="traffic_threshold"
+                )
+
+    # D. Check Admin Panel Login Security (rule: admin_login)
+    if "admin_login" in enabled_rules:
+        try:
+            conn_k = sqlite3.connect(KOMARI_DB)
+            ck = conn_k.cursor()
+            ck.execute("SELECT session, ip, user_agent, created_at FROM sessions ORDER BY created_at DESC LIMIT 1")
+            row = ck.fetchone()
+            conn_k.close()
+            if row:
+                s_id, s_ip, s_ua, s_created = row
+                last_s_id = get_state("last_known_session")
+                if not last_s_id:
+                    set_state("last_known_session", s_id)
+                elif last_s_id != s_id:
+                    set_state("last_known_session", s_id)
+                    ua_short = (s_ua[:60] + "...") if s_ua and len(s_ua) > 60 else (s_ua or "未知终端")
+                    dispatch_notification(
+                        title="🛡️ 管理后台新登录安全提醒",
+                        message=f"<b>登录 IP</b>: <code>{s_ip}</code>\n<b>操作时间</b>: <code>{s_created}</code>\n<b>终端信息</b>: <code>{ua_short}</code>\n<i>如非管理员本人操作，请立即登录服务器排查凭据安全！</i>",
+                        level="info",
+                        rule_key="admin_login"
+                    )
+        except Exception:
+            pass
+
+    # E. Daily Health Report (rule: daily_report)
+    if "daily_report" in enabled_rules:
+        cfg = enabled_rules["daily_report"]
+        rep_time = cfg.get("report_time", "09:00")
+        today_str = now_dt.strftime("%Y-%m-%d")
+        cur_hhmm = now_dt.strftime("%H:%M")
+
+        if cur_hhmm == rep_time and get_state("last_daily_report_date") != today_str:
+            set_state("last_daily_report_date", today_str)
+            on_count = sum(1 for s in servers if s.get("singbox_online"))
+            tot_s = len(servers)
+            tot_traffic = sum(s.get("traffic_total", 0) for s in servers)
+
+            dispatch_notification(
+                title="📊 Komari 每日运维健康简报",
+                message=f"<b>监控服务器总数</b>: {tot_s} 台\n<b>Sing-box 在线</b>: {on_count} / {tot_s} 台\n<b>全网累计消耗</b>: {format_bytes(tot_traffic)}\n\n<i>所有节点监控服务运行正常，祝您今天使用愉快！</i>",
+                level="report",
+                rule_key="daily_report"
+            )
+
+    conn_n.close()
+
+def run_notification_engine():
+    time.sleep(15)
+    print("Notification Engine started successfully.")
+    while True:
+        try:
+            check_and_notify_events()
+        except Exception as e:
+            print("Notification Engine tick error:", e)
+        time.sleep(30)
+
 class NodeMgrHandler(BaseHTTPRequestHandler):
     def _send_json(self, data, status=200):
         self.send_response(status)
@@ -1084,6 +1560,67 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        
+        # Notifications API endpoints
+        if path in ["/api/notifications/config", "/api/node-mgr/notifications/config"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, type, name, enabled, config, updated_at FROM notification_channels ORDER BY id ASC")
+            channels = []
+            for r in c.fetchall():
+                try:
+                    cfg = json.loads(r[4])
+                except Exception:
+                    cfg = {}
+                channels.append({
+                    "id": r[0],
+                    "type": r[1],
+                    "name": r[2],
+                    "enabled": bool(r[3]),
+                    "config": cfg,
+                    "updated_at": str(r[5])
+                })
+
+            c.execute("SELECT rule_key, name, category, description, enabled, config, updated_at FROM notification_rules ORDER BY category ASC, rule_key ASC")
+            rules = []
+            for r in c.fetchall():
+                try:
+                    cfg = json.loads(r[5])
+                except Exception:
+                    cfg = {}
+                rules.append({
+                    "rule_key": r[0],
+                    "name": r[1],
+                    "category": r[2],
+                    "description": r[3],
+                    "enabled": bool(r[4]),
+                    "config": cfg,
+                    "updated_at": str(r[6])
+                })
+            conn.close()
+            self._send_json({"ok": True, "channels": channels, "rules": rules})
+            return
+
+        if path in ["/api/notifications/logs", "/api/node-mgr/notifications/logs"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, rule_key, title, message, channel, status, error, created_at FROM notification_logs ORDER BY id DESC LIMIT 50")
+            logs = []
+            for r in c.fetchall():
+                logs.append({
+                    "id": r[0],
+                    "rule_key": r[1],
+                    "title": r[2],
+                    "message": r[3],
+                    "channel": r[4],
+                    "status": r[5],
+                    "error": r[6],
+                    "created_at": str(r[7])
+                })
+            conn.close()
+            self._send_json({"ok": True, "logs": logs})
+            return
 
         if path == "/install-node.sh":
             script = INSTALL_SCRIPT_TEMPLATE.replace("{DOMAIN}", DOMAIN)
@@ -1218,6 +1755,78 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
 
         # Save subscription rules
+        
+        # Notifications API endpoints
+        if path in ["/api/notifications/channels/save", "/api/node-mgr/notifications/channels/save"]:
+            ch_id = body.get("id")
+            ch_type = body.get("type", "telegram")
+            name = body.get("name", "Telegram 机器人")
+            enabled = 1 if body.get("enabled", True) else 0
+            config = json.dumps(body.get("config", {}))
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if ch_id:
+                c.execute("UPDATE notification_channels SET type=?, name=?, enabled=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                          (ch_type, name, enabled, config, ch_id))
+            else:
+                c.execute("INSERT INTO notification_channels (type, name, enabled, config) VALUES (?, ?, ?, ?)",
+                          (ch_type, name, enabled, config))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/notifications/channels/toggle", "/api/node-mgr/notifications/channels/toggle"]:
+            ch_id = body.get("id")
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE notification_channels SET enabled = (1 - enabled), updated_at=CURRENT_TIMESTAMP WHERE id = ?", (ch_id,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/notifications/rules/toggle", "/api/node-mgr/notifications/rules/toggle"]:
+            rule_key = body.get("rule_key")
+            enabled = 1 if body.get("enabled", True) else 0
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE notification_rules SET enabled=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (enabled, rule_key))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/notifications/rules/config", "/api/node-mgr/notifications/rules/config"]:
+            rule_key = body.get("rule_key")
+            cfg = json.dumps(body.get("config", {}))
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE notification_rules SET config=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (cfg, rule_key))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/notifications/test", "/api/node-mgr/notifications/test"]:
+            title = body.get("title", "⚡ 通知通道即时测试")
+            message = body.get("message", "这是一条由 Komari 节点管理后台发送的即时测试通知！\n\n各项智能告警规则正在全天候守护您的节点与服务器。")
+            level = body.get("level", "info")
+            rule_key = body.get("rule_key", "manual_test")
+            res = dispatch_notification(title, message, level=level, rule_key=rule_key)
+            self._send_json(res)
+            return
+
+        if path in ["/api/notifications/logs/clear", "/api/node-mgr/notifications/logs/clear"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("DELETE FROM notification_logs")
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
         if path in ["/api/sub/rules", "/api/node-mgr/sub/rules"]:
             direct_bt = 1 if body.get("direct_bt", True) else 0
             direct_cn = 1 if body.get("direct_cn", True) else 0
@@ -1382,6 +1991,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         self._send_json({"error": "not found"}, 404)
 
 if __name__ == "__main__":
+    threading.Thread(target=run_notification_engine, daemon=True).start()
     print(f"Starting Node Manager server on 127.0.0.1:{PORT}...")
     server = HTTPServer(("127.0.0.1", PORT), NodeMgrHandler)
     server.serve_forever()

@@ -49,6 +49,29 @@
 <body class="bg-slate-50 dark:bg-[#121212] text-slate-800 dark:text-slate-100 min-h-screen p-3 sm:p-5 md:p-6 pb-20 sm:pb-6 transition-colors duration-200">
 
   <div class="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+    <!-- Top Universal Navigation Pill Bar -->
+    <div class="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 sm:p-2 rounded-2xl shadow-sm overflow-x-auto no-scrollbar">
+      <div class="flex items-center gap-1 sm:gap-2">
+        <button id="navTabNodes" onclick="switchTab('nodes')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
+          <i data-lucide="server" class="w-4 h-4"></i> <span>节点管理</span>
+        </button>
+        <button id="navTabTraffic" onclick="switchTab('traffic')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
+          <i data-lucide="activity" class="w-4 h-4"></i> <span>流量监控</span>
+        </button>
+        <button id="navTabRules" onclick="switchTab('rules')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
+          <i data-lucide="sliders" class="w-4 h-4"></i> <span>分流规则</span>
+        </button>
+        <button id="navTabNotifications" onclick="switchTab('notifications')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
+          <i data-lucide="bell" class="w-4 h-4"></i> <span>通知中心</span>
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        </button>
+      </div>
+
+      <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pr-2">
+        <span>Komari Node Manager v2.2</span>
+      </div>
+    </div>
+
     <!-- ========================================== -->
     <!-- VIEW 1: 节点列表 (Node List & Management) -->
     <!-- ========================================== -->
@@ -762,7 +785,243 @@
     </div>
   </div>
 
-  <!-- Client Import & Universal QR Modal (Bottom sheet on mobile) -->
+  
+    <!-- ========================================== -->
+    <!-- VIEW 4: 智能通知与告警中心 (Notifications) -->
+    <!-- ========================================== -->
+    <div id="viewNotifications" class="space-y-4 sm:space-y-6 hidden">
+      <!-- View 4 Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
+            <span class="p-1.5 sm:p-2 bg-amber-500/10 text-amber-500 rounded-xl shrink-0">
+              <i data-lucide="bell" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+            </span>
+            <span class="truncate">智能通知与告警中心</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+              全天候实时守护中
+            </span>
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">支持 Telegram 机器人、微信、飞书与自定义 Webhook · 细粒度告警勾选与即时推送</p>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button onclick="testNotification()" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md shadow-amber-500/20 flex items-center gap-1.5 transition active:scale-[0.98]">
+            <i data-lucide="zap" class="w-4 h-4"></i>
+            <span>发送测试通知</span>
+          </button>
+          <button onclick="loadNotificationConfig(); loadNotificationLogs();" class="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center gap-1.5 transition">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>刷新</span>
+          </button>
+          <button onclick="clearNotificationLogs()" class="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center gap-1.5 transition">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">清空历史</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- SECTION 1: 推送渠道配置 (Notification Channels) -->
+      <div class="space-y-3">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base sm:text-lg font-bold flex items-center gap-2">
+            <i data-lucide="send" class="w-4 h-4 text-indigo-500"></i>
+            <span>推送渠道设置</span>
+          </h2>
+          <span class="text-xs text-slate-500 dark:text-slate-400">已配置 Telegram 告警机器人</span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+          <!-- Telegram Bot Channel Card (Primary) -->
+          <div class="lg:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-sky-500/10 text-sky-500 flex items-center justify-center font-bold">
+                  <i data-lucide="send" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-sm sm:text-base">Telegram 告警机器人</h3>
+                    <span id="tgStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">已启用</span>
+                  </div>
+                  <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">出海及节点运维首选，支持即时富文本与紧急告警强提醒</p>
+                </div>
+              </div>
+
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input id="tgEnabledSwitch" type="checkbox" checked onchange="saveTelegramChannel()" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span>Bot Token (机器人密钥)</span>
+                  <a href="https://t.me/BotFather" target="_blank" class="text-[11px] text-sky-500 hover:underline flex items-center gap-0.5">
+                    获取 Token <i data-lucide="external-link" class="w-3 h-3"></i>
+                  </a>
+                </label>
+                <div class="relative">
+                  <input id="tgBotToken" type="password" value="8731954829:AAG6HlNgKnth8_2yIYAtMyV4gPx_c-I2bJY" placeholder="例如: 123456789:ABCdefGHI..." class="w-full px-3 py-2 pr-9 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono">
+                  <button type="button" onclick="togglePasswordVisibility('tgBotToken')" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                    <i data-lucide="eye" class="w-4 h-4"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="text-xs font-semibold text-slate-600 dark:text-slate-300 flex items-center justify-between">
+                  <span>Chat ID (接收者/群组 ID)</span>
+                  <a href="https://t.me/userinfobot" target="_blank" class="text-[11px] text-sky-500 hover:underline flex items-center gap-0.5">
+                    查询 Chat ID <i data-lucide="external-link" class="w-3 h-3"></i>
+                  </a>
+                </label>
+                <input id="tgChatId" type="text" value="791298471" placeholder="例如: 791298471" class="w-full px-3 py-2 text-xs sm:text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-mono">
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2">
+              <span class="text-xs text-slate-400">提示：修改参数后点击保存，配置立即生效</span>
+              <div class="flex items-center gap-2">
+                <button onclick="testNotification()" class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-sky-500/10 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20 transition flex items-center gap-1">
+                  <i data-lucide="send" class="w-3 h-3"></i> 测试发送
+                </button>
+                <button onclick="saveTelegramChannel()" class="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm transition">
+                  保存配置
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Other Channels Expansion Card -->
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 flex flex-col justify-between">
+            <div>
+              <div class="flex items-center gap-2 font-bold text-sm sm:text-base pb-2 border-b border-slate-100 dark:border-slate-800">
+                <i data-lucide="plus-circle" class="w-4 h-4 text-emerald-500"></i>
+                <span>更多通知通道支持</span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 mt-2 leading-relaxed">
+                除 Telegram 外，系统还支持国内即时推送渠道：
+              </p>
+              <ul class="text-xs text-slate-600 dark:text-slate-300 space-y-1.5 mt-2">
+                <li class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                  <b>微信推送</b>: PushPlus / Server酱
+                </li>
+                <li class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                  <b>办公协作</b>: 飞书 / 钉钉群 Webhook
+                </li>
+                <li class="flex items-center gap-1.5">
+                  <span class="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                  <b>自动化</b>: 自定义 HTTP Webhook / Bark
+                </li>
+              </ul>
+            </div>
+
+            <div class="pt-2">
+              <button onclick="openOtherChannelModal()" class="w-full py-2 text-xs font-semibold rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 text-slate-600 dark:text-slate-300 hover:text-indigo-600 transition flex items-center justify-center gap-1">
+                <i data-lucide="settings" class="w-3.5 h-3.5"></i> 配置其他通知通道
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 2: 告警监控规则矩阵 (Rule Checklists) -->
+      <div class="space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
+          <div>
+            <h2 class="text-base sm:text-lg font-bold flex items-center gap-2">
+              <i data-lucide="sliders" class="w-4 h-4 text-purple-500"></i>
+              <span>通知规则触发矩阵 (手动勾选需要通知的项目)</span>
+            </h2>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">点击右侧开关即可即时开启或关闭对应告警项，支持细粒度阈值调控</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="rulesCountBadge" class="text-xs font-medium px-2.5 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
+              已启用 10 / 10 项规则
+            </span>
+          </div>
+        </div>
+
+        <!-- 3 Categorized Columns / Cards -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3 sm:gap-4">
+          <!-- Column A: 核心基础告警 (Core) -->
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 class="font-bold text-sm text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
+                <i data-lucide="shield-alert" class="w-4 h-4"></i>
+                <span>A. 核心基础通知 (必选项)</span>
+              </h3>
+              <span class="text-[11px] text-slate-400 font-mono">4 项</span>
+            </div>
+
+            <div id="rulesContainerCore" class="space-y-2.5">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Column B: 智能性能监控 (Monitoring) -->
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 class="font-bold text-sm text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                <i data-lucide="activity" class="w-4 h-4"></i>
+                <span>B. 智能性能监控 (高价值)</span>
+              </h3>
+              <span class="text-[11px] text-slate-400 font-mono">4 项</span>
+            </div>
+
+            <div id="rulesContainerMonitor" class="space-y-2.5">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Column C: 安全与日常运营 (Security & Operations) -->
+          <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+              <h3 class="font-bold text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                <i data-lucide="lock" class="w-4 h-4"></i>
+                <span>C. 安全与日常运营</span>
+              </h3>
+              <span class="text-[11px] text-slate-400 font-mono">2 项</span>
+            </div>
+
+            <div id="rulesContainerSecurity" class="space-y-2.5">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION 3: 实时通知历史动态 (Recent Notification Logs) -->
+      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
+        <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+          <div class="flex items-center gap-2">
+            <i data-lucide="history" class="w-4 h-4 text-slate-500"></i>
+            <h3 class="font-bold text-sm sm:text-base">近期告警与推送历史</h3>
+            <span id="logsCountBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 font-mono">0 条记录</span>
+          </div>
+
+          <button onclick="loadNotificationLogs()" class="text-xs text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i> 刷新历史
+          </button>
+        </div>
+
+        <div class="overflow-x-auto no-scrollbar">
+          <div id="notificationLogsContainer" class="space-y-2">
+            <div class="py-8 text-center text-xs text-slate-400">
+              <i data-lucide="check-circle" class="w-8 h-8 mx-auto text-emerald-500/40 mb-2"></i>
+              暂无异常告警记录，系统与各节点运行平稳
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Client Import & Universal QR Modal (Bottom sheet on mobile) -->
   <div id="clientImportModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="bg-white dark:bg-[#1a1a1a] rounded-t-3xl sm:rounded-2xl max-w-2xl w-full p-4 sm:p-6 shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 space-y-4 max-h-[85vh] sm:max-h-[90vh] overflow-y-auto custom-scrollbar">
       <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto sm:hidden -mt-1 mb-2"></div>
@@ -1092,10 +1351,26 @@
       const viewNodes = document.getElementById('viewNodes');
       const viewTraffic = document.getElementById('viewTraffic');
       const viewRules = document.getElementById('viewRules');
+      const viewNotifications = document.getElementById('viewNotifications');
 
       if (viewNodes) viewNodes.classList.add('hidden');
       if (viewTraffic) viewTraffic.classList.add('hidden');
       if (viewRules) viewRules.classList.add('hidden');
+      if (viewNotifications) viewNotifications.classList.add('hidden');
+
+      // Update Top Nav Pills
+      const navIds = ['navTabNodes', 'navTabTraffic', 'navTabRules', 'navTabNotifications'];
+      const activeNavMap = { 'nodes': 'navTabNodes', 'traffic': 'navTabTraffic', 'rules': 'navTabRules', 'notifications': 'navTabNotifications' };
+      navIds.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (id === activeNavMap[tab]) {
+            el.className = 'px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition bg-indigo-600 text-white shadow-sm';
+          } else {
+            el.className = 'px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800';
+          }
+        }
+      });
 
       if (tab === 'nodes') {
         if (viewNodes) viewNodes.classList.remove('hidden');
@@ -1104,6 +1379,10 @@
       } else if (tab === 'rules') {
         if (viewRules) viewRules.classList.remove('hidden');
         if (typeof loadSubRules === 'function') loadSubRules();
+      } else if (tab === 'notifications') {
+        if (viewNotifications) viewNotifications.classList.remove('hidden');
+        if (typeof loadNotificationConfig === 'function') loadNotificationConfig();
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
       }
 
       if (window.lucide) lucide.createIcons();
@@ -1131,7 +1410,7 @@
         if (window.parent && window.parent !== window) {
           const pu = new URLSearchParams(window.parent.location.search);
           const pTab = pu.get('tab');
-          if (pTab === 'traffic' || pTab === 'rules' || pTab === 'nodes') return pTab;
+          if (pTab === 'traffic' || pTab === 'rules' || pTab === 'nodes' || pTab === 'notifications') return pTab;
         }
       } catch (e) {}
       try {
@@ -2816,6 +3095,256 @@
     setTimeout(() => {
       switchTab(getActiveTabFromUrl());
     }, 50);
+  
+    // ==========================================
+    // NOTIFICATION CENTER CLIENT LOGIC
+    // ==========================================
+    let notificationConfig = { channels: [], rules: [] };
+
+    function togglePasswordVisibility(inputId) {
+      const el = document.getElementById(inputId);
+      if (!el) return;
+      el.type = el.type === 'password' ? 'text' : 'password';
+    }
+
+    async function loadNotificationConfig() {
+      try {
+        const res = await fetch('/api/node-mgr/notifications/config');
+        const data = await res.json();
+        if (data.ok) {
+          notificationConfig = data;
+          renderNotificationChannels(data.channels || []);
+          renderNotificationRules(data.rules || []);
+        }
+      } catch (err) {
+        console.error('Failed to load notification config:', err);
+      }
+    }
+
+    async function loadNotificationLogs() {
+      try {
+        const res = await fetch('/api/node-mgr/notifications/logs');
+        const data = await res.json();
+        if (data.ok) {
+          renderNotificationLogs(data.logs || []);
+        }
+      } catch (err) {
+        console.error('Failed to load notification logs:', err);
+      }
+    }
+
+    function renderNotificationChannels(channels) {
+      const tg = channels.find(c => c.type === 'telegram');
+      if (tg) {
+        const tokenInput = document.getElementById('tgBotToken');
+        const chatInput = document.getElementById('tgChatId');
+        const switchEl = document.getElementById('tgEnabledSwitch');
+        const badgeEl = document.getElementById('tgStatusBadge');
+
+        if (tokenInput && tg.config && tg.config.bot_token) tokenInput.value = tg.config.bot_token;
+        if (chatInput && tg.config && tg.config.chat_id) chatInput.value = tg.config.chat_id;
+        if (switchEl) switchEl.checked = !!tg.enabled;
+        if (badgeEl) {
+          badgeEl.className = tg.enabled
+            ? 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+            : 'px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-700 text-slate-500';
+          badgeEl.innerText = tg.enabled ? '已启用' : '已禁用';
+        }
+      }
+    }
+
+    const ruleIconMap = {
+      'traffic_threshold': 'bar-chart-3',
+      'singbox_status': 'shield-alert',
+      'server_status': 'server',
+      'server_expiration': 'clock',
+      'traffic_surge': 'zap',
+      'resource_exhaustion': 'cpu',
+      'network_block': 'globe',
+      'cert_reality_check': 'lock',
+      'admin_login': 'key-round',
+      'daily_report': 'file-text'
+    };
+
+    function renderNotificationRules(rules) {
+      const cCore = document.getElementById('rulesContainerCore');
+      const cMonitor = document.getElementById('rulesContainerMonitor');
+      const cSec = document.getElementById('rulesContainerSecurity');
+      const badge = document.getElementById('rulesCountBadge');
+
+      if (!cCore || !cMonitor || !cSec) return;
+
+      const enabledCount = rules.filter(r => r.enabled).length;
+      if (badge) badge.innerText = `已启用 ${enabledCount} / ${rules.length} 项规则`;
+
+      const renderRuleItem = (r) => {
+        const iconName = ruleIconMap[r.rule_key] || 'bell';
+        return `
+          <div class="p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-800/40 hover:bg-slate-100/60 dark:hover:bg-slate-800/70 transition space-y-1.5">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <span class="p-1 rounded-lg ${r.enabled ? 'bg-indigo-500/10 text-indigo-500' : 'bg-slate-200 dark:bg-slate-700 text-slate-400'}">
+                  <i data-lucide="${iconName}" class="w-4 h-4"></i>
+                </span>
+                <span class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">${r.name}</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+                <input type="checkbox" ${r.enabled ? 'checked' : ''} onchange="toggleNotificationRule('${r.rule_key}', ${r.enabled})" class="sr-only peer">
+                <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div>
+              </label>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">${r.description}</p>
+          </div>
+        `;
+      };
+
+      cCore.innerHTML = rules.filter(r => r.category === 'core').map(renderRuleItem).join('');
+      cMonitor.innerHTML = rules.filter(r => r.category === 'monitor').map(renderRuleItem).join('');
+      cSec.innerHTML = rules.filter(r => r.category === 'security' || r.category === 'report').map(renderRuleItem).join('');
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderNotificationLogs(logs) {
+      const container = document.getElementById('notificationLogsContainer');
+      const badge = document.getElementById('logsCountBadge');
+      if (!container) return;
+
+      if (badge) badge.innerText = `${logs.length} 条记录`;
+
+      if (!logs || logs.length === 0) {
+        container.innerHTML = `
+          <div class="py-8 text-center text-xs text-slate-400">
+            <i data-lucide="check-circle" class="w-8 h-8 mx-auto text-emerald-500/40 mb-2"></i>
+            暂无异常告警记录，系统与各节点运行平稳
+          </div>
+        `;
+        if (window.lucide) lucide.createIcons();
+        return;
+      }
+
+      container.innerHTML = logs.map(l => {
+        const isSuccess = l.status === 'success';
+        return `
+          <div class="p-2.5 sm:p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+            <div class="space-y-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center gap-1 font-semibold ${isSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}">
+                  <i data-lucide="${isSuccess ? 'check-circle' : 'alert-circle'}" class="w-3.5 h-3.5"></i>
+                  ${isSuccess ? '推送成功' : '推送失败'}
+                </span>
+                <span class="font-bold text-slate-800 dark:text-slate-200">${l.title}</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 font-mono">${l.channel}</span>
+              </div>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 font-mono line-clamp-2">${l.message.replace(/<[^>]+>/g, ' ').replace(/\\n/g, ' ')}</p>
+            </div>
+            <div class="text-[11px] text-slate-400 shrink-0 font-mono">
+              ${l.created_at}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function toggleNotificationRule(ruleKey, currentEnabled) {
+      try {
+        const newEnabled = !currentEnabled;
+        const res = await fetch('/api/node-mgr/notifications/rules/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule_key: ruleKey, enabled: newEnabled })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(newEnabled ? '已开启该告警规则' : '已关闭该告警规则', 'success');
+          loadNotificationConfig();
+        } else {
+          showToast('设置失败: ' + (data.error || '未知错误'), 'error');
+        }
+      } catch (err) {
+        showToast('网络错误: ' + err.message, 'error');
+      }
+    }
+
+    async function saveTelegramChannel() {
+      const token = document.getElementById('tgBotToken').value.trim();
+      const chatId = document.getElementById('tgChatId').value.trim();
+      const enabled = document.getElementById('tgEnabledSwitch').checked;
+      if (!token || !chatId) {
+        showToast('请完整输入 Telegram Bot Token 与 Chat ID', 'warning');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/notifications/channels/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: 1,
+            type: 'telegram',
+            name: 'Telegram 机器人 (@vpssend_bot)',
+            enabled: enabled,
+            config: { bot_token: token, chat_id: chatId }
+          })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('Telegram 渠道配置已保存！', 'success');
+          loadNotificationConfig();
+        } else {
+          showToast('保存失败', 'error');
+        }
+      } catch (err) {
+        showToast('网络异常: ' + err.message, 'error');
+      }
+    }
+
+    async function testNotification(ruleKey = 'manual_test') {
+      showToast('正在发送测试通知...', 'info');
+      try {
+        const res = await fetch('/api/node-mgr/notifications/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: '⚡ 智能通知中心测试',
+            message: 'Telegram 告警通道测试成功！\n\n系统所有 10 项全天候监控规则正常运行中。',
+            level: 'info',
+            rule_key: ruleKey
+          })
+        });
+        const data = await res.json();
+        if (data.ok && data.results && data.results.some(r => r.success)) {
+          showToast('✅ 测试消息已成功推送到 Telegram！', 'success');
+          setTimeout(loadNotificationLogs, 800);
+        } else {
+          const err = data.results && data.results[0] ? data.results[0].error : (data.msg || '未知错误');
+          showToast('❌ 推送失败: ' + err, 'error');
+          loadNotificationLogs();
+        }
+      } catch (err) {
+        showToast('请求失败: ' + err.message, 'error');
+      }
+    }
+
+    async function clearNotificationLogs() {
+      if (!confirm('确定清空所有通知历史记录吗？')) return;
+      try {
+        const res = await fetch('/api/node-mgr/notifications/logs/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok) {
+          showToast('通知历史已清空', 'success');
+          loadNotificationLogs();
+        }
+      } catch (err) {
+        showToast('清空失败', 'error');
+      }
+    }
+
+    function openOtherChannelModal() {
+      alert('如需配置微信 PushPlus 或企业微信/飞书机器人，可联系管理员或在 Telegram 中直接接收，已默认优先推荐 Telegram 机器人推送！');
+    }
+
   </script>
 </body>
 </html>
