@@ -223,19 +223,33 @@
       <!-- View 2 Header -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2">
+          <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
             <span class="p-1.5 sm:p-2 bg-blue-500/10 text-blue-500 rounded-xl shrink-0">
               <i data-lucide="activity" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">服务器流量监控</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span id="trafficPollStatus">3秒 实时动态轮询</span>
+            </span>
           </h1>
-          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Sing-box 核心实时网络吞吐速率与历史消耗流量统计明细</p>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 flex items-center gap-1.5 flex-wrap">
+            <span>Sing-box 核心实时吞吐速率与消耗统计</span>
+            <span class="text-slate-300 dark:text-slate-600">·</span>
+            <span>更新于: <span id="lastRefreshTime" class="font-mono text-slate-700 dark:text-slate-300 font-medium">刚刚</span></span>
+          </p>
         </div>
 
         <div class="flex items-center gap-2">
+          <!-- Live Polling Rate Selector -->
+          <div class="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-xl border border-slate-200/60 dark:border-slate-700/60 text-xs">
+            <button onclick="setPollingInterval(1000)" id="pollBtn1s" class="px-2.5 py-1 rounded-lg text-[11px] font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900">1秒</button>
+            <button onclick="setPollingInterval(3000)" id="pollBtn3s" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs transition">3秒</button>
+            <button onclick="setPollingInterval(5000)" id="pollBtn5s" class="px-2.5 py-1 rounded-lg text-[11px] font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900">5秒</button>
+          </div>
           <button onclick="loadData(); showToast('流量监控数据已刷新', 'info');" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5 transition active:scale-95">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-            <span>刷新流量数据</span>
+            <span>立即刷新</span>
           </button>
         </div>
       </div>
@@ -279,14 +293,14 @@
           </div>
         </div>
 
-        <!-- Card 4: 实时刷新周期 -->
+        <!-- Card 4: 全网实时吞吐速率 -->
         <div class="bg-white dark:bg-[#1a1a1a] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 flex items-center gap-2.5 sm:gap-3.5 shadow-sm">
           <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-500/10 text-purple-500 flex items-center justify-center font-bold shrink-0">
             <i data-lucide="zap" class="w-5 h-5 sm:w-6 sm:h-6"></i>
           </div>
           <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">实时更新模式</div>
-            <div class="text-base sm:text-2xl font-bold mt-0.5 text-purple-600 dark:text-purple-400">3秒 轮询同步</div>
+            <div class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 truncate">全网实时速率</div>
+            <div class="text-sm sm:text-lg font-bold mt-0.5 text-purple-600 dark:text-purple-400 font-mono truncate" id="trafficLiveThroughput">↓ 0 B/s · ↑ 0 B/s</div>
           </div>
         </div>
       </div>
@@ -1988,6 +2002,23 @@
         const elTrafficServerDirect = document.getElementById('trafficServerCountDirect');
         if (elTrafficServerDirect) elTrafficServerDirect.textContent = resServers.total_servers || currentServers.length;
 
+        // Calculate and update Network-Wide Live Throughput
+        let sumInRate = 0;
+        let sumOutRate = 0;
+        currentServers.forEach(s => {
+          sumInRate += (s.in_rate || 0);
+          sumOutRate += (s.out_rate || 0);
+        });
+        const elThroughput = document.getElementById('trafficLiveThroughput');
+        if (elThroughput) {
+          elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
+        }
+        const elLastTime = document.getElementById('lastRefreshTime');
+        if (elLastTime) {
+          const d = new Date();
+          elLastTime.textContent = d.toTimeString().split(' ')[0];
+        }
+
         if (resSub && resSub.sub_url) {
           currentSubUrl = resSub.sub_url;
           document.querySelectorAll('.sub-url-input').forEach(inp => {
@@ -2725,9 +2756,39 @@
       });
     }
 
-    // Auto Refresh every 3 seconds for live traffic & speed updates
+    // Dynamic polling controller (1s / 3s / 5s)
+    let pollIntervalMs = 3000;
+    let pollTimer = null;
+
+    function setPollingInterval(ms) {
+      pollIntervalMs = ms;
+      ['pollBtn1s', 'pollBtn3s', 'pollBtn5s'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+          btn.className = "px-2.5 py-1 rounded-lg text-[11px] font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900";
+        }
+      });
+      const activeId = ms === 1000 ? 'pollBtn1s' : ms === 5000 ? 'pollBtn5s' : 'pollBtn3s';
+      const activeBtn = document.getElementById(activeId);
+      if (activeBtn) {
+        activeBtn.className = "px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs transition";
+      }
+      const pollStatus = document.getElementById('trafficPollStatus');
+      if (pollStatus) {
+        pollStatus.textContent = `${ms / 1000}秒 实时动态轮询`;
+      }
+      startPolling();
+      loadData();
+    }
+
+    function startPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(loadData, pollIntervalMs);
+    }
+
+    // Auto Refresh with dynamic interval
     loadData();
-    setInterval(loadData, 3000);
+    startPolling();
 
     // Initialize tab from URL query params
     setTimeout(() => {

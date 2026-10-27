@@ -9,6 +9,8 @@ import base64
 import time
 import subprocess
 import urllib.parse
+import urllib.request
+import concurrent.futures
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -278,27 +280,31 @@ def get_servers_with_stats():
     baselines = {r[0]: (r[1], r[2]) for r in c_n.fetchall()}
     conn_n.close()
 
-    metrics_by_uuid = {}
+    # Query real-time instantaneous metrics from Komari internal recent API (live second-by-second)
+    recent_metrics = {}
+    try:
+        def fetch_recent(uuid_val):
+            try:
+                req = urllib.request.Request(f"http://127.0.0.1:25774/api/recent/{uuid_val}")
+                with urllib.request.urlopen(req, timeout=0.8) as resp:
+                    data = json.loads(resp.read().decode())
+                    items = data.get("data", [])
+                    return uuid_val, items[-1] if items else None
+            except Exception:
+                return uuid_val, None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            recent_metrics = dict(executor.map(fetch_recent, [r[0] for r in clients]))
+    except Exception:
+        pass
+
+    # Historical metrics fallback (from SQLite metric_rollups)
     first_seen_by_uuid = {}
     if os.path.exists(METRICS_DB):
         try:
             conn_m = sqlite3.connect(METRICS_DB)
             c_m = conn_m.cursor()
-            # Latest instantaneous reading (use last_val for live rates and latest counter)
-            c_m.execute("""
-                SELECT s.entity_id, s.metric_name, r.last_val
-                FROM metric_series s
-                JOIN metric_rollups r ON s.id = r.series_id
-                WHERE s.metric_name IN ('net.total.up', 'net.total.down', 'net.in.rate', 'net.out.rate')
-                ORDER BY r.bucket_milli DESC
-            """)
-            for eid, mname, val in c_m.fetchall():
-                if eid not in metrics_by_uuid:
-                    metrics_by_uuid[eid] = {}
-                if mname not in metrics_by_uuid[eid]:
-                    metrics_by_uuid[eid][mname] = val
-
-            # First recorded value by Komari
+            # First recorded value by Komari (to establish initial baseline if needed)
             c_m.execute("""
                 SELECT s.entity_id, s.metric_name, min(r.first_val)
                 FROM metric_series s
@@ -311,16 +317,20 @@ def get_servers_with_stats():
                     first_seen_by_uuid[eid] = {}
                 first_seen_by_uuid[eid][mname] = val
             conn_m.close()
-        except Exception as e:
+        except Exception:
             pass
 
     # Auto-initialize missing baselines
     new_baselines = []
     for row in clients:
         uuid_val = row[0]
-        m = metrics_by_uuid.get(uuid_val, {})
-        cur_up = int(m.get('net.total.up', 0))
-        cur_down = int(m.get('net.total.down', 0))
+        rec = recent_metrics.get(uuid_val)
+        if rec and "network" in rec:
+            cur_up = int(rec["network"].get("totalUp", 0))
+            cur_down = int(rec["network"].get("totalDown", 0))
+        else:
+            cur_up = 0
+            cur_down = 0
 
         if uuid_val not in baselines:
             first_m = first_seen_by_uuid.get(uuid_val, {})
@@ -350,9 +360,22 @@ def get_servers_with_stats():
         if is_online:
             online_count += 1
 
-        m = metrics_by_uuid.get(uuid_val, {})
-        cur_up = int(m.get('net.total.up', 0))
-        cur_down = int(m.get('net.total.down', 0))
+        rec = recent_metrics.get(uuid_val)
+        if rec and "network" in rec:
+            net = rec["network"]
+            cur_up = int(net.get("totalUp", 0))
+            cur_down = int(net.get("totalDown", 0))
+            # Komari: net.down is download rate, net.up is upload rate
+            in_rate = int(net.get("down", 0))
+            out_rate = int(net.get("up", 0))
+            rec_updated = rec.get("updated_at") or updated_at
+        else:
+            cur_up = 0
+            cur_down = 0
+            in_rate = 0
+            out_rate = 0
+            rec_updated = updated_at
+
         raw_tot = cur_up + cur_down
         total_raw_traffic += raw_tot
 
@@ -376,7 +399,7 @@ def get_servers_with_stats():
             "os": os_name or "",
             "arch": arch or "",
             "token": token or "",
-            "updated_at": str(updated_at) if updated_at else "",
+            "updated_at": str(rec_updated) if rec_updated else "",
             "singbox_online": is_online,
             "singbox_installed": last_seen > 0,
             "last_seen": last_seen,
@@ -389,8 +412,8 @@ def get_servers_with_stats():
             "raw_total": raw_tot,
             "baseline_up": base_up,
             "baseline_down": base_down,
-            "in_rate": int(m.get('net.in.rate', 0)),
-            "out_rate": int(m.get('net.out.rate', 0))
+            "in_rate": in_rate,
+            "out_rate": out_rate
         })
 
     return {
@@ -401,7 +424,6 @@ def get_servers_with_stats():
         "total_traffic": total_traffic,
         "total_raw_traffic": total_raw_traffic
     }
-
 def get_servers():
     return get_servers_with_stats().get("servers", [])
 
