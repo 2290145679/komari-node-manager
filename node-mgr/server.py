@@ -95,7 +95,12 @@ def init_db():
         ("proxy_tg", "INTEGER DEFAULT 0"),
         ("proxy_media", "INTEGER DEFAULT 0"),
         ("proxy_dev", "INTEGER DEFAULT 0"),
-        ("direct_games", "INTEGER DEFAULT 0")
+        ("direct_games", "INTEGER DEFAULT 0"),
+        ("target_ai", "TEXT DEFAULT 'PROXY'"),
+        ("target_tg", "TEXT DEFAULT 'PROXY'"),
+        ("target_media", "TEXT DEFAULT 'PROXY'"),
+        ("target_dev", "TEXT DEFAULT 'PROXY'"),
+        ("target_games", "TEXT DEFAULT 'DIRECT'")
     ]
     for col, ctype in extra_cols:
         try:
@@ -155,7 +160,12 @@ def get_subscription_rules():
         "proxy_tg": bool(d.get("proxy_tg", 0)),
         "proxy_media": bool(d.get("proxy_media", 0)),
         "proxy_dev": bool(d.get("proxy_dev", 0)),
-        "direct_games": bool(d.get("direct_games", 0))
+        "direct_games": bool(d.get("direct_games", 0)),
+        "target_ai": d.get("target_ai") or "PROXY",
+        "target_tg": d.get("target_tg") or "PROXY",
+        "target_media": d.get("target_media") or "PROXY",
+        "target_dev": d.get("target_dev") or "PROXY",
+        "target_games": d.get("target_games") or "DIRECT"
     }
 
 def get_reality_keypair():
@@ -550,65 +560,70 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     # 2. AI services
     if rules_cfg.get("proxy_ai"):
-        rules_list.append("  # === 🤖 AI 大模型服务代理 (ChatGPT / Claude / Gemini) ===")
-        rules_list.append("  - GEOSITE,openai,PROXY")
-        rules_list.append("  - GEOSITE,anthropic,PROXY")
-        rules_list.append("  - GEOSITE,google-gemini,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,chatgpt.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,openai.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,oaistatic.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,oaiusercontent.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,anthropic.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,claude.ai,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,gemini.google.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,copilot.microsoft.com,PROXY")
+        t_ai = rules_cfg.get("target_ai") or "PROXY"
+        rules_list.append(f"  # === 🤖 AI 大模型服务 (ChatGPT / Claude / Gemini) -> {t_ai} ===")
+        rules_list.append(f"  - GEOSITE,openai,{t_ai}")
+        rules_list.append(f"  - GEOSITE,anthropic,{t_ai}")
+        rules_list.append(f"  - GEOSITE,google-gemini,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,chatgpt.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,openai.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,oaistatic.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,oaiusercontent.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,anthropic.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,claude.ai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,gemini.google.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,copilot.microsoft.com,{t_ai}")
 
     # 3. Telegram
     if rules_cfg.get("proxy_tg"):
-        rules_list.append("  # === ✈️ Telegram 社交专线 ===")
-        rules_list.append("  - GEOSITE,telegram,PROXY")
-        rules_list.append("  - IP-CIDR,91.108.4.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,91.108.8.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,91.108.12.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,91.108.16.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,91.108.56.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,149.154.160.0/20,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,149.154.164.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,149.154.168.0/22,PROXY,no-resolve")
-        rules_list.append("  - IP-CIDR,149.154.172.0/22,PROXY,no-resolve")
+        t_tg = rules_cfg.get("target_tg") or "PROXY"
+        rules_list.append(f"  # === ✈️ Telegram 社交专线 -> {t_tg} ===")
+        rules_list.append(f"  - GEOSITE,telegram,{t_tg}")
+        rules_list.append(f"  - IP-CIDR,91.108.4.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,91.108.8.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,91.108.12.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,91.108.16.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,91.108.56.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,149.154.160.0/20,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,149.154.164.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,149.154.168.0/22,{t_tg},no-resolve")
+        rules_list.append(f"  - IP-CIDR,149.154.172.0/22,{t_tg},no-resolve")
 
     # 4. Overseas Streaming Media
     if rules_cfg.get("proxy_media"):
-        rules_list.append("  # === 🎬 海外主流流媒体 (YouTube / Netflix / Spotify) ===")
-        rules_list.append("  - GEOSITE,youtube,PROXY")
-        rules_list.append("  - GEOSITE,netflix,PROXY")
-        rules_list.append("  - GEOSITE,disney,PROXY")
-        rules_list.append("  - GEOSITE,spotify,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,youtube.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,googlevideo.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,netflix.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,nflxvideo.net,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,spotify.com,PROXY")
+        t_media = rules_cfg.get("target_media") or "PROXY"
+        rules_list.append(f"  # === 🎬 海外主流流媒体 (YouTube / Netflix / Spotify) -> {t_media} ===")
+        rules_list.append(f"  - GEOSITE,youtube,{t_media}")
+        rules_list.append(f"  - GEOSITE,netflix,{t_media}")
+        rules_list.append(f"  - GEOSITE,disney,{t_media}")
+        rules_list.append(f"  - GEOSITE,spotify,{t_media}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,youtube.com,{t_media}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,googlevideo.com,{t_media}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,netflix.com,{t_media}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,nflxvideo.net,{t_media}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,spotify.com,{t_media}")
 
     # 5. Developer Services
     if rules_cfg.get("proxy_dev"):
-        rules_list.append("  # === 💻 开发者服务加速 (GitHub / Docker / Hugging Face) ===")
-        rules_list.append("  - GEOSITE,github,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,github.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,githubusercontent.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,docker.com,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,docker.io,PROXY")
-        rules_list.append("  - DOMAIN-SUFFIX,huggingface.co,PROXY")
+        t_dev = rules_cfg.get("target_dev") or "PROXY"
+        rules_list.append(f"  # === 💻 开发者服务加速 (GitHub / Docker / Hugging Face) -> {t_dev} ===")
+        rules_list.append(f"  - GEOSITE,github,{t_dev}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,github.com,{t_dev}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,githubusercontent.com,{t_dev}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,docker.com,{t_dev}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,docker.io,{t_dev}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,huggingface.co,{t_dev}")
 
     # 6. Game Platforms Direct
     if rules_cfg.get("direct_games"):
-        rules_list.append("  # === 🎮 主流游戏平台直连 (Steam / Epic / 暴雪) ===")
-        rules_list.append("  - GEOSITE,steam@cn,DIRECT")
-        rules_list.append("  - GEOSITE,epicgames,DIRECT")
-        rules_list.append("  - GEOSITE,blizzard,DIRECT")
-        rules_list.append("  - DOMAIN-SUFFIX,steamserver.net,DIRECT")
-        rules_list.append("  - DOMAIN-SUFFIX,steamcontent.com,DIRECT")
-        rules_list.append("  - DOMAIN-SUFFIX,epicgames.com,DIRECT")
+        t_games = rules_cfg.get("target_games") or "DIRECT"
+        rules_list.append(f"  # === 🎮 主流游戏平台直连 (Steam / Epic / 暴雪) -> {t_games} ===")
+        rules_list.append(f"  - GEOSITE,steam@cn,{t_games}")
+        rules_list.append(f"  - GEOSITE,epicgames,{t_games}")
+        rules_list.append(f"  - GEOSITE,blizzard,{t_games}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,steamserver.net,{t_games}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,steamcontent.com,{t_games}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,epicgames.com,{t_games}")
 
     # 7. BT / PT Direct rule
     if rules_cfg.get("direct_bt", True):
@@ -1194,6 +1209,11 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             proxy_media = 1 if body.get("proxy_media", False) else 0
             proxy_dev = 1 if body.get("proxy_dev", False) else 0
             direct_games = 1 if body.get("direct_games", False) else 0
+            target_ai = body.get("target_ai") or "PROXY"
+            target_tg = body.get("target_tg") or "PROXY"
+            target_media = body.get("target_media") or "PROXY"
+            target_dev = body.get("target_dev") or "PROXY"
+            target_games = body.get("target_games") or "DIRECT"
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
@@ -1201,11 +1221,13 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 UPDATE subscription_rules
                 SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?,
                     final_match=?, custom_rules=?, proxy_ai=?, proxy_tg=?, proxy_media=?,
-                    proxy_dev=?, direct_games=?, updated_at=CURRENT_TIMESTAMP
+                    proxy_dev=?, direct_games=?, target_ai=?, target_tg=?, target_media=?,
+                    target_dev=?, target_games=?, updated_at=CURRENT_TIMESTAMP
                 WHERE id = 1
             """, (direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group,
                   final_match, custom_rules, proxy_ai, proxy_tg, proxy_media,
-                  proxy_dev, direct_games))
+                  proxy_dev, direct_games, target_ai, target_tg, target_media,
+                  target_dev, target_games))
             conn.commit()
             conn.close()
             self._send_json({"ok": True, "msg": "订阅规则已保存生效"})
