@@ -4,9 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>节点管理 - Komari</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    try {
+      if (window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark')) {
+        document.documentElement.classList.add('dark');
+      } else if (localStorage.getItem('theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+      }
+    } catch (e) {}
+  </script>
+  <script src="assets/tailwind.js"></script>
+  <script src="assets/qrcode.min.js"></script>
+  <script src="assets/lucide.min.js"></script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -1404,7 +1413,7 @@
           }
         }
       } catch (e) {}
-    }, 80);
+    }, 50);
 
     // Global state for visual rules
         // Global state for visual rules & decision table
