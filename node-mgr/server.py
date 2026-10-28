@@ -334,6 +334,19 @@ def parse_proxy_link(link):
         node["protocol"] = "custom"
         return node
 
+
+_stats_cache = {"ts": 0, "data": None}
+
+def get_cached_servers_with_stats():
+    global _stats_cache
+    now = time.time()
+    if _stats_cache["data"] and (now - _stats_cache["ts"]) < 1.2:
+        return _stats_cache["data"]
+    data = get_servers_with_stats()
+    _stats_cache["ts"] = now
+    _stats_cache["data"] = data
+    return data
+
 def get_servers_with_stats():
     servers = []
     if not os.path.exists(KOMARI_DB):
@@ -1679,7 +1692,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/servers" or path == "/api/node-mgr/servers":
-            servers_data = get_servers_with_stats()
+            servers_data = get_cached_servers_with_stats()
             self._send_json(servers_data)
             return
 

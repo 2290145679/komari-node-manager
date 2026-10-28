@@ -29,6 +29,20 @@
     }
   </script>
   <style>
+    :root {
+      --km-bg: #f8fafc;
+      --km-card: #ffffff;
+      --km-border: #e2e8f0;
+    }
+    html.dark {
+      --km-bg: #111113;
+      --km-card: #18181b;
+      --km-border: #27272a;
+    }
+    body {
+      background-color: var(--km-bg) !important;
+    }
+
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       -webkit-tap-highlight-color: transparent;
@@ -70,6 +84,7 @@
               <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">节点列表与管理</span>
+          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自建 Sing-box 节点与外部节点统一管理 · 实时延时测速与一键导出</p>
         </div>
@@ -203,6 +218,29 @@
 
       <!-- Mobile Responsive Cards View (visible on screen < 768px) -->
       <div id="nodeCardsContainer" class="mobile-cards-view p-3 space-y-3">
+          <!-- Initial Skeleton Cards (shown when no cache exists yet) -->
+          <div class="skeleton-placeholder p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#18181b] animate-pulse space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded"></div>
+              <div class="h-5 w-14 bg-indigo-500/10 rounded-full"></div>
+            </div>
+            <div class="h-3 w-40 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+              <div class="h-3 w-20 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+              <div class="h-3 w-16 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+            </div>
+          </div>
+          <div class="skeleton-placeholder p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#18181b] animate-pulse space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
+              <div class="h-5 w-14 bg-emerald-500/10 rounded-full"></div>
+            </div>
+            <div class="h-3 w-36 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
+              <div class="h-3 w-24 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+              <div class="h-3 w-16 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+            </div>
+          </div>
       </div>
 
       <div id="emptyState" class="py-12 sm:py-16 text-center hidden">
@@ -237,6 +275,7 @@
               <i data-lucide="activity" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">服务器流量监控</span>
+          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span id="trafficPollStatus">3秒 实时动态轮询</span>
@@ -395,6 +434,7 @@
               <i data-lucide="sliders" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">分流规则与全能订阅配置</span>
+          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Clash / Mihomo / Sing-box 全协议订阅分流与可视化规则策略</p>
         </div>
@@ -784,6 +824,7 @@
               <i data-lucide="bell" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">智能通知与告警中心</span>
+          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
               全天候实时守护中
@@ -2241,16 +2282,35 @@
       return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
     }
 
-    async function loadData() {
-      try {
-        const [resNodes, resServers, resSub] = await Promise.all([
-          fetch('/api/node-mgr/nodes').then(r => r.json()),
-          fetch('/api/node-mgr/servers').then(r => r.json()),
-          fetch('/api/node-mgr/sub/token').then(r => r.json())
-        ]);
+    function setSyncing(isSyncing) {
+      const bar = document.getElementById('topLoadingProgress');
+      const badges = document.querySelectorAll('.loading-sync-badge');
+      if (bar) {
+        if (isSyncing) {
+          bar.classList.remove('opacity-0');
+          bar.classList.add('opacity-100', 'animate-pulse');
+        } else {
+          bar.classList.remove('animate-pulse');
+          bar.classList.add('opacity-0');
+        }
+      }
+      badges.forEach(b => {
+        if (isSyncing) {
+          b.classList.remove('opacity-0');
+          b.classList.add('opacity-100');
+        } else {
+          b.classList.remove('opacity-100');
+          b.classList.add('opacity-0');
+        }
+      });
+    }
 
+    function applyDataPayload(resNodes, resServers, resSub) {
+      if (resNodes && resNodes.nodes) {
         currentNodes = resNodes.nodes || [];
         if (typeof renderRulesDecisionTable === 'function') renderRulesDecisionTable();
+      }
+      if (resServers && resServers.servers) {
         currentServers = resServers.servers || [];
 
         // Update Stat Cards (Node Stats)
@@ -2298,28 +2358,68 @@
           const d = new Date();
           elLastTime.textContent = d.toTimeString().split(' ')[0];
         }
+      }
 
-        if (resSub && resSub.sub_url) {
-          currentSubUrl = resSub.sub_url;
-          document.querySelectorAll('.sub-url-input').forEach(inp => {
-            inp.value = resSub.sub_url;
-          });
-          const legacyInput = document.getElementById('subUrlInput');
-          if (legacyInput) legacyInput.value = resSub.sub_url;
-          const clashEl = document.getElementById('subClashUrlInput');
-          if (clashEl) clashEl.value = resSub.sub_url + '?clash=1';
-          const b64El = document.getElementById('subB64UrlInput');
-          if (b64El) b64El.value = resSub.sub_url + '?format=b64';
+      if (resSub && resSub.sub_url) {
+        currentSubUrl = resSub.sub_url;
+        document.querySelectorAll('.sub-url-input').forEach(inp => {
+          inp.value = resSub.sub_url;
+        });
+        const legacyInput = document.getElementById('subUrlInput');
+        if (legacyInput) legacyInput.value = resSub.sub_url;
+        const clashEl = document.getElementById('subClashUrlInput');
+        if (clashEl) clashEl.value = resSub.sub_url + '?clash=1';
+        const b64El = document.getElementById('subB64UrlInput');
+        if (b64El) b64El.value = resSub.sub_url + '?format=b64';
+      }
+
+      renderNodeTable();
+      renderTrafficTable((resServers && resServers.total_traffic) || 0);
+      updateServerSelect();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    // Instant Cache Hydration (0 Milliseconds on start / switch)
+    function hydrateCache() {
+      try {
+        const rawN = localStorage.getItem('km_cache_nodes');
+        const rawS = localStorage.getItem('km_cache_servers');
+        const rawSub = localStorage.getItem('km_cache_sub');
+        if (rawN || rawS) {
+          const resN = rawN ? JSON.parse(rawN) : {};
+          const resS = rawS ? JSON.parse(rawS) : {};
+          const resSub = rawSub ? JSON.parse(rawSub) : {};
+          applyDataPayload(resN, resS, resSub);
         }
+      } catch (e) {}
+    }
 
-        renderNodeTable();
-        renderTrafficTable(resServers.total_traffic || 0);
-        updateServerSelect();
-        lucide.createIcons();
+    async function loadData() {
+      setSyncing(true);
+      try {
+        const [resNodes, resServers, resSub] = await Promise.all([
+          fetch('/api/node-mgr/nodes').then(r => r.json()),
+          fetch('/api/node-mgr/servers').then(r => r.json()),
+          fetch('/api/node-mgr/sub/token').then(r => r.json())
+        ]);
+
+        applyDataPayload(resNodes, resServers, resSub);
+
+        // Store to cache for instant 0ms next load
+        try {
+          localStorage.setItem('km_cache_nodes', JSON.stringify(resNodes));
+          localStorage.setItem('km_cache_servers', JSON.stringify(resServers));
+          localStorage.setItem('km_cache_sub', JSON.stringify(resSub));
+        } catch (e) {}
       } catch (e) {
         console.error("加载数据失败:", e);
+      } finally {
+        setTimeout(() => setSyncing(false), 200);
       }
     }
+
+    // Immediately hydrate from local storage on script parse
+    hydrateCache();
 
     function renderNodeTable() {
       const tbody = document.getElementById('nodeTableBody');
