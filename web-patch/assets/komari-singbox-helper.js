@@ -10,18 +10,15 @@ if ('caches' in window) {
   });
 }
 
-// Ensure plugin iframes are never served from stale browser cache
-function ensureFreshIframes() {
-  document.querySelectorAll('iframe.km-plugin-frame').forEach(function(iframe) {
+// Eliminate any legacy duplicate iframes created by cached chunk-plugin_page
+function killDuplicateIframes() {
+  document.querySelectorAll('iframe.km-plugin-frame').forEach(function(el) {
     try {
-      var src = iframe.getAttribute('src');
-      if (src && src.indexOf('/api/admin/plugin/node-manager/') !== -1 && src.indexOf('v=') === -1) {
-        iframe.src = src + (src.indexOf('?') !== -1 ? '&' : '?') + 'v=1.2';
-      }
+      el.remove();
     } catch (e) {}
   });
 }
-setInterval(ensureFreshIframes, 300);
-document.addEventListener('DOMContentLoaded', ensureFreshIframes);
+setInterval(killDuplicateIframes, 200);
+document.addEventListener('DOMContentLoaded', killDuplicateIframes);
 
-console.log('[Komari] Native React sing-box integration active (v4)');
+console.log('[Komari] Native React sing-box integration active (v5)');

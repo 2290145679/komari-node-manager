@@ -93,7 +93,7 @@
               <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">节点列表与管理</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+          <span class="loading-sync-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自建 Sing-box 节点与外部节点统一管理 · 实时延时测速与一键导出</p>
         </div>
@@ -201,7 +201,7 @@
           </h2>
           <span class="text-xs text-slate-400 hidden sm:inline">(自建 Sing-box 节点与外部导入节点)</span>
         </div>
-        <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="刷新列表">
+        <button onclick="loadData(true)" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="刷新列表">
           <i data-lucide="rotate-cw" class="w-4 h-4"></i>
         </button>
       </div>
@@ -284,7 +284,7 @@
               <i data-lucide="activity" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">服务器流量监控</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+          <span class="loading-sync-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span id="trafficPollStatus">3秒 实时动态轮询</span>
@@ -304,7 +304,7 @@
             <button onclick="setPollingInterval(3000)" id="pollBtn3s" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs transition">3秒</button>
             <button onclick="setPollingInterval(5000)" id="pollBtn5s" class="px-2.5 py-1 rounded-lg text-[11px] font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900">5秒</button>
           </div>
-          <button onclick="loadData(); showToast('流量监控数据已刷新', 'info');" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5 transition active:scale-95">
+          <button onclick="loadData(true); showToast('流量监控数据已刷新', 'info');" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5 transition active:scale-95">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             <span>立即刷新</span>
           </button>
@@ -396,7 +396,7 @@
             <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
             全部归零
           </button>
-          <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="立即刷新">
+          <button onclick="loadData(true)" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="立即刷新">
             <i data-lucide="rotate-cw" class="w-4 h-4"></i>
           </button>
         </div>
@@ -443,7 +443,7 @@
               <i data-lucide="sliders" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">分流规则与全能订阅配置</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+          <span class="loading-sync-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Clash / Mihomo / Sing-box 全协议订阅分流与可视化规则策略</p>
         </div>
@@ -833,7 +833,7 @@
               <i data-lucide="bell" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">智能通知与告警中心</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+          <span class="loading-sync-badge hidden inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
               全天候实时守护中
@@ -2327,30 +2327,68 @@
       }
       badges.forEach(b => {
         if (isSyncing) {
-          b.classList.remove('opacity-0');
-          b.classList.add('opacity-100');
+          b.classList.remove('hidden');
         } else {
-          b.classList.remove('opacity-100');
-          b.classList.add('opacity-0');
+          b.classList.add('hidden');
         }
       });
+    }
+
+    function applyServersPayload(resServers) {
+      if (!resServers || !resServers.servers) return;
+      currentServers = resServers.servers || [];
+
+      // Update Stat Cards (Node Stats)
+      const elSingboxOnline = document.getElementById('singboxOnlineCount');
+      if (elSingboxOnline) elSingboxOnline.textContent = resServers.singbox_online_count || 0;
+      const elServerTotal = document.getElementById('serverTotalCount');
+      if (elServerTotal) elServerTotal.textContent = resServers.total_servers || currentServers.length;
+      const elTotalTraffic = document.getElementById('totalTrafficDisplay');
+      if (elTotalTraffic) elTotalTraffic.textContent = formatBytes(resServers.total_traffic || 0);
+
+      // Update Traffic View Stats
+      const elTrafficSingbox = document.getElementById('trafficSingboxOnline');
+      if (elTrafficSingbox) elTrafficSingbox.textContent = resServers.singbox_online_count || 0;
+      const elTrafficServer = document.getElementById('trafficServerTotal');
+      if (elTrafficServer) elTrafficServer.textContent = resServers.total_servers || currentServers.length;
+      const elTrafficServerDirect = document.getElementById('trafficServerCountDirect');
+      if (elTrafficServerDirect) elTrafficServerDirect.textContent = resServers.total_servers || currentServers.length;
+
+      // Calculate and update Network-Wide Live Throughput
+      let sumInRate = 0;
+      let sumOutRate = 0;
+      currentServers.forEach(s => {
+        sumInRate += (s.in_rate || 0);
+        sumOutRate += (s.out_rate || 0);
+      });
+      const elIn = document.getElementById('trafficLiveInRate');
+      if (elIn) elIn.textContent = `${formatBytes(sumInRate)}/s`;
+      const elOut = document.getElementById('trafficLiveOutRate');
+      if (elOut) elOut.textContent = `${formatBytes(sumOutRate)}/s`;
+      const elThroughput = document.getElementById('trafficLiveThroughput');
+      if (elThroughput) {
+        elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
+      }
+      const elLastTime = document.getElementById('lastRefreshTime');
+      if (elLastTime) {
+        const d = new Date();
+        elLastTime.textContent = d.toTimeString().split(' ')[0];
+      }
+
+      renderTrafficTable((resServers && resServers.total_traffic) || 0);
+      updateServerSelect();
+      if (window.lucide) {
+        const trafficContainer = document.getElementById('viewTraffic');
+        if (trafficContainer) {
+          try { lucide.createIcons({ root: trafficContainer }); } catch(e) {}
+        }
+      }
     }
 
     function applyDataPayload(resNodes, resServers, resSub) {
       if (resNodes && resNodes.nodes) {
         currentNodes = resNodes.nodes || [];
         if (typeof renderRulesDecisionTable === 'function') renderRulesDecisionTable();
-      }
-      if (resServers && resServers.servers) {
-        currentServers = resServers.servers || [];
-
-        // Update Stat Cards (Node Stats)
-        const elSingboxOnline = document.getElementById('singboxOnlineCount');
-        if (elSingboxOnline) elSingboxOnline.textContent = resServers.singbox_online_count || 0;
-        const elServerTotal = document.getElementById('serverTotalCount');
-        if (elServerTotal) elServerTotal.textContent = resServers.total_servers || currentServers.length;
-        const elTotalTraffic = document.getElementById('totalTrafficDisplay');
-        if (elTotalTraffic) elTotalTraffic.textContent = formatBytes(resServers.total_traffic || 0);
         const elNodeTotal = document.getElementById('nodeTotalCount');
         if (elNodeTotal) elNodeTotal.textContent = currentNodes.length;
 
@@ -2360,35 +2398,11 @@
         if (elNative) elNative.textContent = nativeCount;
         const elExternal = document.getElementById('externalNodeCount');
         if (elExternal) elExternal.textContent = externalCount;
+        renderNodeTable();
+      }
 
-        // Update Traffic View Stats
-        const elTrafficSingbox = document.getElementById('trafficSingboxOnline');
-        if (elTrafficSingbox) elTrafficSingbox.textContent = resServers.singbox_online_count || 0;
-        const elTrafficServer = document.getElementById('trafficServerTotal');
-        if (elTrafficServer) elTrafficServer.textContent = resServers.total_servers || currentServers.length;
-        const elTrafficServerDirect = document.getElementById('trafficServerCountDirect');
-        if (elTrafficServerDirect) elTrafficServerDirect.textContent = resServers.total_servers || currentServers.length;
-
-        // Calculate and update Network-Wide Live Throughput
-        let sumInRate = 0;
-        let sumOutRate = 0;
-        currentServers.forEach(s => {
-          sumInRate += (s.in_rate || 0);
-          sumOutRate += (s.out_rate || 0);
-        });
-        const elIn = document.getElementById('trafficLiveInRate');
-        if (elIn) elIn.textContent = `${formatBytes(sumInRate)}/s`;
-        const elOut = document.getElementById('trafficLiveOutRate');
-        if (elOut) elOut.textContent = `${formatBytes(sumOutRate)}/s`;
-        const elThroughput = document.getElementById('trafficLiveThroughput');
-        if (elThroughput) {
-          elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
-        }
-        const elLastTime = document.getElementById('lastRefreshTime');
-        if (elLastTime) {
-          const d = new Date();
-          elLastTime.textContent = d.toTimeString().split(' ')[0];
-        }
+      if (resServers && resServers.servers) {
+        applyServersPayload(resServers);
       }
 
       if (resSub && resSub.sub_url) {
@@ -2404,9 +2418,6 @@
         if (b64El) b64El.value = resSub.sub_url + '?format=b64';
       }
 
-      renderNodeTable();
-      renderTrafficTable((resServers && resServers.total_traffic) || 0);
-      updateServerSelect();
       if (window.lucide) lucide.createIcons();
     }
 
@@ -2425,8 +2436,11 @@
       } catch (e) {}
     }
 
-    async function loadData() {
-      setSyncing(true);
+    let isDataLoading = false;
+    async function loadData(showSync = false) {
+      if (isDataLoading) return;
+      isDataLoading = true;
+      if (showSync) setSyncing(true);
       try {
         const [resNodes, resServers, resSub] = await Promise.all([
           fetch('/api/node-mgr/nodes').then(r => r.json()),
@@ -2445,7 +2459,28 @@
       } catch (e) {
         console.error("加载数据失败:", e);
       } finally {
-        setTimeout(() => setSyncing(false), 200);
+        isDataLoading = false;
+        if (showSync) setTimeout(() => setSyncing(false), 200);
+        else setSyncing(false);
+      }
+    }
+
+    // Silent background realtime traffic polling (only fetches servers API)
+    let isPollingBusy = false;
+    async function pollTraffic() {
+      if (isPollingBusy) return;
+      isPollingBusy = true;
+      try {
+        const resServers = await fetch('/api/node-mgr/servers').then(r => r.json());
+        if (resServers && resServers.servers) {
+          applyServersPayload(resServers);
+          try {
+            localStorage.setItem('km_cache_servers', JSON.stringify(resServers));
+          } catch (e) {}
+        }
+      } catch (e) {
+      } finally {
+        isPollingBusy = false;
       }
     }
 
@@ -3194,16 +3229,16 @@
         pollStatus.textContent = `${ms / 1000}秒 实时动态轮询`;
       }
       startPolling();
-      loadData();
+      pollTraffic();
     }
 
     function startPolling() {
       if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(loadData, pollIntervalMs);
+      pollTimer = setInterval(pollTraffic, pollIntervalMs);
     }
 
-    // Auto Refresh with dynamic interval
-    loadData();
+    // Auto Refresh with dynamic interval (silent polling)
+    loadData(false);
     startPolling();
 
     // Initialize tab from URL query params
