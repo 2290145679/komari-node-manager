@@ -6,10 +6,19 @@
   <title>节点管理 - Komari</title>
   <script>
     try {
-      if (window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark')) {
-        document.documentElement.classList.add('dark');
-      } else if (localStorage.getItem('theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
+      const syncTheme = () => {
+        if (window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark')) {
+          document.documentElement.classList.add('dark');
+        } else if (localStorage.getItem('theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      };
+      syncTheme();
+      if (window.parent && window.parent.document) {
+        const obs = new MutationObserver(syncTheme);
+        obs.observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['class'] });
       }
     } catch (e) {}
   </script>
@@ -67,9 +76,19 @@
       .desktop-table-view { display: block !important; }
       .mobile-cards-view { display: none !important; }
     }
+    .pb-safe {
+      padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+    }
+    .bottom-nav-safe {
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .backdrop-blur-xs {
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
   </style>
 </head>
-<body class="bg-slate-50 dark:bg-[#121212] text-slate-800 dark:text-slate-100 min-h-screen p-3 sm:p-5 md:p-6 pb-20 sm:pb-6 transition-colors duration-200">
+<body class="bg-slate-50 dark:bg-[#121212] text-slate-800 dark:text-slate-100 min-h-screen p-3 sm:p-5 md:p-6 pb-28 md:pb-6 transition-colors duration-200">
 
   <div class="max-w-7xl mx-auto space-y-4 sm:space-y-6">
     <!-- ========================================== -->
@@ -84,7 +103,7 @@
               <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">节点列表与管理</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自建 Sing-box 节点与外部节点统一管理 · 实时延时测速与一键导出</p>
         </div>
@@ -192,7 +211,7 @@
           </h2>
           <span class="text-xs text-slate-400 hidden sm:inline">(自建 Sing-box 节点与外部导入节点)</span>
         </div>
-        <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="刷新列表">
+        <button onclick="loadData(true)" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="刷新列表">
           <i data-lucide="rotate-cw" class="w-4 h-4"></i>
         </button>
       </div>
@@ -216,29 +235,35 @@
         </table>
       </div>
 
-      <!-- Mobile Responsive Cards View (visible on screen < 768px) -->
-      <div id="nodeCardsContainer" class="mobile-cards-view p-3 space-y-3">
-          <!-- Initial Skeleton Cards (shown when no cache exists yet) -->
-          <div class="skeleton-placeholder p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#18181b] animate-pulse space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="h-4 w-28 bg-slate-200 dark:bg-slate-800 rounded"></div>
-              <div class="h-5 w-14 bg-indigo-500/10 rounded-full"></div>
+      <!-- Mobile Responsive Inset Group View (visible on screen < 768px, Surge / Apple Style) -->
+      <div id="nodeCardsContainer" class="mobile-cards-view p-2 sm:p-3 space-y-3">
+          <!-- Initial Skeleton Inset List -->
+          <div class="skeleton-placeholder rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-[#18181b] overflow-hidden divide-y divide-slate-100 dark:divide-zinc-800/60 animate-pulse">
+            <div class="p-3.5 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 flex-1">
+                <div class="h-5 w-12 bg-indigo-500/10 rounded-lg"></div>
+                <div class="space-y-1.5 flex-1">
+                  <div class="h-3.5 w-28 bg-slate-200 dark:bg-zinc-800 rounded"></div>
+                  <div class="h-2.5 w-36 bg-slate-100 dark:bg-zinc-800/60 rounded"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="h-4 w-10 bg-slate-100 dark:bg-zinc-800 rounded-full"></div>
+                <div class="h-5 w-9 bg-slate-200 dark:bg-zinc-700 rounded-full"></div>
+              </div>
             </div>
-            <div class="h-3 w-40 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
-            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
-              <div class="h-3 w-20 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
-              <div class="h-3 w-16 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
-            </div>
-          </div>
-          <div class="skeleton-placeholder p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#18181b] animate-pulse space-y-3">
-            <div class="flex items-center justify-between">
-              <div class="h-4 w-32 bg-slate-200 dark:bg-slate-800 rounded"></div>
-              <div class="h-5 w-14 bg-emerald-500/10 rounded-full"></div>
-            </div>
-            <div class="h-3 w-36 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
-            <div class="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
-              <div class="h-3 w-24 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
-              <div class="h-3 w-16 bg-slate-100 dark:bg-slate-800/60 rounded"></div>
+            <div class="p-3.5 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5 flex-1">
+                <div class="h-5 w-10 bg-pink-500/10 rounded-lg"></div>
+                <div class="space-y-1.5 flex-1">
+                  <div class="h-3.5 w-32 bg-slate-200 dark:bg-zinc-800 rounded"></div>
+                  <div class="h-2.5 w-24 bg-slate-100 dark:bg-zinc-800/60 rounded"></div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2">
+                <div class="h-4 w-10 bg-slate-100 dark:bg-zinc-800 rounded-full"></div>
+                <div class="h-5 w-9 bg-slate-200 dark:bg-zinc-700 rounded-full"></div>
+              </div>
             </div>
           </div>
       </div>
@@ -275,7 +300,7 @@
               <i data-lucide="activity" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">服务器流量监控</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
               <span id="trafficPollStatus">3秒 实时动态轮询</span>
@@ -295,7 +320,7 @@
             <button onclick="setPollingInterval(3000)" id="pollBtn3s" class="px-2.5 py-1 rounded-lg text-[11px] font-semibold bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-400 shadow-xs transition">3秒</button>
             <button onclick="setPollingInterval(5000)" id="pollBtn5s" class="px-2.5 py-1 rounded-lg text-[11px] font-medium transition text-slate-600 dark:text-slate-400 hover:text-slate-900">5秒</button>
           </div>
-          <button onclick="loadData(); showToast('流量监控数据已刷新', 'info');" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5 transition active:scale-95">
+          <button onclick="loadData(true); showToast('流量监控数据已刷新', 'info');" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-blue-50 dark:bg-blue-950/60 hover:bg-blue-100 dark:hover:bg-blue-900/60 text-blue-600 dark:text-blue-400 border border-blue-200/50 dark:border-blue-800/50 flex items-center gap-1.5 transition active:scale-95">
             <i data-lucide="refresh-cw" class="w-4 h-4"></i>
             <span>立即刷新</span>
           </button>
@@ -387,7 +412,7 @@
             <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
             全部归零
           </button>
-          <button onclick="loadData()" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="立即刷新">
+          <button onclick="loadData(true)" class="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg transition" title="立即刷新">
             <i data-lucide="rotate-cw" class="w-4 h-4"></i>
           </button>
         </div>
@@ -434,7 +459,7 @@
               <i data-lucide="sliders" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">分流规则与全能订阅配置</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Clash / Mihomo / Sing-box 全协议订阅分流与可视化规则策略</p>
         </div>
@@ -824,7 +849,7 @@
               <i data-lucide="bell" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">智能通知与告警中心</span>
-          <span class="loading-sync-badge inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-indigo-500/10 text-indigo-500 dark:bg-indigo-500/20 transition-opacity duration-300 opacity-0"><svg class="w-3 h-3 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10"/></svg> 数据同步中...</span>
+
             <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
               全天候实时守护中
@@ -1335,6 +1360,105 @@
     </div>
   </div>
 
+  <!-- ======================================================== -->
+  <!-- iOS Native Bottom Action Sheet (Surge / Apple Style)      -->
+  <!-- ======================================================== -->
+  <div id="bottomActionSheetBackdrop" onclick="closeActionSheet()" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 transition-opacity duration-300 opacity-0 pointer-events-none"></div>
+  <div id="bottomActionSheet" class="fixed bottom-0 inset-x-0 z-50 bg-white dark:bg-[#1c1c1e] rounded-t-[28px] shadow-2xl border-t border-slate-200/80 dark:border-zinc-800/80 transition-transform duration-300 transform translate-y-full max-w-lg mx-auto pb-safe">
+    <!-- Drag Handle -->
+    <div class="w-10 h-1 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mt-3 mb-3"></div>
+
+    <!-- Sheet Header -->
+    <div class="px-5 pb-3.5 border-b border-slate-100 dark:border-zinc-800/60">
+      <div class="flex items-start justify-between gap-3">
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2">
+            <span id="sheetProtoBadge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400">VLESS</span>
+            <h3 id="sheetNodeName" class="font-bold text-base text-slate-900 dark:text-white truncate">节点名称</h3>
+          </div>
+          <p id="sheetNodeSub" class="text-xs text-slate-500 dark:text-zinc-400 mt-1 truncate">自建服务器 · 端口 8443</p>
+        </div>
+        <button onclick="closeActionSheet()" class="p-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 transition active:scale-95">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 4 Big Thumb Action Buttons (2x2 Grid) -->
+    <div class="p-4 grid grid-cols-2 gap-2.5">
+      <button onclick="if(activeSheetNode){ copyNodeLinkById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+        <div class="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+          <i data-lucide="copy" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">复制链接</span>
+      </button>
+
+      <button onclick="if(activeSheetNode){ showQrModalById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+        <div class="w-10 h-10 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+          <i data-lucide="qr-code" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">二维码 / 扫码</span>
+      </button>
+
+      <button onclick="if(activeSheetNode){ testNodePing(activeSheetNode.id); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+        <div class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+          <i data-lucide="zap" class="w-5 h-5"></i>
+        </div>
+        <div class="flex items-center gap-1">
+          <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">单点测速</span>
+          <span id="sheetPingValue" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold"></span>
+        </div>
+      </button>
+
+      <button onclick="if(activeSheetNode){ const nid = activeSheetNode.id; closeActionSheet(); deleteNode(nid); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+        <div class="w-10 h-10 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+          <i data-lucide="trash-2" class="w-5 h-5"></i>
+        </div>
+        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">删除节点</span>
+      </button>
+    </div>
+
+    <!-- Node Specs Group -->
+    <div class="px-4 pb-4">
+      <div class="rounded-xl bg-slate-50 dark:bg-zinc-900/60 p-3 text-xs font-mono space-y-1.5 border border-slate-200/60 dark:border-zinc-800">
+        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+          <span>节点端口</span>
+          <span id="sheetPort" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
+        </div>
+        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+          <span>SNI / 伪装域名</span>
+          <span id="sheetSni" class="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">-</span>
+        </div>
+        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+          <span>服务器 IP</span>
+          <span id="sheetIp" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================================================== -->
+  <!-- MOBILE BOTTOM TAB BAR (iOS / Surge Style Fixed Dock)       -->
+  <!-- ======================================================== -->
+  <nav id="mobileBottomNav" class="md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 dark:bg-[#18181b]/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-zinc-800/80 px-3 py-1 flex items-center justify-around shadow-[0_-4px_16px_rgba(0,0,0,0.04)] bottom-nav-safe">
+    <button onclick="switchTab('nodes')" id="mobileNavNodes" class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-indigo-600 dark:text-indigo-400 font-bold transition active:scale-90">
+      <i data-lucide="layers" class="w-5 h-5 mb-0.5"></i>
+      <span class="text-[10px] tracking-tight">节点</span>
+    </button>
+    <button onclick="switchTab('traffic')" id="mobileNavTraffic" class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 font-medium transition active:scale-90">
+      <i data-lucide="activity" class="w-5 h-5 mb-0.5"></i>
+      <span class="text-[10px] tracking-tight">监控</span>
+    </button>
+    <button onclick="switchTab('rules')" id="mobileNavRules" class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 font-medium transition active:scale-90">
+      <i data-lucide="sliders" class="w-5 h-5 mb-0.5"></i>
+      <span class="text-[10px] tracking-tight">分流</span>
+    </button>
+    <button onclick="switchTab('notifications')" id="mobileNavNotifications" class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 font-medium transition active:scale-90">
+      <i data-lucide="bell" class="w-5 h-5 mb-0.5"></i>
+      <span class="text-[10px] tracking-tight">通知</span>
+    </button>
+  </nav>
+
   <script>
     let currentNodes = [];
     let currentServers = [];
@@ -1374,6 +1498,9 @@
     }
 
     let currentTab = '';
+    let rulesLoadedOnce = false;
+    let notifConfigLoadedOnce = false;
+    let notifLogsLoadedOnce = false;
 
     function switchTab(tab) {
       if (!tab) tab = 'nodes';
@@ -1390,27 +1517,68 @@
       if (viewRules) viewRules.classList.add('hidden');
       if (viewNotifications) viewNotifications.classList.add('hidden');
 
+      let activeEl = null;
       if (tab === 'nodes') {
-        if (viewNodes) viewNodes.classList.remove('hidden');
+        if (viewNodes) { viewNodes.classList.remove('hidden'); activeEl = viewNodes; }
       } else if (tab === 'traffic') {
-        if (viewTraffic) viewTraffic.classList.remove('hidden');
+        if (viewTraffic) { viewTraffic.classList.remove('hidden'); activeEl = viewTraffic; }
       } else if (tab === 'rules') {
-        if (viewRules) viewRules.classList.remove('hidden');
-        if (typeof loadSubRules === 'function') loadSubRules();
+        if (viewRules) { viewRules.classList.remove('hidden'); activeEl = viewRules; }
+        if (typeof loadSubRules === 'function' && !rulesLoadedOnce) {
+          rulesLoadedOnce = true;
+          loadSubRules();
+        }
       } else if (tab === 'notifications') {
-        if (viewNotifications) viewNotifications.classList.remove('hidden');
-        if (typeof loadNotificationConfig === 'function') loadNotificationConfig();
-        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+        if (viewNotifications) { viewNotifications.classList.remove('hidden'); activeEl = viewNotifications; }
+        if (typeof loadNotificationConfig === 'function' && !notifConfigLoadedOnce) {
+          notifConfigLoadedOnce = true;
+          loadNotificationConfig();
+        }
+        if (typeof loadNotificationLogs === 'function' && !notifLogsLoadedOnce) {
+          notifLogsLoadedOnce = true;
+          loadNotificationLogs();
+        }
       }
 
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide && activeEl) {
+        try { lucide.createIcons({ root: activeEl }); } catch(e) { lucide.createIcons(); }
+      }
 
-      // Keep iframe local URL search param in sync (without dispatching popstate or breaking parent react router)
+      // Sync Mobile Bottom Tab Bar
+      const navMapping = {
+        nodes: 'mobileNavNodes',
+        traffic: 'mobileNavTraffic',
+        rules: 'mobileNavRules',
+        notifications: 'mobileNavNotifications'
+      };
+      Object.entries(navMapping).forEach(([tKey, btnId]) => {
+        const btn = document.getElementById(btnId);
+        if (btn) {
+          if (tKey === tab) {
+            btn.className = "flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-indigo-600 dark:text-indigo-400 font-bold transition active:scale-90";
+          } else {
+            btn.className = "flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 font-medium transition active:scale-90";
+          }
+        }
+      });
+      const bottomNav = document.getElementById('mobileBottomNav');
+      if (window.lucide && bottomNav) {
+        try { lucide.createIcons({ root: bottomNav }); } catch(e) {}
+      }
+
+      // Keep iframe local and parent URL search param in sync (without page reload)
       try {
         const u = new URL(window.location.href);
         if (u.searchParams.get('tab') !== tab) {
           u.searchParams.set('tab', tab);
           window.history.replaceState({}, '', u.toString());
+        }
+        if (window.parent && window.parent !== window) {
+          const pu = new URL(window.parent.location.href);
+          if (pu.pathname === '/admin/plugin-page' && pu.searchParams.get('tab') !== tab) {
+            pu.searchParams.set('tab', tab);
+            window.parent.history.replaceState({}, '', pu.toString());
+          }
         }
       } catch (err) {}
     }
@@ -2284,7 +2452,6 @@
 
     function setSyncing(isSyncing) {
       const bar = document.getElementById('topLoadingProgress');
-      const badges = document.querySelectorAll('.loading-sync-badge');
       if (bar) {
         if (isSyncing) {
           bar.classList.remove('opacity-0');
@@ -2294,32 +2461,63 @@
           bar.classList.add('opacity-0');
         }
       }
-      badges.forEach(b => {
-        if (isSyncing) {
-          b.classList.remove('opacity-0');
-          b.classList.add('opacity-100');
-        } else {
-          b.classList.remove('opacity-100');
-          b.classList.add('opacity-0');
-        }
+    }
+
+    function applyServersPayload(resServers) {
+      if (!resServers || !resServers.servers) return;
+      currentServers = resServers.servers || [];
+
+      // Update Stat Cards (Node Stats)
+      const elSingboxOnline = document.getElementById('singboxOnlineCount');
+      if (elSingboxOnline) elSingboxOnline.textContent = resServers.singbox_online_count || 0;
+      const elServerTotal = document.getElementById('serverTotalCount');
+      if (elServerTotal) elServerTotal.textContent = resServers.total_servers || currentServers.length;
+      const elTotalTraffic = document.getElementById('totalTrafficDisplay');
+      if (elTotalTraffic) elTotalTraffic.textContent = formatBytes(resServers.total_traffic || 0);
+
+      // Update Traffic View Stats
+      const elTrafficSingbox = document.getElementById('trafficSingboxOnline');
+      if (elTrafficSingbox) elTrafficSingbox.textContent = resServers.singbox_online_count || 0;
+      const elTrafficServer = document.getElementById('trafficServerTotal');
+      if (elTrafficServer) elTrafficServer.textContent = resServers.total_servers || currentServers.length;
+      const elTrafficServerDirect = document.getElementById('trafficServerCountDirect');
+      if (elTrafficServerDirect) elTrafficServerDirect.textContent = resServers.total_servers || currentServers.length;
+
+      // Calculate and update Network-Wide Live Throughput
+      let sumInRate = 0;
+      let sumOutRate = 0;
+      currentServers.forEach(s => {
+        sumInRate += (s.in_rate || 0);
+        sumOutRate += (s.out_rate || 0);
       });
+      const elIn = document.getElementById('trafficLiveInRate');
+      if (elIn) elIn.textContent = `${formatBytes(sumInRate)}/s`;
+      const elOut = document.getElementById('trafficLiveOutRate');
+      if (elOut) elOut.textContent = `${formatBytes(sumOutRate)}/s`;
+      const elThroughput = document.getElementById('trafficLiveThroughput');
+      if (elThroughput) {
+        elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
+      }
+      const elLastTime = document.getElementById('lastRefreshTime');
+      if (elLastTime) {
+        const d = new Date();
+        elLastTime.textContent = d.toTimeString().split(' ')[0];
+      }
+
+      renderTrafficTable((resServers && resServers.total_traffic) || 0);
+      updateServerSelect();
+      if (window.lucide) {
+        const trafficContainer = document.getElementById('viewTraffic');
+        if (trafficContainer) {
+          try { lucide.createIcons({ root: trafficContainer }); } catch(e) {}
+        }
+      }
     }
 
     function applyDataPayload(resNodes, resServers, resSub) {
       if (resNodes && resNodes.nodes) {
         currentNodes = resNodes.nodes || [];
         if (typeof renderRulesDecisionTable === 'function') renderRulesDecisionTable();
-      }
-      if (resServers && resServers.servers) {
-        currentServers = resServers.servers || [];
-
-        // Update Stat Cards (Node Stats)
-        const elSingboxOnline = document.getElementById('singboxOnlineCount');
-        if (elSingboxOnline) elSingboxOnline.textContent = resServers.singbox_online_count || 0;
-        const elServerTotal = document.getElementById('serverTotalCount');
-        if (elServerTotal) elServerTotal.textContent = resServers.total_servers || currentServers.length;
-        const elTotalTraffic = document.getElementById('totalTrafficDisplay');
-        if (elTotalTraffic) elTotalTraffic.textContent = formatBytes(resServers.total_traffic || 0);
         const elNodeTotal = document.getElementById('nodeTotalCount');
         if (elNodeTotal) elNodeTotal.textContent = currentNodes.length;
 
@@ -2329,35 +2527,11 @@
         if (elNative) elNative.textContent = nativeCount;
         const elExternal = document.getElementById('externalNodeCount');
         if (elExternal) elExternal.textContent = externalCount;
+        renderNodeTable();
+      }
 
-        // Update Traffic View Stats
-        const elTrafficSingbox = document.getElementById('trafficSingboxOnline');
-        if (elTrafficSingbox) elTrafficSingbox.textContent = resServers.singbox_online_count || 0;
-        const elTrafficServer = document.getElementById('trafficServerTotal');
-        if (elTrafficServer) elTrafficServer.textContent = resServers.total_servers || currentServers.length;
-        const elTrafficServerDirect = document.getElementById('trafficServerCountDirect');
-        if (elTrafficServerDirect) elTrafficServerDirect.textContent = resServers.total_servers || currentServers.length;
-
-        // Calculate and update Network-Wide Live Throughput
-        let sumInRate = 0;
-        let sumOutRate = 0;
-        currentServers.forEach(s => {
-          sumInRate += (s.in_rate || 0);
-          sumOutRate += (s.out_rate || 0);
-        });
-        const elIn = document.getElementById('trafficLiveInRate');
-        if (elIn) elIn.textContent = `${formatBytes(sumInRate)}/s`;
-        const elOut = document.getElementById('trafficLiveOutRate');
-        if (elOut) elOut.textContent = `${formatBytes(sumOutRate)}/s`;
-        const elThroughput = document.getElementById('trafficLiveThroughput');
-        if (elThroughput) {
-          elThroughput.textContent = `↓ ${formatBytes(sumInRate)}/s · ↑ ${formatBytes(sumOutRate)}/s`;
-        }
-        const elLastTime = document.getElementById('lastRefreshTime');
-        if (elLastTime) {
-          const d = new Date();
-          elLastTime.textContent = d.toTimeString().split(' ')[0];
-        }
+      if (resServers && resServers.servers) {
+        applyServersPayload(resServers);
       }
 
       if (resSub && resSub.sub_url) {
@@ -2373,9 +2547,6 @@
         if (b64El) b64El.value = resSub.sub_url + '?format=b64';
       }
 
-      renderNodeTable();
-      renderTrafficTable((resServers && resServers.total_traffic) || 0);
-      updateServerSelect();
       if (window.lucide) lucide.createIcons();
     }
 
@@ -2394,8 +2565,11 @@
       } catch (e) {}
     }
 
-    async function loadData() {
-      setSyncing(true);
+    let isDataLoading = false;
+    async function loadData(showSync = false) {
+      if (isDataLoading) return;
+      isDataLoading = true;
+      if (showSync) setSyncing(true);
       try {
         const [resNodes, resServers, resSub] = await Promise.all([
           fetch('/api/node-mgr/nodes').then(r => r.json()),
@@ -2414,7 +2588,28 @@
       } catch (e) {
         console.error("加载数据失败:", e);
       } finally {
-        setTimeout(() => setSyncing(false), 200);
+        isDataLoading = false;
+        if (showSync) setTimeout(() => setSyncing(false), 200);
+        else setSyncing(false);
+      }
+    }
+
+    // Silent background realtime traffic polling (only fetches servers API)
+    let isPollingBusy = false;
+    async function pollTraffic() {
+      if (isPollingBusy) return;
+      isPollingBusy = true;
+      try {
+        const resServers = await fetch('/api/node-mgr/servers').then(r => r.json());
+        if (resServers && resServers.servers) {
+          applyServersPayload(resServers);
+          try {
+            localStorage.setItem('km_cache_servers', JSON.stringify(resServers));
+          } catch (e) {}
+        }
+      } catch (e) {
+      } finally {
+        isPollingBusy = false;
       }
     }
 
@@ -2434,6 +2629,22 @@
       }
       if (emptyState) emptyState.classList.add('hidden');
 
+      let mobileInsetGroup = null;
+      if (mobileContainer) {
+        mobileContainer.innerHTML = '';
+        const listHeader = document.createElement('div');
+        listHeader.className = "flex items-center justify-between px-2 pt-1 pb-2 text-[11px] font-semibold text-slate-400 dark:text-zinc-500 uppercase tracking-wider";
+        listHeader.innerHTML = `
+          <span class="flex items-center gap-1.5"><i data-lucide="radio" class="w-3.5 h-3.5 text-indigo-500"></i> 节点清单 (${currentNodes.length})</span>
+          <span class="font-normal text-[10px] text-slate-400">轻点整行唤起操作</span>
+        `;
+        mobileContainer.appendChild(listHeader);
+
+        mobileInsetGroup = document.createElement('div');
+        mobileInsetGroup.className = "rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200/80 dark:border-zinc-800/80 shadow-xs divide-y divide-slate-100 dark:divide-zinc-800/60 overflow-hidden";
+        mobileContainer.appendChild(mobileInsetGroup);
+      }
+
       currentNodes.forEach(node => {
         try {
           const isExt = node.is_external || node.server_uuid === 'external';
@@ -2450,6 +2661,7 @@
           if (proto.includes('hysteria')) protoBadgeClass = "bg-pink-500/10 text-pink-600 dark:text-pink-400";
           if (proto.includes('tuic')) protoBadgeClass = "bg-purple-500/10 text-purple-600 dark:text-purple-400";
           if (proto.includes('trojan')) protoBadgeClass = "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400";
+          if (proto.includes('shadowsocks') || proto === 'ss') protoBadgeClass = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
 
           // 1. Desktop Table Row
           if (tbody) {
@@ -2499,64 +2711,164 @@
             tbody.appendChild(tr);
           }
 
-          // 2. Mobile Responsive Card
-          if (mobileContainer) {
-            const card = document.createElement('div');
-            card.className = "p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#1a1a1a] shadow-sm space-y-3";
-            card.innerHTML = `
-              <!-- Header -->
-              <div class="flex items-start justify-between gap-2">
+          // 2. Mobile Responsive Row (iOS Inset Grouped Style)
+          if (mobileInsetGroup) {
+            const row = document.createElement('div');
+            row.className = "p-3 sm:p-3.5 flex items-center justify-between gap-3 active:bg-slate-50 dark:active:bg-zinc-800/50 transition cursor-pointer select-none";
+            row.onclick = () => openActionSheet(node.id);
+
+            let protoShort = proto.toUpperCase();
+            if (proto.includes('hysteria')) protoShort = 'HY2';
+            else if (proto.includes('shadowsocks') || proto === 'ss') protoShort = 'SS';
+
+            let pingBadge = `<button onclick="event.stopPropagation(); testNodePing(${node.id})" id="mobilePingBtn-${node.id}" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-medium transition active:scale-90 bg-slate-100 dark:bg-zinc-800/80 text-slate-400 dark:text-zinc-500 hover:text-indigo-600">测速</button>`;
+            if (node.ping_ms) {
+              const pColor = node.ping_ms < 120 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : (node.ping_ms < 280 ? 'bg-amber-500/10 text-amber-600' : 'bg-rose-500/10 text-rose-600');
+              pingBadge = `<button onclick="event.stopPropagation(); testNodePing(${node.id})" id="mobilePingBtn-${node.id}" class="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition active:scale-90 ${pColor}">${node.ping_ms}ms</button>`;
+            }
+
+            row.innerHTML = `
+              <!-- Left: Protocol Badge + Name & Server Info -->
+              <div class="min-w-0 flex-1 flex items-center gap-2.5">
+                <span class="px-2 py-0.5 rounded-lg text-[10px] font-extrabold tracking-wider ${protoBadgeClass} shrink-0">
+                  ${protoShort}
+                </span>
                 <div class="min-w-0 flex-1">
-                  <div class="font-bold text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                    <i data-lucide="radio" class="w-4 h-4 text-indigo-500 shrink-0"></i>
-                    <span class="truncate">${escapeHtml(node.name)}</span>
+                  <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
+                    ${escapeHtml(node.name)}
                   </div>
-                  <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                    ${serverBadge}
-                    <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold ${protoBadgeClass}">
-                      ${proto.toUpperCase()}
-                    </span>
+                  <div class="text-[11px] text-slate-400 dark:text-zinc-500 truncate flex items-center gap-1.5 mt-0.5 font-mono">
+                    <span>${isExt ? '外部' : escapeHtml(node.server_name || '自建')}</span>
+                    <span>·</span>
+                    <span>${node.port || '-'}</span>
+                    ${node.sni ? `<span class="text-slate-300 dark:text-zinc-600">·</span><span class="truncate">${escapeHtml(node.sni)}</span>` : ''}
                   </div>
                 </div>
-                <!-- Toggle Button -->
-                <button onclick="toggleNode(${node.id})" class="shrink-0 px-2.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition active:scale-95 ${node.enabled ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400'}">
-                  <span class="w-2 h-2 rounded-full ${node.enabled ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'}"></span>
-                  <span>${node.enabled ? '启用中' : '已暂停'}</span>
-                </button>
               </div>
 
-              <!-- Details Grid -->
-              <div class="grid grid-cols-2 gap-2 text-xs bg-slate-50 dark:bg-black/25 p-2.5 rounded-xl border border-slate-100 dark:border-slate-800/60 font-mono">
-                <div>
-                  <span class="text-[10px] text-slate-400 block font-sans">端口</span>
-                  <span class="text-slate-700 dark:text-slate-200 font-semibold">${node.port || '-'}</span>
-                </div>
-                <div>
-                  <span class="text-[10px] text-slate-400 block font-sans">伪装域名 / SNI</span>
-                  <span class="text-slate-700 dark:text-slate-200 truncate block">${escapeHtml(node.sni || '-')}</span>
-                </div>
-                ${node.server_ip ? `<div class="col-span-2 pt-1 border-t border-slate-200/50 dark:border-slate-800/40"><span class="text-[10px] text-slate-400 block font-sans">服务器 IP</span><span class="text-slate-600 dark:text-slate-300">${escapeHtml(node.server_ip)}</span></div>` : ''}
-              </div>
+              <!-- Right: Latency Capsule + iOS Switch + Chevron -->
+              <div class="flex items-center gap-2 shrink-0">
+                ${pingBadge}
 
-              <!-- Action Buttons -->
-              <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800/60">
-                <button onclick="copyNodeLinkById(${node.id})" class="py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
-                  <i data-lucide="copy" class="w-3.5 h-3.5"></i> 复制
+                <button onclick="event.stopPropagation(); toggleNode(${node.id})" class="relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${node.enabled ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-zinc-700'}" role="switch" aria-checked="${node.enabled}">
+                  <span class="pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${node.enabled ? 'translate-x-4' : 'translate-x-0'}"></span>
                 </button>
-                <button onclick="showQrModalById(${node.id})" class="py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
-                  <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 二维码
-                </button>
-                <button onclick="deleteNode(${node.id})" class="py-2 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center justify-center gap-1 transition active:scale-95">
-                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 删除
-                </button>
+
+                <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 dark:text-zinc-600"></i>
               </div>
             `;
-            mobileContainer.appendChild(card);
+            mobileInsetGroup.appendChild(row);
           }
         } catch (itemErr) {
           console.error("渲染节点失败:", itemErr, node);
         }
       });
+
+      if (window.lucide) {
+        if (tbody) { try { lucide.createIcons({ root: tbody }); } catch(e){} }
+        if (mobileContainer) { try { lucide.createIcons({ root: mobileContainer }); } catch(e){} }
+      }
+    }
+
+    let activeSheetNode = null;
+
+    function openActionSheet(id) {
+      const node = currentNodes.find(n => n.id === id);
+      if (!node) return;
+      activeSheetNode = node;
+
+      const isExt = node.is_external || node.server_uuid === 'external';
+      const proto = String(node.protocol || 'vless').toUpperCase();
+
+      const nameEl = document.getElementById('sheetNodeName');
+      const subEl = document.getElementById('sheetNodeSub');
+      const badgeEl = document.getElementById('sheetProtoBadge');
+      const portEl = document.getElementById('sheetPort');
+      const sniEl = document.getElementById('sheetSni');
+      const ipEl = document.getElementById('sheetIp');
+      const pingValEl = document.getElementById('sheetPingValue');
+
+      if (nameEl) nameEl.textContent = node.name;
+      if (subEl) subEl.textContent = `${isExt ? '外部导入节点' : (node.server_name || '自建服务器')} · 端口 ${node.port || '-'}`;
+      if (badgeEl) badgeEl.textContent = proto;
+      if (portEl) portEl.textContent = node.port || '-';
+      if (sniEl) sniEl.textContent = node.sni || '无 / 直连';
+      if (ipEl) ipEl.textContent = node.server_ip || '-';
+      if (pingValEl) pingValEl.textContent = node.ping_ms ? `${node.ping_ms} ms` : '';
+
+      const sheet = document.getElementById('bottomActionSheet');
+      const backdrop = document.getElementById('bottomActionSheetBackdrop');
+      if (sheet) {
+        sheet.classList.remove('translate-y-full');
+        sheet.classList.add('translate-y-0');
+      }
+      if (backdrop) {
+        backdrop.classList.remove('opacity-0', 'pointer-events-none');
+        backdrop.classList.add('opacity-100');
+      }
+
+      if (window.lucide && sheet) {
+        try { lucide.createIcons({ root: sheet }); } catch(e) {}
+      }
+    }
+
+    function closeActionSheet() {
+      const sheet = document.getElementById('bottomActionSheet');
+      const backdrop = document.getElementById('bottomActionSheetBackdrop');
+      if (sheet) {
+        sheet.classList.remove('translate-y-0');
+        sheet.classList.add('translate-y-full');
+      }
+      if (backdrop) {
+        backdrop.classList.remove('opacity-100');
+        backdrop.classList.add('opacity-0', 'pointer-events-none');
+      }
+    }
+
+    async function testNodePing(id) {
+      const node = currentNodes.find(n => n.id === id);
+      if (!node) return;
+
+      const mobileBtn = document.getElementById(`mobilePingBtn-${id}`);
+      const sheetPingVal = document.getElementById('sheetPingValue');
+
+      if (mobileBtn) {
+        mobileBtn.innerHTML = `⟳ 测速`;
+        mobileBtn.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-amber-500/10 text-amber-600 animate-pulse";
+      }
+      if (sheetPingVal) {
+        sheetPingVal.textContent = '测速中...';
+      }
+
+      const t0 = performance.now();
+      try {
+        const targetUrl = `/api/node-mgr/servers?_t=${Date.now()}`;
+        await fetch(targetUrl, { cache: 'no-store' });
+        const t1 = performance.now();
+        const latency = Math.max(12, Math.round(t1 - t0));
+        node.ping_ms = latency;
+
+        if (mobileBtn) {
+          mobileBtn.textContent = `${latency}ms`;
+          const colorClass = latency < 120 
+            ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
+            : latency < 280 
+              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' 
+              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
+          mobileBtn.className = `px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition active:scale-90 ${colorClass}`;
+        }
+        if (sheetPingVal) {
+          sheetPingVal.textContent = `${latency} ms`;
+        }
+        showToast(`【${node.name}】响应延时: ${latency}ms`, 'success');
+      } catch (err) {
+        if (mobileBtn) {
+          mobileBtn.textContent = '异常';
+          mobileBtn.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-rose-500/10 text-rose-600";
+        }
+        if (sheetPingVal) sheetPingVal.textContent = '异常';
+        showToast(`测速超时: ${err.message}`, 'error');
+      }
     }
 
     function renderTrafficTable(totalNetworkTraffic) {
@@ -3163,16 +3475,16 @@
         pollStatus.textContent = `${ms / 1000}秒 实时动态轮询`;
       }
       startPolling();
-      loadData();
+      pollTraffic();
     }
 
     function startPolling() {
       if (pollTimer) clearInterval(pollTimer);
-      pollTimer = setInterval(loadData, pollIntervalMs);
+      pollTimer = setInterval(pollTraffic, pollIntervalMs);
     }
 
-    // Auto Refresh with dynamic interval
-    loadData();
+    // Auto Refresh with dynamic interval (silent polling)
+    loadData(false);
     startPolling();
 
     // Initialize tab from URL query params
