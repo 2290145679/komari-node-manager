@@ -6,10 +6,19 @@
   <title>节点管理 - Komari</title>
   <script>
     try {
-      if (window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark')) {
-        document.documentElement.classList.add('dark');
-      } else if (localStorage.getItem('theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
+      const syncTheme = () => {
+        if (window.parent && window.parent.document && window.parent.document.documentElement.classList.contains('dark')) {
+          document.documentElement.classList.add('dark');
+        } else if (localStorage.getItem('theme') === 'dark' || window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
+      };
+      syncTheme();
+      if (window.parent && window.parent.document) {
+        const obs = new MutationObserver(syncTheme);
+        obs.observe(window.parent.document.documentElement, { attributes: true, attributeFilter: ['class'] });
       }
     } catch (e) {}
   </script>
@@ -1374,6 +1383,9 @@
     }
 
     let currentTab = '';
+    let rulesLoadedOnce = false;
+    let notifConfigLoadedOnce = false;
+    let notifLogsLoadedOnce = false;
 
     function switchTab(tab) {
       if (!tab) tab = 'nodes';
@@ -1390,27 +1402,46 @@
       if (viewRules) viewRules.classList.add('hidden');
       if (viewNotifications) viewNotifications.classList.add('hidden');
 
+      let activeEl = null;
       if (tab === 'nodes') {
-        if (viewNodes) viewNodes.classList.remove('hidden');
+        if (viewNodes) { viewNodes.classList.remove('hidden'); activeEl = viewNodes; }
       } else if (tab === 'traffic') {
-        if (viewTraffic) viewTraffic.classList.remove('hidden');
+        if (viewTraffic) { viewTraffic.classList.remove('hidden'); activeEl = viewTraffic; }
       } else if (tab === 'rules') {
-        if (viewRules) viewRules.classList.remove('hidden');
-        if (typeof loadSubRules === 'function') loadSubRules();
+        if (viewRules) { viewRules.classList.remove('hidden'); activeEl = viewRules; }
+        if (typeof loadSubRules === 'function' && !rulesLoadedOnce) {
+          rulesLoadedOnce = true;
+          loadSubRules();
+        }
       } else if (tab === 'notifications') {
-        if (viewNotifications) viewNotifications.classList.remove('hidden');
-        if (typeof loadNotificationConfig === 'function') loadNotificationConfig();
-        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+        if (viewNotifications) { viewNotifications.classList.remove('hidden'); activeEl = viewNotifications; }
+        if (typeof loadNotificationConfig === 'function' && !notifConfigLoadedOnce) {
+          notifConfigLoadedOnce = true;
+          loadNotificationConfig();
+        }
+        if (typeof loadNotificationLogs === 'function' && !notifLogsLoadedOnce) {
+          notifLogsLoadedOnce = true;
+          loadNotificationLogs();
+        }
       }
 
-      if (window.lucide) lucide.createIcons();
+      if (window.lucide && activeEl) {
+        try { lucide.createIcons({ root: activeEl }); } catch(e) { lucide.createIcons(); }
+      }
 
-      // Keep iframe local URL search param in sync (without dispatching popstate or breaking parent react router)
+      // Keep iframe local and parent URL search param in sync (without page reload)
       try {
         const u = new URL(window.location.href);
         if (u.searchParams.get('tab') !== tab) {
           u.searchParams.set('tab', tab);
           window.history.replaceState({}, '', u.toString());
+        }
+        if (window.parent && window.parent !== window) {
+          const pu = new URL(window.parent.location.href);
+          if (pu.pathname === '/admin/plugin-page' && pu.searchParams.get('tab') !== tab) {
+            pu.searchParams.set('tab', tab);
+            window.parent.history.replaceState({}, '', pu.toString());
+          }
         }
       } catch (err) {}
     }
