@@ -49,29 +49,6 @@
 <body class="bg-slate-50 dark:bg-[#121212] text-slate-800 dark:text-slate-100 min-h-screen p-3 sm:p-5 md:p-6 pb-20 sm:pb-6 transition-colors duration-200">
 
   <div class="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-    <!-- Top Universal Navigation Pill Bar -->
-    <div class="flex items-center justify-between bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1.5 sm:p-2 rounded-2xl shadow-sm overflow-x-auto no-scrollbar">
-      <div class="flex items-center gap-1 sm:gap-2">
-        <button id="navTabNodes" onclick="switchTab('nodes')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
-          <i data-lucide="server" class="w-4 h-4"></i> <span>节点管理</span>
-        </button>
-        <button id="navTabTraffic" onclick="switchTab('traffic')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
-          <i data-lucide="activity" class="w-4 h-4"></i> <span>流量监控</span>
-        </button>
-        <button id="navTabRules" onclick="switchTab('rules')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
-          <i data-lucide="sliders" class="w-4 h-4"></i> <span>分流规则</span>
-        </button>
-        <button id="navTabNotifications" onclick="switchTab('notifications')" class="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition">
-          <i data-lucide="bell" class="w-4 h-4"></i> <span>通知中心</span>
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        </button>
-      </div>
-
-      <div class="hidden sm:flex items-center gap-2 text-xs text-slate-400 dark:text-slate-500 pr-2">
-        <span>Komari Node Manager v2.2</span>
-      </div>
-    </div>
-
     <!-- ========================================== -->
     <!-- VIEW 1: 节点列表 (Node List & Management) -->
     <!-- ========================================== -->
@@ -1346,8 +1323,13 @@
       }, 2500);
     }
 
+    let currentTab = '';
+
     function switchTab(tab) {
       if (!tab) tab = 'nodes';
+      if (!['nodes', 'traffic', 'rules', 'notifications'].includes(tab)) tab = 'nodes';
+      currentTab = tab;
+
       const viewNodes = document.getElementById('viewNodes');
       const viewTraffic = document.getElementById('viewTraffic');
       const viewRules = document.getElementById('viewRules');
@@ -1357,20 +1339,6 @@
       if (viewTraffic) viewTraffic.classList.add('hidden');
       if (viewRules) viewRules.classList.add('hidden');
       if (viewNotifications) viewNotifications.classList.add('hidden');
-
-      // Update Top Nav Pills
-      const navIds = ['navTabNodes', 'navTabTraffic', 'navTabRules', 'navTabNotifications'];
-      const activeNavMap = { 'nodes': 'navTabNodes', 'traffic': 'navTabTraffic', 'rules': 'navTabRules', 'notifications': 'navTabNotifications' };
-      navIds.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) {
-          if (id === activeNavMap[tab]) {
-            el.className = 'px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition bg-indigo-600 text-white shadow-sm';
-          } else {
-            el.className = 'px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-1.5 transition text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800';
-          }
-        }
-      });
 
       if (tab === 'nodes') {
         if (viewNodes) viewNodes.classList.remove('hidden');
@@ -1387,51 +1355,58 @@
 
       if (window.lucide) lucide.createIcons();
 
-      // Sync URL parameter in panel and parent window
+      // Keep iframe local URL search param in sync (without dispatching popstate or breaking parent react router)
       try {
         const u = new URL(window.location.href);
         if (u.searchParams.get('tab') !== tab) {
           u.searchParams.set('tab', tab);
           window.history.replaceState({}, '', u.toString());
         }
-        if (window.parent && window.parent !== window) {
-          const pu = new URL(window.parent.location.href);
-          if (pu.searchParams.get('tab') !== tab) {
-            pu.searchParams.set('tab', tab);
-            window.parent.history.replaceState({}, '', pu.toString());
-            window.parent.dispatchEvent(new PopStateEvent('popstate'));
-          }
-        }
       } catch (err) {}
     }
 
     function getActiveTabFromUrl() {
+      // 1. Try reading parent window URL search params
       try {
         if (window.parent && window.parent !== window) {
           const pu = new URLSearchParams(window.parent.location.search);
           const pTab = pu.get('tab');
-          if (pTab === 'traffic' || pTab === 'rules' || pTab === 'nodes' || pTab === 'notifications') return pTab;
+          if (pTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(pTab)) return pTab;
         }
       } catch (e) {}
+
+      // 2. Try reading iframe URL search params
       try {
         const u = new URLSearchParams(window.location.search);
         const lTab = u.get('tab');
-        if (lTab === 'traffic' || lTab === 'rules' || lTab === 'nodes') return lTab;
+        if (lTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(lTab)) return lTab;
       } catch (e) {}
+
       return 'nodes';
     }
 
+    // Listen to parent postMessage
     window.addEventListener('message', (ev) => {
-      if (ev.data && ev.data.type === 'switchTab') {
+      if (ev.data && ev.data.type === 'switchTab' && ev.data.tab) {
         switchTab(ev.data.tab);
       }
     });
 
-    window.addEventListener('popstate', () => {
-      switchTab(getActiveTabFromUrl());
-    });
+    // High frequency parent URL watcher (runs every 80ms)
+    // Ensures instant switching whenever any item in parent sidebar is clicked
+    setInterval(() => {
+      try {
+        if (window.parent && window.parent !== window) {
+          const pu = new URLSearchParams(window.parent.location.search);
+          const pTab = pu.get('tab');
+          if (pTab && pTab !== currentTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(pTab)) {
+            switchTab(pTab);
+          }
+        }
+      } catch (e) {}
+    }, 80);
 
-        // Global state for visual rules
+    // Global state for visual rules
         // Global state for visual rules & decision table
     let visualRules = [];
     let rulesTableCategory = "all";
