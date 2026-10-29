@@ -523,22 +523,23 @@ def build_node_share_link(node):
     proto = node.get("protocol")
     ip = node.get("server_ip") or DOMAIN
     port = node.get("port")
-    name = node.get("name")
+    name = node.get("name") or "Node"
+    quoted_name = urllib.parse.quote(name)
     u = node.get("uuid_or_passwd")
-    sni = node.get("sni") or "addons.mozilla.org"
+    sni = node.get("sni") or "bing.com"
     url_ip = f"[{ip}]" if (":" in ip and not ip.startswith("[")) else ip
     
     if proto == "vless_reality":
         pbk = node.get("public_key")
         sid = node.get("short_id") or ""
         flow = node.get("flow") or "xtls-rprx-vision"
-        return f"vless://{u}@{url_ip}:{port}?encryption=none&flow={flow}&security=reality&sni={sni}&fp=chrome&pbk={pbk}&sid={sid}&type=tcp#{name}"
+        return f"vless://{u}@{url_ip}:{port}?encryption=none&flow={flow}&security=reality&sni={sni}&fp=chrome&pbk={pbk}&sid={sid}&type=tcp#{quoted_name}"
     elif proto == "hysteria2":
-        return f"hysteria2://{u}@{url_ip}:{port}/?insecure=1&sni={sni}#{name}"
+        return f"hysteria2://{u}@{url_ip}:{port}/?insecure=1&sni={sni}#{quoted_name}"
     elif proto == "tuic":
-        return f"tuic://{u}:{u}@{url_ip}:{port}?congestion_control=bbr&alpn=h3&sni={sni}&allow_insecure=1#{name}"
+        return f"tuic://{u}:{u}@{url_ip}:{port}?congestion_control=bbr&alpn=h3&sni={sni}&allow_insecure=1#{quoted_name}"
     elif proto == "trojan":
-        return f"trojan://{u}@{url_ip}:{port}?security=tls&sni={sni}&allowInsecure=1#{name}"
+        return f"trojan://{u}@{url_ip}:{port}?security=tls&sni={sni}&allowInsecure=1#{quoted_name}"
     elif proto == "vmess_ws":
         ws_path = node.get("ws_path") or "/vmess"
         vj = {
@@ -599,7 +600,9 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
     port: {port}
     password: "{u}"
     sni: {sni}
-    skip-cert-verify: true""")
+    skip-cert-verify: true
+    alpn:
+      - h3""")
         elif proto == "tuic":
             proxies.append(f"""  - name: "{name}"
     type: tuic
@@ -975,9 +978,13 @@ if [ -f /etc/alpine-release ] || (ldd --version 2>&1 | grep -qi musl); then
 fi
 
 mkdir -p /etc/sing-box
-if [ ! -f /etc/sing-box/cert.key ]; then
+if [ ! -f /etc/sing-box/cert.key ] || [ ! -f /etc/sing-box/cert.pem ]; then
   if command -v openssl >/dev/null 2>&1; then
-    openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 -subj "/CN=bing.com" >/dev/null 2>&1 || true
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
+      -subj "/CN=bing.com" \
+      -addext "subjectAltName=DNS:bing.com,DNS:*.bing.com,DNS:addons.mozilla.org,DNS:gateway.icloud.com,DNS:www.apple.com,DNS:komari.yohoo.xyz,IP:127.0.0.1" >/dev/null 2>&1 || \
+    openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
+      -subj "/CN=bing.com" >/dev/null 2>&1 || true
   fi
 fi
 
@@ -1070,6 +1077,18 @@ restart_sing_box() {
 }
 
 while true; do
+  # Ensure TLS certificate exists for Hysteria2 / TUIC / Trojan
+  if [ ! -f /etc/sing-box/cert.key ] || [ ! -f /etc/sing-box/cert.pem ]; then
+    if command -v openssl >/dev/null 2>&1; then
+      mkdir -p /etc/sing-box
+      openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
+        -subj "/CN=bing.com" \
+        -addext "subjectAltName=DNS:bing.com,DNS:*.bing.com,DNS:addons.mozilla.org,DNS:gateway.icloud.com,DNS:www.apple.com,DNS:komari.yohoo.xyz,IP:127.0.0.1" >/dev/null 2>&1 || \
+      openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
+        -subj "/CN=bing.com" >/dev/null 2>&1 || true
+    fi
+  fi
+
   RES=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
   if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
     NEW_MD5=$(echo "$RES" | md5sum | awk '{print $1}')
@@ -1080,6 +1099,27 @@ while true; do
       if /usr/local/bin/sing-box check -c /tmp/new_config.json >/dev/null 2>&1; then
         mv /tmp/new_config.json "$CONFIG_FILE"
         echo "$NEW_MD5" > "$MD5_FILE"
+
+        # Auto open firewall ports for all inbounds
+        PORTS=$(grep -o '"listen_port":[0-9]*' "$CONFIG_FILE" | cut -d':' -f2 | sort -u)
+        for p in $PORTS; do
+          if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+            firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
+            firewall-cmd --add-port=${p}/udp --permanent >/dev/null 2>&1 || true
+          fi
+          if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+            ufw allow ${p}/tcp >/dev/null 2>&1 || true
+            ufw allow ${p}/udp >/dev/null 2>&1 || true
+          fi
+          iptables -I INPUT -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          iptables -I INPUT -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+        done
+        if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+          firewall-cmd --reload >/dev/null 2>&1 || true
+        fi
+
         restart_sing_box
         echo "[NodeSync] Sing-box restarted successfully!"
       else
