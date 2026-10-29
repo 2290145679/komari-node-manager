@@ -1950,7 +1950,18 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             server_uuid = body.get("server_uuid", "")
             server_name = body.get("server_name", "")
             server_ip = body.get("server_ip", "")
-            name = body.get("name", "Node")
+            name = str(body.get("name") or "Node").strip()
+
+            # Duplicate name check
+            conn_chk = sqlite3.connect(NODES_DB)
+            c_chk = conn_chk.cursor()
+            c_chk.execute("SELECT id FROM nodes WHERE LOWER(TRIM(name)) = LOWER(?)", (name,))
+            dup = c_chk.fetchone()
+            conn_chk.close()
+            if dup:
+                self._send_json({"error": f"已存在名为【{name}】的节点，请更换节点名称"}, 400)
+                return
+
             protocol = body.get("protocol", "vless_reality")
             port = int(body.get("port") or secrets.randbelow(45000) + 15000)
             u = body.get("uuid_or_passwd") or str(uuid.uuid4())
@@ -2016,6 +2027,16 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
             ipv6 = server["ipv6"]
             clone_name = node["name"] if "[IPv6]" in node["name"] else f"{node['name']} [IPv6]"
+
+            # Check duplicate clone name
+            conn_dup = sqlite3.connect(NODES_DB)
+            c_dup = conn_dup.cursor()
+            c_dup.execute("SELECT id FROM nodes WHERE LOWER(TRIM(name)) = LOWER(?)", (clone_name,))
+            if c_dup.fetchone():
+                conn_dup.close()
+                self._send_json({"error": f"已存在名为【{clone_name}】的 IPv6 节点，无需重复创建"}, 400)
+                return
+            conn_dup.close()
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()

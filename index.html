@@ -3200,6 +3200,35 @@
       onServerSelectChange();
     }
 
+    function getSuggestedNodeName() {
+      const sel = document.getElementById('serverSelect');
+      if (!sel || !sel.value) return '自建节点';
+      const server = currentServers.find(s => s.uuid === sel.value);
+      if (!server) return '自建节点';
+
+      const protoRadio = document.querySelector('input[name="protocol"]:checked');
+      const proto = protoRadio ? protoRadio.value : 'vless_reality';
+      let protoLabel = 'Reality';
+      if (proto === 'vless_reality') protoLabel = 'Reality';
+      else if (proto === 'hysteria2') protoLabel = 'HY2';
+      else if (proto === 'tuic') protoLabel = 'TUIC';
+      else if (proto === 'trojan') protoLabel = 'Trojan';
+
+      const isIpv6 = document.querySelector('input[name="ipVersion"]:checked')?.value === 'ipv6';
+      const v6Suffix = isIpv6 ? ' [IPv6]' : '';
+
+      return `${server.name} - ${protoLabel}${v6Suffix}`;
+    }
+
+    function refreshSuggestedNodeName(force = false) {
+      const nameInput = document.getElementById('nodeNameInput');
+      if (!nameInput) return;
+      if (force || !nameInput.value || nameInput.dataset.userEdited !== 'true') {
+        nameInput.value = getSuggestedNodeName();
+        nameInput.dataset.userEdited = 'false';
+      }
+    }
+
     function onServerSelectChange() {
       const sel = document.getElementById('serverSelect');
       if (!sel) return;
@@ -3255,20 +3284,12 @@
         onIpVersionChange('ipv6');
       }
 
-      // Automatically suggest node name if empty or default
-      const nameInput = document.getElementById('nodeNameInput');
-      if (nameInput && (!nameInput.value || nameInput.value.includes('Reality') || nameInput.value.includes('节点'))) {
-        const isV6 = radioIpv6 && radioIpv6.checked;
-        nameInput.value = `${server.name}${isV6 ? ' [IPv6]' : ''}`;
-      }
+      refreshSuggestedNodeName();
     }
 
     function onIpVersionChange(val) {
       const labelIpv4 = document.getElementById('labelIpv4');
       const labelIpv6 = document.getElementById('labelIpv6');
-      const nameInput = document.getElementById('nodeNameInput');
-      const sel = document.getElementById('serverSelect');
-      const server = currentServers.find(s => s.uuid === sel.value);
 
       if (val === 'ipv6') {
         if (labelIpv6) {
@@ -3279,9 +3300,6 @@
           labelIpv4.classList.remove('border-indigo-500/40', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
           labelIpv4.classList.add('border-slate-200', 'dark:border-slate-700');
         }
-        if (nameInput && server && !nameInput.value.includes('[IPv6]')) {
-          nameInput.value = `${nameInput.value.trim()} [IPv6]`;
-        }
       } else {
         if (labelIpv4) {
           labelIpv4.classList.add('border-indigo-500/40', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
@@ -3291,10 +3309,9 @@
           labelIpv6.classList.remove('border-purple-500/60', 'bg-purple-50/50', 'dark:bg-purple-950/20');
           labelIpv6.classList.add('border-slate-200', 'dark:border-slate-700');
         }
-        if (nameInput) {
-          nameInput.value = nameInput.value.replace(/\s*\[IPv6\]/g, '').trim();
-        }
       }
+
+      refreshSuggestedNodeName();
     }
 
     function randomizePort() {
@@ -3305,12 +3322,21 @@
     function onProtocolChange(val) {
       const sniGroup = document.getElementById('realitySniGroup');
       if (sniGroup) sniGroup.classList.remove('hidden');
+      refreshSuggestedNodeName();
     }
 
     function openCreateModal() {
       randomizePort();
       updateServerSelect();
+      const nameInput = document.getElementById('nodeNameInput');
+      if (nameInput) {
+        nameInput.dataset.userEdited = 'false';
+        nameInput.oninput = () => {
+          nameInput.dataset.userEdited = nameInput.value.trim() ? 'true' : 'false';
+        };
+      }
       onServerSelectChange();
+      refreshSuggestedNodeName(true);
       document.getElementById('createModal').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -3342,8 +3368,35 @@
         return;
       }
 
+      const baseName = document.getElementById('nodeNameInput').value.trim();
+      if (!baseName) {
+        showToast("请输入节点名称！", 'error');
+        return;
+      }
+
+      // Check duplicate node name
+      const isDup = currentNodes.some(n => n.name && n.name.trim().toLowerCase() === baseName.toLowerCase());
+      if (isDup) {
+        showToast(`已存在名为【${baseName}】的节点，请使用不同的名称！`, 'error');
+        const nameInput = document.getElementById('nodeNameInput');
+        if (nameInput) {
+          nameInput.focus();
+          nameInput.select();
+        }
+        return;
+      }
+
       const isIpv6Selected = document.querySelector('input[name="ipVersion"]:checked')?.value === 'ipv6';
       const shouldCreateDualStack = document.getElementById('createDualStackCheck')?.checked && !isIpv6Selected && selectedServer.ipv6;
+
+      if (shouldCreateDualStack) {
+        const v6SiblingName = `${baseName} [IPv6]`;
+        const isV6Dup = currentNodes.some(n => n.name && n.name.trim().toLowerCase() === v6SiblingName.toLowerCase());
+        if (isV6Dup) {
+          showToast(`已存在同名 IPv6 节点【${v6SiblingName}】，请更换名称！`, 'error');
+          return;
+        }
+      }
 
       let targetIp = isIpv6Selected ? selectedServer.ipv6 : (selectedServer.ipv4 || selectedServer.ipv6 || '');
       if (isIpv6Selected && !selectedServer.ipv6) {
@@ -3357,7 +3410,6 @@
       lucide.createIcons();
 
       const proto = document.querySelector('input[name="protocol"]:checked').value;
-      const baseName = document.getElementById('nodeNameInput').value.trim();
       const port = parseInt(document.getElementById('nodePortInput').value);
       const sni = document.getElementById('nodeSniInput').value.trim() || 'addons.mozilla.org';
 
@@ -3425,6 +3477,12 @@
       }
 
       const cloneName = node.name.includes('[IPv6]') ? node.name : `${node.name} [IPv6]`;
+      const isDup = currentNodes.some(n => n.name && n.name.trim().toLowerCase() === cloneName.toLowerCase());
+      if (isDup) {
+        showToast(`已存在名为【${cloneName}】的 IPv6 节点，无需重复创建！`, 'info');
+        return;
+      }
+
       if (!confirm(`确定为【${node.name}】自动衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${server.ipv6}\n端口将复用原节点端口: ${node.port}`)) return;
 
       showToast('正在创建 IPv6 节点...', 'info');
