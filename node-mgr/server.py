@@ -526,18 +526,19 @@ def build_node_share_link(node):
     name = node.get("name")
     u = node.get("uuid_or_passwd")
     sni = node.get("sni") or "addons.mozilla.org"
+    url_ip = f"[{ip}]" if (":" in ip and not ip.startswith("[")) else ip
     
     if proto == "vless_reality":
         pbk = node.get("public_key")
         sid = node.get("short_id") or ""
         flow = node.get("flow") or "xtls-rprx-vision"
-        return f"vless://{u}@{ip}:{port}?encryption=none&flow={flow}&security=reality&sni={sni}&fp=chrome&pbk={pbk}&sid={sid}&type=tcp#{name}"
+        return f"vless://{u}@{url_ip}:{port}?encryption=none&flow={flow}&security=reality&sni={sni}&fp=chrome&pbk={pbk}&sid={sid}&type=tcp#{name}"
     elif proto == "hysteria2":
-        return f"hysteria2://{u}@{ip}:{port}/?insecure=1&sni={sni}#{name}"
+        return f"hysteria2://{u}@{url_ip}:{port}/?insecure=1&sni={sni}#{name}"
     elif proto == "tuic":
-        return f"tuic://{u}:{u}@{ip}:{port}?congestion_control=bbr&alpn=h3&sni={sni}&allow_insecure=1#{name}"
+        return f"tuic://{u}:{u}@{url_ip}:{port}?congestion_control=bbr&alpn=h3&sni={sni}&allow_insecure=1#{name}"
     elif proto == "trojan":
-        return f"trojan://{u}@{ip}:{port}?security=tls&sni={sni}&allowInsecure=1#{name}"
+        return f"trojan://{u}@{url_ip}:{port}?security=tls&sni={sni}&allowInsecure=1#{name}"
     elif proto == "vmess_ws":
         ws_path = node.get("ws_path") or "/vmess"
         vj = {
@@ -579,7 +580,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
         if proto == "vless_reality" or (proto == "vless" and n.get("public_key")):
             proxies.append(f"""  - name: "{name}"
     type: vless
-    server: {ip}
+    server: "{ip}"
     port: {port}
     uuid: {u}
     network: tcp
@@ -594,7 +595,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
         elif proto == "hysteria2":
             proxies.append(f"""  - name: "{name}"
     type: hysteria2
-    server: {ip}
+    server: "{ip}"
     port: {port}
     password: "{u}"
     sni: {sni}
@@ -602,7 +603,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
         elif proto == "tuic":
             proxies.append(f"""  - name: "{name}"
     type: tuic
-    server: {ip}
+    server: "{ip}"
     port: {port}
     uuid: {u}
     password: {u}
@@ -613,7 +614,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
         elif proto == "trojan":
             proxies.append(f"""  - name: "{name}"
     type: trojan
-    server: {ip}
+    server: "{ip}"
     port: {port}
     password: "{u}"
     sni: {sni}
@@ -622,7 +623,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
         elif proto in ["vmess", "vmess_ws"]:
             proxies.append(f"""  - name: "{name}"
     type: vmess
-    server: {ip}
+    server: "{ip}"
     port: {port}
     uuid: {u}
     alterId: 0
@@ -798,6 +799,7 @@ rules:
 
 def build_sing_box_config(nodes_for_server):
     inbounds = []
+    seen_ports = set()
     cert_path = "/etc/sing-box/cert.pem"
     key_path = "/etc/sing-box/cert.key"
     
@@ -808,6 +810,9 @@ def build_sing_box_config(nodes_for_server):
             continue
         proto = n.get("protocol")
         port = n.get("port")
+        if port in seen_ports:
+            continue
+        seen_ports.add(port)
         tag = f"{proto}-{n.get('id')}"
         u = n.get("uuid_or_passwd")
         sni = n.get("sni") or "addons.mozilla.org"
@@ -1985,6 +1990,47 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             conn.commit()
             conn.close()
             self._send_json({"ok": True})
+            return
+
+        if (path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")) and path.endswith("/clone-ipv6"):
+            parts = path.split("/")
+            node_id = parts[-2]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
+            cols = [d[0] for d in c.description]
+            row = c.fetchone()
+            if not row:
+                conn.close()
+                self._send_json({"error": "节点不存在"}, 404)
+                return
+            node = dict(zip(cols, row))
+            conn.close()
+
+            servers_data = get_servers_with_stats()
+            servers = servers_data.get("servers", [])
+            server = next((s for s in servers if s.get("uuid") == node.get("server_uuid")), None)
+            if not server or not server.get("ipv6"):
+                self._send_json({"error": "该节点所属服务器未检测到有效 IPv6 地址"}, 400)
+                return
+
+            ipv6 = server["ipv6"]
+            clone_name = node["name"] if "[IPv6]" in node["name"] else f"{node['name']} [IPv6]"
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
+                                  uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1)
+            ''', (node["server_uuid"], node["server_name"], ipv6, clone_name, node["protocol"], node["port"],
+                  node["uuid_or_passwd"], node["sni"], node["public_key"], node["private_key"],
+                  node["short_id"], node["flow"], node["ws_path"]))
+            new_id = c.lastrowid
+            conn.commit()
+            conn.close()
+
+            self._send_json({"ok": True, "id": new_id, "name": clone_name, "ipv6": ipv6})
             return
 
         self._send_json({"error": "not found"}, 404)

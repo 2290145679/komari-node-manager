@@ -729,10 +729,47 @@
       <form id="createForm" onsubmit="submitCreateNode(event)" class="space-y-3 sm:space-y-4 text-sm">
         <div>
           <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">目标服务器</label>
-          <select id="serverSelect" required class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 sm:py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm">
+          <select id="serverSelect" required onchange="onServerSelectChange()" class="w-full bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 sm:py-2 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs sm:text-sm">
             <option value="">加载服务器列表中...</option>
           </select>
           <p class="text-[11px] text-slate-400 mt-1">优先选择标记为 🟢 Sing-box 在线的服务器</p>
+        </div>
+
+        <!-- IP Stack / Version Selector (IPv4 vs IPv6) -->
+        <div id="ipVersionGroup" class="space-y-2 p-3 rounded-2xl bg-slate-50 dark:bg-black/25 border border-slate-200/80 dark:border-slate-800">
+          <div class="flex items-center justify-between">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300">节点 IP 网络协议栈</label>
+            <span id="serverIpSupportBadge" class="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">检测中</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs pt-0.5">
+            <label id="labelIpv4" class="flex items-center gap-2 p-2.5 rounded-xl border border-indigo-500/40 bg-white dark:bg-zinc-800/80 cursor-pointer shadow-xs transition">
+              <input type="radio" name="ipVersion" value="ipv4" checked onchange="onIpVersionChange(this.value)" class="text-indigo-600 focus:ring-indigo-500">
+              <div class="min-w-0 flex-1">
+                <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                  <span>IPv4 节点</span>
+                  <span class="text-[9px] px-1 rounded bg-slate-100 dark:bg-zinc-700 text-slate-500 font-mono">v4</span>
+                </div>
+                <div id="createModalIpv4Text" class="text-[10px] text-slate-400 font-mono truncate mt-0.5">-</div>
+              </div>
+            </label>
+            <label id="labelIpv6" class="flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-zinc-800/80 cursor-pointer shadow-xs transition">
+              <input type="radio" name="ipVersion" value="ipv6" onchange="onIpVersionChange(this.value)" class="text-indigo-600 focus:ring-indigo-500">
+              <div class="min-w-0 flex-1">
+                <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center justify-between">
+                  <span class="text-purple-600 dark:text-purple-400">IPv6 节点</span>
+                  <span class="text-[9px] px-1 rounded bg-purple-500/10 text-purple-600 font-mono">v6</span>
+                </div>
+                <div id="createModalIpv6Text" class="text-[10px] text-slate-400 font-mono truncate mt-0.5">-</div>
+              </div>
+            </label>
+          </div>
+          <!-- Auto create dual-stack sibling option -->
+          <div id="createDualStackOption" class="pt-1.5 flex items-center justify-between border-t border-slate-200/50 dark:border-slate-800/50">
+            <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+              <input type="checkbox" id="createDualStackCheck" class="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5">
+              <span>同时自动创建带 <span class="font-bold text-purple-600 dark:text-purple-400 font-mono">[IPv6]</span> 后缀的双栈节点</span>
+            </label>
+          </div>
         </div>
 
         <div>
@@ -1415,6 +1452,14 @@
           <i data-lucide="trash-2" class="w-5 h-5"></i>
         </div>
         <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">删除节点</span>
+      </button>
+    </div>
+
+    <!-- IPv6 Clone Action Bar (Shown when server supports IPv6 and node is not already IPv6) -->
+    <div id="sheetIpv6Bar" class="px-4 pb-2.5 hidden">
+      <button onclick="createIpv6CloneFromSheet()" class="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm shadow-purple-500/20 active:scale-98 transition">
+        <i data-lucide="network" class="w-4 h-4"></i>
+        <span>一键衍生创建带 [IPv6] 后缀节点</span>
       </button>
     </div>
 
@@ -2664,13 +2709,21 @@
           if (proto.includes('shadowsocks') || proto === 'ss') protoBadgeClass = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
 
           // 1. Desktop Table Row
+          const srv = currentServers.find(s => s.uuid === node.server_uuid);
+          const isV6Node = Boolean(node.server_ip && node.server_ip.includes(':'));
+          const canCreateV6 = !isExt && srv && srv.ipv6 && !isV6Node;
+          const v6Badge = isV6Node 
+            ? `<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">IPv6</span>` 
+            : '';
+
           if (tbody) {
             const tr = document.createElement('tr');
             tr.className = "hover:bg-slate-50/70 dark:hover:bg-white/[0.02] transition";
             tr.innerHTML = `
               <td class="py-3 px-4">
                 <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                  ${escapeHtml(node.name)}
+                  <span>${escapeHtml(node.name)}</span>
+                  ${v6Badge}
                 </div>
               </td>
               <td class="py-3 px-4">
@@ -2696,6 +2749,11 @@
               </td>
               <td class="py-3 px-4 text-right">
                 <div class="flex items-center justify-end gap-1.5">
+                  ${canCreateV6 ? `
+                  <button onclick="createIpv6Clone(${node.id})" class="p-1.5 text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-slate-800 rounded-lg transition" title="一键衍生创建带 [IPv6] 后缀节点">
+                    <i data-lucide="network" class="w-4 h-4 text-purple-500"></i>
+                  </button>
+                  ` : ''}
                   <button onclick="copyNodeLinkById(${node.id})" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition" title="复制链接">
                     <i data-lucide="copy" class="w-4 h-4"></i>
                   </button>
@@ -2734,8 +2792,9 @@
                   ${protoShort}
                 </span>
                 <div class="min-w-0 flex-1">
-                  <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">
-                    ${escapeHtml(node.name)}
+                  <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate flex items-center gap-1.5">
+                    <span class="truncate">${escapeHtml(node.name)}</span>
+                    ${v6Badge}
                   </div>
                   <div class="text-[11px] text-slate-400 dark:text-zinc-500 truncate flex items-center gap-1.5 mt-0.5 font-mono">
                     <span>${isExt ? '外部' : escapeHtml(node.server_name || '自建')}</span>
@@ -2787,6 +2846,17 @@
       const sniEl = document.getElementById('sheetSni');
       const ipEl = document.getElementById('sheetIp');
       const pingValEl = document.getElementById('sheetPingValue');
+
+      const srv = currentServers.find(s => s.uuid === node.server_uuid);
+      const isAlreadyV6 = Boolean(node.server_ip && node.server_ip.includes(':'));
+      const sheetIpv6Bar = document.getElementById('sheetIpv6Bar');
+      if (sheetIpv6Bar) {
+        if (!isExt && srv && srv.ipv6 && !isAlreadyV6) {
+          sheetIpv6Bar.classList.remove('hidden');
+        } else {
+          sheetIpv6Bar.classList.add('hidden');
+        }
+      }
 
       if (nameEl) nameEl.textContent = node.name;
       if (subEl) subEl.textContent = `${isExt ? '外部导入节点' : (node.server_name || '自建服务器')} · 端口 ${node.port || '-'}`;
@@ -3102,14 +3172,129 @@
         sel.innerHTML = '<option value="">暂无服务器 (请先在服务器列表添加)</option>';
         return;
       }
-      sel.innerHTML = '';
-      currentServers.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s.uuid;
-        const onlineTag = s.singbox_online ? '🟢 Sing-box 在线' : '⚪ 未安装核心';
-        opt.textContent = `${s.name} (${s.ipv4 || s.ipv6 || '无IP'}) [${onlineTag}]`;
-        sel.appendChild(opt);
-      });
+
+      const currentVal = sel.value;
+      const optionsHtml = currentServers.map(s => {
+        const onlineTag = s.singbox_online ? '🟢 在线' : '⚪ 离线';
+        const stackTag = (s.ipv4 && s.ipv6) ? ' [双栈 IPv4+v6]' : (s.ipv6 ? ' [纯 IPv6]' : '');
+        const ipDisplay = s.ipv4 || s.ipv6 || '无IP';
+        return `<option value="${escapeHtml(s.uuid)}">${escapeHtml(s.name)}${stackTag} (${escapeHtml(ipDisplay)}) [${onlineTag}]</option>`;
+      }).join('');
+
+      // Avoid re-rendering if options markup hasn't changed to prevent resetting user selection
+      if (sel.dataset.lastHtml === optionsHtml) {
+        if (currentVal && sel.value !== currentVal) sel.value = currentVal;
+        return;
+      }
+
+      sel.innerHTML = optionsHtml;
+      sel.dataset.lastHtml = optionsHtml;
+
+      // Preserve previously selected value if still in currentServers
+      if (currentVal && currentServers.some(s => s.uuid === currentVal)) {
+        sel.value = currentVal;
+      } else if (currentServers.length > 0) {
+        sel.value = currentServers[0].uuid;
+      }
+
+      onServerSelectChange();
+    }
+
+    function onServerSelectChange() {
+      const sel = document.getElementById('serverSelect');
+      if (!sel) return;
+      const server = currentServers.find(s => s.uuid === sel.value);
+      const ipv4El = document.getElementById('createModalIpv4Text');
+      const ipv6El = document.getElementById('createModalIpv6Text');
+      const labelIpv4 = document.getElementById('labelIpv4');
+      const labelIpv6 = document.getElementById('labelIpv6');
+      const radioIpv4 = document.querySelector('input[name="ipVersion"][value="ipv4"]');
+      const radioIpv6 = document.querySelector('input[name="ipVersion"][value="ipv6"]');
+      const dualStackOpt = document.getElementById('createDualStackOption');
+      const supportBadge = document.getElementById('serverIpSupportBadge');
+
+      if (!server) return;
+
+      if (ipv4El) ipv4El.textContent = server.ipv4 || '无 IPv4 地址';
+      if (ipv6El) ipv6El.textContent = server.ipv6 || '未检测到 IPv6';
+
+      const hasV4 = Boolean(server.ipv4);
+      const hasV6 = Boolean(server.ipv6);
+
+      if (supportBadge) {
+        if (hasV4 && hasV6) {
+          supportBadge.textContent = '🟢 双栈支持 (IPv4 + IPv6)';
+          supportBadge.className = 'text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+        } else if (hasV6) {
+          supportBadge.textContent = '🟣 纯 IPv6 服务器';
+          supportBadge.className = 'text-[10px] px-2 py-0.5 rounded-full font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400';
+        } else {
+          supportBadge.textContent = '🔵 仅 IPv4';
+          supportBadge.className = 'text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-500/10 text-blue-600 dark:text-blue-400';
+        }
+      }
+
+      if (radioIpv6 && labelIpv6) {
+        if (hasV6) {
+          radioIpv6.disabled = false;
+          labelIpv6.classList.remove('opacity-40', 'cursor-not-allowed');
+          if (dualStackOpt) dualStackOpt.classList.remove('hidden');
+        } else {
+          radioIpv6.disabled = true;
+          labelIpv6.classList.add('opacity-40', 'cursor-not-allowed');
+          if (radioIpv6.checked && radioIpv4) {
+            radioIpv4.checked = true;
+            onIpVersionChange('ipv4');
+          }
+          if (dualStackOpt) dualStackOpt.classList.add('hidden');
+        }
+      }
+
+      if (hasV6 && !hasV4 && radioIpv6) {
+        radioIpv6.checked = true;
+        onIpVersionChange('ipv6');
+      }
+
+      // Automatically suggest node name if empty or default
+      const nameInput = document.getElementById('nodeNameInput');
+      if (nameInput && (!nameInput.value || nameInput.value.includes('Reality') || nameInput.value.includes('节点'))) {
+        const isV6 = radioIpv6 && radioIpv6.checked;
+        nameInput.value = `${server.name}${isV6 ? ' [IPv6]' : ''}`;
+      }
+    }
+
+    function onIpVersionChange(val) {
+      const labelIpv4 = document.getElementById('labelIpv4');
+      const labelIpv6 = document.getElementById('labelIpv6');
+      const nameInput = document.getElementById('nodeNameInput');
+      const sel = document.getElementById('serverSelect');
+      const server = currentServers.find(s => s.uuid === sel.value);
+
+      if (val === 'ipv6') {
+        if (labelIpv6) {
+          labelIpv6.classList.add('border-purple-500/60', 'bg-purple-50/50', 'dark:bg-purple-950/20');
+          labelIpv6.classList.remove('border-slate-200', 'dark:border-slate-700');
+        }
+        if (labelIpv4) {
+          labelIpv4.classList.remove('border-indigo-500/40', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+          labelIpv4.classList.add('border-slate-200', 'dark:border-slate-700');
+        }
+        if (nameInput && server && !nameInput.value.includes('[IPv6]')) {
+          nameInput.value = `${nameInput.value.trim()} [IPv6]`;
+        }
+      } else {
+        if (labelIpv4) {
+          labelIpv4.classList.add('border-indigo-500/40', 'bg-indigo-50/50', 'dark:bg-indigo-950/20');
+          labelIpv4.classList.remove('border-slate-200', 'dark:border-slate-700');
+        }
+        if (labelIpv6) {
+          labelIpv6.classList.remove('border-purple-500/60', 'bg-purple-50/50', 'dark:bg-purple-950/20');
+          labelIpv6.classList.add('border-slate-200', 'dark:border-slate-700');
+        }
+        if (nameInput) {
+          nameInput.value = nameInput.value.replace(/\s*\[IPv6\]/g, '').trim();
+        }
+      }
     }
 
     function randomizePort() {
@@ -3124,6 +3309,8 @@
 
     function openCreateModal() {
       randomizePort();
+      updateServerSelect();
+      onServerSelectChange();
       document.getElementById('createModal').classList.remove('hidden');
       lucide.createIcons();
     }
@@ -3145,9 +3332,22 @@
     async function submitCreateNode(e) {
       e.preventDefault();
       const sel = document.getElementById('serverSelect');
-      const selectedServer = currentServers[sel.selectedIndex];
-      if (!sel.value) {
+      if (!sel || !sel.value) {
         showToast("请先选择目标服务器！", 'error');
+        return;
+      }
+      const selectedServer = currentServers.find(s => s.uuid === sel.value);
+      if (!selectedServer) {
+        showToast("未找到目标服务器！", 'error');
+        return;
+      }
+
+      const isIpv6Selected = document.querySelector('input[name="ipVersion"]:checked')?.value === 'ipv6';
+      const shouldCreateDualStack = document.getElementById('createDualStackCheck')?.checked && !isIpv6Selected && selectedServer.ipv6;
+
+      let targetIp = isIpv6Selected ? selectedServer.ipv6 : (selectedServer.ipv4 || selectedServer.ipv6 || '');
+      if (isIpv6Selected && !selectedServer.ipv6) {
+        showToast("该服务器暂未分配 IPv6 地址！", 'error');
         return;
       }
 
@@ -3157,14 +3357,18 @@
       lucide.createIcons();
 
       const proto = document.querySelector('input[name="protocol"]:checked').value;
+      const baseName = document.getElementById('nodeNameInput').value.trim();
+      const port = parseInt(document.getElementById('nodePortInput').value);
+      const sni = document.getElementById('nodeSniInput').value.trim() || 'addons.mozilla.org';
+
       const payload = {
         server_uuid: selectedServer.uuid,
         server_name: selectedServer.name,
-        server_ip: selectedServer.ipv4 || selectedServer.ipv6 || '',
-        name: document.getElementById('nodeNameInput').value.trim(),
+        server_ip: targetIp,
+        name: baseName,
         protocol: proto,
-        port: parseInt(document.getElementById('nodePortInput').value),
-        sni: document.getElementById('nodeSniInput').value.trim() || 'addons.mozilla.org'
+        port: port,
+        sni: sni
       };
 
       try {
@@ -3175,8 +3379,30 @@
         }).then(r => r.json());
 
         if (res.ok) {
+          // If user also checked "同时自动创建 IPv6 镜像节点"
+          if (shouldCreateDualStack) {
+            const v6Payload = {
+              server_uuid: selectedServer.uuid,
+              server_name: selectedServer.name,
+              server_ip: selectedServer.ipv6,
+              name: `${baseName} [IPv6]`,
+              protocol: proto,
+              port: port,
+              sni: sni
+            };
+            try {
+              await fetch('/api/node-mgr/nodes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(v6Payload)
+              });
+            } catch (v6err) {
+              console.error('Failed to create secondary IPv6 node:', v6err);
+            }
+          }
+
           closeCreateModal();
-          showToast('节点创建成功！', 'success');
+          showToast(shouldCreateDualStack ? 'IPv4 & IPv6 双栈节点创建成功！' : '节点创建成功！', 'success');
           await loadData();
         } else {
           showToast("创建失败: " + (res.error || "未知错误"), 'error');
@@ -3186,6 +3412,70 @@
       } finally {
         btn.disabled = false;
         btn.innerHTML = `<span>立即创建</span>`;
+      }
+    }
+
+    async function createIpv6Clone(nodeId) {
+      const node = currentNodes.find(n => n.id === nodeId);
+      if (!node) return;
+      const server = currentServers.find(s => s.uuid === node.server_uuid);
+      if (!server || !server.ipv6) {
+        showToast(`【${node.server_name || '服务器'}】未检测到有效 IPv6 地址，无法创建 IPv6 节点！`, 'error');
+        return;
+      }
+
+      const cloneName = node.name.includes('[IPv6]') ? node.name : `${node.name} [IPv6]`;
+      if (!confirm(`确定为【${node.name}】自动衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${server.ipv6}\n端口将复用原节点端口: ${node.port}`)) return;
+
+      showToast('正在创建 IPv6 节点...', 'info');
+      try {
+        const res = await fetch(`/api/node-mgr/nodes/${nodeId}/clone-ipv6`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }).then(r => r.json());
+
+        if (res.ok) {
+          showToast(`✅ IPv6 节点【${cloneName}】已成功创建！`, 'success');
+          if (typeof closeActionSheet === 'function') closeActionSheet();
+          await loadData();
+        } else {
+          // Fallback to standard creation POST if endpoint returns error
+          const fallbackPayload = {
+            server_uuid: node.server_uuid,
+            server_name: node.server_name,
+            server_ip: server.ipv6,
+            name: cloneName,
+            protocol: node.protocol,
+            port: node.port,
+            sni: node.sni || 'addons.mozilla.org',
+            uuid_or_passwd: node.uuid_or_passwd,
+            public_key: node.public_key,
+            private_key: node.private_key,
+            short_id: node.short_id,
+            flow: node.flow
+          };
+          const fbRes = await fetch('/api/node-mgr/nodes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(fallbackPayload)
+          }).then(r => r.json());
+
+          if (fbRes.ok) {
+            showToast(`✅ IPv6 节点【${cloneName}】已成功创建！`, 'success');
+            if (typeof closeActionSheet === 'function') closeActionSheet();
+            await loadData();
+          } else {
+            showToast("创建失败: " + (fbRes.error || res.error || "未知错误"), 'error');
+          }
+        }
+      } catch (err) {
+        showToast("请求失败: " + err.message, 'error');
+      }
+    }
+
+    function createIpv6CloneFromSheet() {
+      if (activeSheetNode) {
+        createIpv6Clone(activeSheetNode.id);
       }
     }
 
