@@ -1946,6 +1946,18 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "count": imported_count})
             return
 
+        if path == "/api/sub/reset" or path == "/api/node-mgr/sub/reset":
+            new_token = secrets.token_hex(16)
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("DELETE FROM subscriptions")
+            c.execute("INSERT INTO subscriptions (token, name) VALUES (?, 'default')", (new_token,))
+            conn.commit()
+            conn.close()
+            new_sub_url = f"https://{DOMAIN}/sub/{new_token}"
+            self._send_json({"ok": True, "token": new_token, "sub_url": new_sub_url})
+            return
+
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
             server_uuid = body.get("server_uuid", "")
             server_name = body.get("server_name", "")

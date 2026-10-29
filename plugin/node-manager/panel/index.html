@@ -198,6 +198,10 @@
           <button onclick="openClientImportModal('qr')" class="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl whitespace-nowrap flex items-center gap-1 transition shadow-sm active:scale-95">
             <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 扫码
           </button>
+          <button onclick="resetSubUrl()" class="px-2.5 py-2 border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-600 rounded-xl whitespace-nowrap flex items-center gap-1 transition text-xs font-semibold active:scale-95" title="重置订阅 Token（防泄露紧急重置）">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">重置</span>
+          </button>
         </div>
       </div>
 
@@ -502,6 +506,10 @@
           </button>
           <button onclick="openClientImportModal('qr')" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl whitespace-nowrap flex items-center gap-1 transition shadow-xs active:scale-95">
             <i data-lucide="qr-code" class="w-3.5 h-3.5"></i> 二维码
+          </button>
+          <button onclick="resetSubUrl()" class="px-2.5 py-2 border border-slate-200 dark:border-slate-700 hover:border-rose-300 dark:hover:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-600 rounded-xl whitespace-nowrap flex items-center gap-1 transition text-xs font-semibold active:scale-95" title="重置订阅 Token（防泄露紧急重置）">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            <span class="hidden sm:inline">重置</span>
           </button>
         </div>
       </div>
@@ -3609,6 +3617,39 @@
       navigator.clipboard.writeText(currentSubUrl).then(() => {
         showToast("统一订阅链接已复制到剪贴板！", 'success');
       });
+    }
+
+    async function resetSubUrl() {
+      if (!confirm('⚠️ 警告：确定要重置统一订阅链接吗？\n\n重置后旧订阅链接将立即失效！所有已导入旧链接的客户端（Clash/Surge/Shadowrocket 等）必须重新配置新链接。\n\n适用于：怀疑链接泄露或需要紧急吊销旧订阅。')) {
+        return;
+      }
+
+      showToast('正在重置订阅 Token...', 'info');
+      try {
+        const res = await fetch('/api/node-mgr/sub/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' }
+        }).then(r => r.json());
+
+        if (res.ok && res.sub_url) {
+          currentSubUrl = res.sub_url;
+          document.querySelectorAll('.sub-url-input').forEach(inp => {
+            inp.value = res.sub_url;
+          });
+          const legacyInput = document.getElementById('subUrlInput');
+          if (legacyInput) legacyInput.value = res.sub_url;
+          const clashEl = document.getElementById('subClashUrlInput');
+          if (clashEl) clashEl.value = res.sub_url + '?clash=1';
+          const b64El = document.getElementById('subB64UrlInput');
+          if (b64El) b64El.value = res.sub_url + '?format=b64';
+
+          showToast('✅ 订阅链接已成功重置！旧链接已作废失效。', 'success');
+        } else {
+          showToast('重置失败: ' + (res.error || '未知错误'), 'error');
+        }
+      } catch (err) {
+        showToast('请求异常: ' + err.message, 'error');
+      }
     }
 
     function openClientImportModal(initialTab = 'clients', targetNodeLink = null) {
