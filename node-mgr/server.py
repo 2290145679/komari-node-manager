@@ -800,6 +800,325 @@ rules:
 {rules_yaml}
 """
 
+def build_sing_box_client_profile(nodes, rules_cfg=None):
+    if rules_cfg is None:
+        rules_cfg = get_subscription_rules()
+
+    outbounds = []
+    node_tags = []
+
+    for n in nodes:
+        proto = n.get("protocol")
+        name = n.get("name") or f"Node-{n.get('id')}"
+        ip = n.get("server_ip")
+        port = n.get("port")
+        u = n.get("uuid_or_passwd")
+        sni = n.get("sni") or "addons.mozilla.org"
+
+        if not ip or not port:
+            continue
+        try:
+            port = int(port)
+        except Exception:
+            continue
+
+        tag = name
+        base_tag = tag
+        c_idx = 1
+        while tag in node_tags or tag in ["PROXY", "自动优选", "direct", "block", "dns-out"]:
+            tag = f"{base_tag} ({c_idx})"
+            c_idx += 1
+        node_tags.append(tag)
+
+        if proto == "vless_reality" or (proto == "vless" and n.get("public_key")):
+            outbounds.append({
+                "type": "vless",
+                "tag": tag,
+                "server": ip,
+                "server_port": port,
+                "uuid": u,
+                "flow": n.get("flow") or "xtls-rprx-vision",
+                "tls": {
+                    "enabled": True,
+                    "server_name": sni,
+                    "reality": {
+                        "enabled": True,
+                        "public_key": n.get("public_key") or "",
+                        "short_id": n.get("short_id") or ""
+                    },
+                    "utls": {
+                        "enabled": True,
+                        "fingerprint": "chrome"
+                    }
+                },
+                "packet_encoding": "xudp"
+            })
+        elif proto == "hysteria2":
+            outbounds.append({
+                "type": "hysteria2",
+                "tag": tag,
+                "server": ip,
+                "server_port": port,
+                "password": u,
+                "tls": {
+                    "enabled": True,
+                    "server_name": sni,
+                    "insecure": True,
+                    "alpn": ["h3"]
+                }
+            })
+        elif proto == "tuic":
+            outbounds.append({
+                "type": "tuic",
+                "tag": tag,
+                "server": ip,
+                "server_port": port,
+                "uuid": u,
+                "password": u,
+                "congestion_control": "bbr",
+                "tls": {
+                    "enabled": True,
+                    "server_name": sni,
+                    "insecure": True,
+                    "alpn": ["h3"]
+                }
+            })
+        elif proto == "trojan":
+            outbounds.append({
+                "type": "trojan",
+                "tag": tag,
+                "server": ip,
+                "server_port": port,
+                "password": u,
+                "tls": {
+                    "enabled": True,
+                    "server_name": sni,
+                    "insecure": True
+                }
+            })
+        elif proto in ["vmess", "vmess_ws"]:
+            outbounds.append({
+                "type": "vmess",
+                "tag": tag,
+                "server": ip,
+                "server_port": port,
+                "uuid": u,
+                "security": "auto",
+                "transport": {
+                    "type": "ws",
+                    "path": n.get("ws_path") or "/vmess"
+                }
+            })
+
+    # Group outbounds
+    selector_tags = []
+    if rules_cfg.get("enable_auto_group", True) and node_tags:
+        selector_tags.append("自动优选")
+    selector_tags.extend(node_tags)
+    selector_tags.append("direct")
+
+    group_outbounds = []
+    group_outbounds.append({
+        "type": "selector",
+        "tag": "PROXY",
+        "outbounds": selector_tags if selector_tags else ["direct"],
+        "default": selector_tags[0] if selector_tags else "direct"
+    })
+
+    if rules_cfg.get("enable_auto_group", True) and node_tags:
+        group_outbounds.append({
+            "type": "urltest",
+            "tag": "自动优选",
+            "outbounds": list(node_tags),
+            "url": "http://www.gstatic.com/generate_204",
+            "interval": "5m",
+            "tolerance": 50
+        })
+
+    group_outbounds.extend([
+        {"type": "direct", "tag": "direct"},
+        {"type": "block", "tag": "block"},
+        {"type": "dns", "tag": "dns-out"}
+    ])
+
+    final_outbounds = group_outbounds + outbounds
+
+    # Route rules
+    route_rules = [
+        {"protocol": "dns", "outbound": "dns-out"},
+        {"clash_mode": "Direct", "outbound": "direct"},
+        {"clash_mode": "Global", "outbound": "PROXY"}
+    ]
+
+    # 1. Custom rules
+    custom = rules_cfg.get("custom_rules", "").strip()
+    if custom:
+        for line in custom.splitlines():
+            line = line.strip().lstrip("- ")
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) >= 3:
+                rtype, rval, rtarget = parts[0].upper(), parts[1], parts[2]
+                target_out = "direct" if rtarget.upper() == "DIRECT" else ("block" if rtarget.upper() == "REJECT" else "PROXY")
+                if rtype in ["DOMAIN-SUFFIX", "DOMAIN"]:
+                    route_rules.append({"domain_suffix": [rval], "outbound": target_out})
+                elif rtype in ["DOMAIN-KEYWORD"]:
+                    route_rules.append({"domain_keyword": [rval], "outbound": target_out})
+                elif rtype in ["IP-CIDR", "IP-CIDR6"]:
+                    route_rules.append({"ip_cidr": [rval], "outbound": target_out})
+                elif rtype in ["GEOIP"]:
+                    route_rules.append({"geoip": [rval.lower()], "outbound": target_out})
+                elif rtype in ["GEOSITE"]:
+                    route_rules.append({"geosite": [rval.lower()], "outbound": target_out})
+
+    # 2. BT / PT Direct rule
+    if rules_cfg.get("direct_bt", True):
+        route_rules.append({
+            "process_name": [
+                "qbittorrent", "qbittorrent-nox", "Transmission",
+                "transmission-daemon", "aria2c", "fdm"
+            ],
+            "outbound": "direct"
+        })
+        route_rules.append({
+            "domain_keyword": ["tracker", "torrent", "peer"],
+            "outbound": "direct"
+        })
+
+    # 3. LAN Direct rule
+    if rules_cfg.get("direct_lan", True):
+        route_rules.append({
+            "ip_cidr": [
+                "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                "::1/128", "fc00::/7", "fe80::/10"
+            ],
+            "outbound": "direct"
+        })
+
+    # 4. Ad blocking
+    if rules_cfg.get("block_ads", False):
+        route_rules.append({
+            "geosite": ["category-ads-all"],
+            "outbound": "block"
+        })
+
+    # 5. AI Services
+    if rules_cfg.get("proxy_ai"):
+        t_ai = rules_cfg.get("target_ai") or "PROXY"
+        target_out = "direct" if t_ai == "DIRECT" else "PROXY"
+        route_rules.append({
+            "domain_suffix": [
+                "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
+                "anthropic.com", "claude.ai", "gemini.google.com", "copilot.microsoft.com"
+            ],
+            "outbound": target_out
+        })
+
+    # 6. Telegram
+    if rules_cfg.get("proxy_tg"):
+        t_tg = rules_cfg.get("target_tg") or "PROXY"
+        target_out = "direct" if t_tg == "DIRECT" else "PROXY"
+        route_rules.append({
+            "ip_cidr": [
+                "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22",
+                "91.108.56.0/22", "149.154.160.0/20", "149.154.164.0/22",
+                "149.154.168.0/22", "149.154.172.0/22"
+            ],
+            "outbound": target_out
+        })
+
+    # 7. Media
+    if rules_cfg.get("proxy_media"):
+        t_media = rules_cfg.get("target_media") or "PROXY"
+        target_out = "direct" if t_media == "DIRECT" else "PROXY"
+        route_rules.append({
+            "domain_suffix": [
+                "youtube.com", "googlevideo.com", "netflix.com", "nflxvideo.net", "spotify.com"
+            ],
+            "outbound": target_out
+        })
+
+    # 8. Developer
+    if rules_cfg.get("proxy_dev"):
+        t_dev = rules_cfg.get("target_dev") or "PROXY"
+        target_out = "direct" if t_dev == "DIRECT" else "PROXY"
+        route_rules.append({
+            "domain_suffix": [
+                "github.com", "githubusercontent.com", "docker.com", "docker.io", "huggingface.co"
+            ],
+            "outbound": target_out
+        })
+
+    # 9. Game platforms
+    if rules_cfg.get("direct_games"):
+        t_games = rules_cfg.get("target_games") or "DIRECT"
+        target_out = "direct" if t_games == "DIRECT" else "PROXY"
+        route_rules.append({
+            "domain_suffix": [
+                "steamserver.net", "steamcontent.com", "epicgames.com"
+            ],
+            "outbound": target_out
+        })
+
+    # 10. China Direct
+    if rules_cfg.get("direct_cn", True):
+        route_rules.append({
+            "domain_suffix": [
+                ".cn", "baidu.com", "qq.com", "163.com", "aliyun.com", "taobao.com", "jd.com", "bilibili.com"
+            ],
+            "outbound": "direct"
+        })
+        route_rules.append({
+            "geoip": ["cn"],
+            "outbound": "direct"
+        })
+
+    final_match = rules_cfg.get("final_match") or "PROXY"
+    final_outbound = "direct" if final_match == "DIRECT" else "PROXY"
+
+    return {
+        "log": {"level": "info", "timestamp": True},
+        "dns": {
+            "servers": [
+                {"tag": "dns-remote", "address": "tcp://1.1.1.1", "address_resolver": "dns-direct", "detour": "PROXY"},
+                {"tag": "dns-direct", "address": "223.5.5.5", "detour": "direct"},
+                {"tag": "dns-block", "address": "rcode://success"}
+            ],
+            "rules": [
+                {"outbound": "any", "server": "dns-direct"},
+                {"clash_mode": "Global", "server": "dns-remote"},
+                {"clash_mode": "Direct", "server": "dns-direct"}
+            ],
+            "strategy": "prefer_ipv4"
+        },
+        "inbounds": [
+            {
+                "type": "mixed",
+                "tag": "mixed-in",
+                "listen": "127.0.0.1",
+                "listen_port": 2080,
+                "sniff": True
+            },
+            {
+                "type": "tun",
+                "tag": "tun-in",
+                "interface_name": "tun0",
+                "inet4_address": "172.19.0.1/30",
+                "auto_route": True,
+                "strict_route": True,
+                "stack": "system",
+                "sniff": True
+            }
+        ],
+        "outbounds": final_outbounds,
+        "route": {
+            "auto_detect_interface": True,
+            "final": final_outbound,
+            "rules": route_rules
+        }
+    }
+
 def build_sing_box_config(nodes_for_server):
     inbounds = []
     seen_ports = set()
@@ -1705,8 +2024,12 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             ua = self.headers.get("User-Agent", "").lower()
             fmt = query.get("format", [""])[0].lower()
             clash_flag = query.get("clash", [""])[0]
+            singbox_flag = query.get("singbox", [""])[0]
 
-            if fmt == "clash" or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]):
+            if fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]):
+                sb_profile = build_sing_box_client_profile(nodes, rules_cfg)
+                self._send_text(json.dumps(sb_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8")
+            elif fmt == "clash" or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]):
                 yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
                 self._send_text(yaml_data, 200, "text/yaml; charset=utf-8")
             elif fmt == "raw":
