@@ -2182,8 +2182,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             fmt = query.get("format", [""])[0].lower()
             clash_flag = query.get("clash", [""])[0]
             singbox_flag = query.get("singbox", [""])[0]
+            sb_flag = query.get("sb", [""])[0]
 
-            if fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]):
+            if fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or sb_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]):
                 sb_profile = build_sing_box_client_profile(nodes, rules_cfg)
                 self._send_text(json.dumps(sb_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8")
             elif fmt == "clash" or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]):
