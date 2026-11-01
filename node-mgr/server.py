@@ -937,15 +937,15 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
 
     group_outbounds.extend([
         {"type": "direct", "tag": "direct"},
-        {"type": "block", "tag": "block"},
-        {"type": "dns", "tag": "dns-out"}
+        {"type": "block", "tag": "block"}
     ])
 
     final_outbounds = group_outbounds + outbounds
 
     # Route rules
     route_rules = [
-        {"protocol": "dns", "outbound": "dns-out"},
+        {"action": "sniff"},
+        {"protocol": "dns", "action": "hijack-dns"},
         {"clash_mode": "Direct", "outbound": "direct"},
         {"clash_mode": "Global", "outbound": "PROXY"}
     ]
@@ -967,10 +967,6 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
                     route_rules.append({"domain_keyword": [rval], "outbound": target_out})
                 elif rtype in ["IP-CIDR", "IP-CIDR6"]:
                     route_rules.append({"ip_cidr": [rval], "outbound": target_out})
-                elif rtype in ["GEOIP"]:
-                    route_rules.append({"geoip": [rval.lower()], "outbound": target_out})
-                elif rtype in ["GEOSITE"]:
-                    route_rules.append({"geosite": [rval.lower()], "outbound": target_out})
 
     # 2. BT / PT Direct rule
     if rules_cfg.get("direct_bt", True):
@@ -999,7 +995,7 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
     # 4. Ad blocking
     if rules_cfg.get("block_ads", False):
         route_rules.append({
-            "geosite": ["category-ads-all"],
+            "domain_keyword": ["adservice", "googleads", "pagead", "doubleclick"],
             "outbound": "block"
         })
 
@@ -1065,12 +1061,9 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
     if rules_cfg.get("direct_cn", True):
         route_rules.append({
             "domain_suffix": [
-                ".cn", "baidu.com", "qq.com", "163.com", "aliyun.com", "taobao.com", "jd.com", "bilibili.com"
+                ".cn", "baidu.com", "qq.com", "163.com", "aliyun.com", "taobao.com", "jd.com", "bilibili.com",
+                "zhihu.com", "weibo.com", "sina.com.cn", "sohu.com", "douyin.com", "xiaohongshu.com"
             ],
-            "outbound": "direct"
-        })
-        route_rules.append({
-            "geoip": ["cn"],
             "outbound": "direct"
         })
 
@@ -1081,12 +1074,10 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
         "log": {"level": "info", "timestamp": True},
         "dns": {
             "servers": [
-                {"tag": "dns-remote", "address": "tcp://1.1.1.1", "address_resolver": "dns-direct", "detour": "PROXY"},
-                {"tag": "dns-direct", "address": "223.5.5.5", "detour": "direct"},
-                {"tag": "dns-block", "address": "rcode://success"}
+                {"tag": "dns-remote", "type": "tcp", "server": "1.1.1.1", "detour": "PROXY"},
+                {"tag": "dns-direct", "type": "udp", "server": "223.5.5.5", "detour": "direct"}
             ],
             "rules": [
-                {"outbound": "any", "server": "dns-direct"},
                 {"clash_mode": "Global", "server": "dns-remote"},
                 {"clash_mode": "Direct", "server": "dns-direct"}
             ],
@@ -1097,23 +1088,22 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
                 "type": "mixed",
                 "tag": "mixed-in",
                 "listen": "127.0.0.1",
-                "listen_port": 2080,
-                "sniff": True
+                "listen_port": 2080
             },
             {
                 "type": "tun",
                 "tag": "tun-in",
                 "interface_name": "tun0",
-                "inet4_address": "172.19.0.1/30",
+                "address": ["172.19.0.1/30", "fdfe:dcba:9876::1/126"],
                 "auto_route": True,
                 "strict_route": True,
-                "stack": "system",
-                "sniff": True
+                "stack": "system"
             }
         ],
         "outbounds": final_outbounds,
         "route": {
             "auto_detect_interface": True,
+            "default_domain_resolver": "dns-direct",
             "final": final_outbound,
             "rules": route_rules
         }
