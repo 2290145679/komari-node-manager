@@ -243,6 +243,148 @@ def get_subscription_rules():
         "target_games": d.get("target_games") or "DIRECT"
     }
 
+def get_rules_referencing_node(node_name):
+    if not node_name:
+        return []
+    conn = sqlite3.connect(NODES_DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM subscription_rules WHERE id = 1")
+    r_row = c.fetchone()
+    conn.close()
+
+    refs = []
+    if r_row:
+        meta_map = {
+            "target_ai": "🤖 AI 大模型服务 (ChatGPT / Claude)",
+            "target_tg": "✈️ Telegram 社交专线",
+            "target_media": "🎬 海外流媒体 (YouTube / Netflix)",
+            "target_dev": "💻 开发者服务 (GitHub / Docker)",
+            "target_games": "🎮 主流游戏平台 (Steam / Epic)"
+        }
+        for f, label in meta_map.items():
+            if r_row[f] == node_name:
+                refs.append({"type": "preset", "field": f, "name": label})
+
+        custom_rules = r_row["custom_rules"] or ""
+        for line in custom_rules.splitlines():
+            t = line.strip()
+            if not t or t.startswith("#"):
+                continue
+            parts = [p.strip() for p in t.lstrip("- ").split(",")]
+            if len(parts) >= 3 and parts[2] == node_name:
+                refs.append({"type": "custom", "rule": t, "name": f"自定义: {parts[0]},{parts[1]}"})
+    return refs
+
+def redirect_rules_for_node(node_name, redirect_target="PROXY"):
+    if not node_name:
+        return 0
+    redirect_target = redirect_target or "PROXY"
+    conn = sqlite3.connect(NODES_DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT * FROM subscription_rules WHERE id = 1")
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return 0
+
+    updated_count = 0
+    fields_to_check = ["target_ai", "target_tg", "target_media", "target_dev", "target_games"]
+    updates = {}
+    for f in fields_to_check:
+        if row[f] == node_name:
+            updates[f] = redirect_target
+            updated_count += 1
+
+    custom_rules = row["custom_rules"] or ""
+    new_lines = []
+    custom_changed = False
+    for line in custom_rules.splitlines():
+        trimmed = line.strip()
+        if not trimmed or trimmed.startswith("#"):
+            new_lines.append(line)
+            continue
+        parts = [p.strip() for p in trimmed.lstrip("- ").split(",")]
+        if len(parts) >= 3 and parts[2] == node_name:
+            parts[2] = redirect_target
+            prefix = "- " if trimmed.startswith("-") else ""
+            new_line = prefix + ",".join(parts)
+            new_lines.append(new_line)
+            custom_changed = True
+            updated_count += 1
+        else:
+            new_lines.append(line)
+
+    if custom_changed:
+        updates["custom_rules"] = "\n".join(new_lines)
+
+    if updates:
+        set_clauses = [f"{k} = ?" for k in updates.keys()]
+        values = list(updates.values())
+        c.execute(f"UPDATE subscription_rules SET {', '.join(set_clauses)}, updated_at=CURRENT_TIMESTAMP WHERE id = 1", values)
+        conn.commit()
+
+    conn.close()
+    return updated_count
+
+def fix_all_dangling_rules(default_fallback="PROXY"):
+    conn = sqlite3.connect(NODES_DB)
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    c.execute("SELECT name FROM nodes")
+    active_names = set(r["name"] for r in c.fetchall())
+    base_actions = {"PROXY", "DIRECT", "REJECT", "自动优选"}
+    valid_targets = active_names | base_actions
+
+    c.execute("SELECT * FROM subscription_rules WHERE id = 1")
+    row = c.fetchone()
+    if not row:
+        conn.close()
+        return {"fixed": 0}
+
+    fixed_count = 0
+    updates = {}
+    for f in ["target_ai", "target_tg", "target_media", "target_dev", "target_games"]:
+        cur = row[f]
+        if cur and cur not in valid_targets:
+            updates[f] = default_fallback
+            fixed_count += 1
+
+    custom_rules = row["custom_rules"] or ""
+    new_lines = []
+    custom_changed = False
+    for line in custom_rules.splitlines():
+        trimmed = line.strip()
+        if not trimmed or trimmed.startswith("#"):
+            new_lines.append(line)
+            continue
+        parts = [p.strip() for p in trimmed.lstrip("- ").split(",")]
+        if len(parts) >= 3:
+            tgt = parts[2]
+            if tgt not in valid_targets:
+                parts[2] = default_fallback
+                prefix = "- " if trimmed.startswith("-") else ""
+                new_lines.append(prefix + ",".join(parts))
+                custom_changed = True
+                fixed_count += 1
+            else:
+                new_lines.append(line)
+        else:
+            new_lines.append(line)
+
+    if custom_changed:
+        updates["custom_rules"] = "\n".join(new_lines)
+
+    if updates:
+        set_clauses = [f"{k} = ?" for k in updates.keys()]
+        values = list(updates.values())
+        c.execute(f"UPDATE subscription_rules SET {', '.join(set_clauses)}, updated_at=CURRENT_TIMESTAMP WHERE id = 1", values)
+        conn.commit()
+
+    conn.close()
+    return {"fixed": fixed_count}
+
 def get_reality_keypair():
     try:
         res = subprocess.run(["sing-box", "generate", "reality-keypair"], capture_output=True, text=True, check=True)
@@ -659,6 +801,16 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     groups_text = "\n".join(proxy_groups)
 
+    # Valid targets whitelist for safe fallback
+    valid_targets = set(names) | {"PROXY", "DIRECT", "REJECT"}
+    if rules_cfg.get("enable_auto_group") and names:
+        valid_targets.add("自动优选")
+
+    def safe_target(t, default="PROXY"):
+        if not t or t not in valid_targets:
+            return default
+        return t
+
     # Build rules list
     rules_list = []
 
@@ -671,11 +823,17 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
             if line:
                 if not line.startswith("-") and not line.startswith("#"):
                     line = f"- {line}"
+                parts = [p.strip() for p in line.lstrip("- ").split(",")]
+                if len(parts) >= 3:
+                    tgt = parts[2]
+                    if tgt not in valid_targets:
+                        parts[2] = "PROXY"
+                        line = f"- {','.join(parts)}"
                 rules_list.append(f"  {line}")
 
     # 2. AI services
     if rules_cfg.get("proxy_ai"):
-        t_ai = rules_cfg.get("target_ai") or "PROXY"
+        t_ai = safe_target(rules_cfg.get("target_ai"), "PROXY")
         rules_list.append(f"  # === 🤖 AI 大模型服务 (ChatGPT / Claude / Gemini) -> {t_ai} ===")
         rules_list.append(f"  - GEOSITE,openai,{t_ai}")
         rules_list.append(f"  - GEOSITE,anthropic,{t_ai}")
@@ -691,7 +849,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     # 3. Telegram
     if rules_cfg.get("proxy_tg"):
-        t_tg = rules_cfg.get("target_tg") or "PROXY"
+        t_tg = safe_target(rules_cfg.get("target_tg"), "PROXY")
         rules_list.append(f"  # === ✈️ Telegram 社交专线 -> {t_tg} ===")
         rules_list.append(f"  - GEOSITE,telegram,{t_tg}")
         rules_list.append(f"  - IP-CIDR,91.108.4.0/22,{t_tg},no-resolve")
@@ -706,7 +864,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     # 4. Overseas Streaming Media
     if rules_cfg.get("proxy_media"):
-        t_media = rules_cfg.get("target_media") or "PROXY"
+        t_media = safe_target(rules_cfg.get("target_media"), "PROXY")
         rules_list.append(f"  # === 🎬 海外主流流媒体 (YouTube / Netflix / Spotify) -> {t_media} ===")
         rules_list.append(f"  - GEOSITE,youtube,{t_media}")
         rules_list.append(f"  - GEOSITE,netflix,{t_media}")
@@ -720,7 +878,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     # 5. Developer Services
     if rules_cfg.get("proxy_dev"):
-        t_dev = rules_cfg.get("target_dev") or "PROXY"
+        t_dev = safe_target(rules_cfg.get("target_dev"), "PROXY")
         rules_list.append(f"  # === 💻 开发者服务加速 (GitHub / Docker / Hugging Face) -> {t_dev} ===")
         rules_list.append(f"  - GEOSITE,github,{t_dev}")
         rules_list.append(f"  - DOMAIN-SUFFIX,github.com,{t_dev}")
@@ -731,7 +889,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
 
     # 6. Game Platforms Direct
     if rules_cfg.get("direct_games"):
-        t_games = rules_cfg.get("target_games") or "DIRECT"
+        t_games = safe_target(rules_cfg.get("target_games"), "DIRECT")
         rules_list.append(f"  # === 🎮 主流游戏平台直连 (Steam / Epic / 暴雪) -> {t_games} ===")
         rules_list.append(f"  - GEOSITE,steam@cn,{t_games}")
         rules_list.append(f"  - GEOSITE,epicgames,{t_games}")
@@ -942,6 +1100,19 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
 
     final_outbounds = group_outbounds + outbounds
 
+    valid_sb_tags = set([o["tag"] for o in final_outbounds])
+
+    def safe_sb_target(t, default="PROXY"):
+        if not t:
+            return default
+        if t in ["DIRECT", "direct"]:
+            return "direct"
+        if t in ["REJECT", "block"]:
+            return "block"
+        if t in valid_sb_tags:
+            return t
+        return default
+
     # Route rules
     route_rules = [
         {"action": "sniff"},
@@ -960,7 +1131,8 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
             parts = [p.strip() for p in line.split(",")]
             if len(parts) >= 3:
                 rtype, rval, rtarget = parts[0].upper(), parts[1], parts[2]
-                target_out = "direct" if rtarget.upper() == "DIRECT" else ("block" if rtarget.upper() == "REJECT" else "PROXY")
+                target_out = "direct" if rtarget.upper() == "DIRECT" else ("block" if rtarget.upper() == "REJECT" else rtarget)
+                target_out = safe_sb_target(target_out, "PROXY")
                 if rtype in ["DOMAIN-SUFFIX", "DOMAIN"]:
                     route_rules.append({"domain_suffix": [rval], "outbound": target_out})
                 elif rtype in ["DOMAIN-KEYWORD"]:
@@ -1001,60 +1173,55 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
 
     # 5. AI Services
     if rules_cfg.get("proxy_ai"):
-        t_ai = rules_cfg.get("target_ai") or "PROXY"
-        target_out = "direct" if t_ai == "DIRECT" else "PROXY"
+        t_ai = safe_sb_target(rules_cfg.get("target_ai"), "PROXY")
         route_rules.append({
             "domain_suffix": [
                 "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
                 "anthropic.com", "claude.ai", "gemini.google.com", "copilot.microsoft.com"
             ],
-            "outbound": target_out
+            "outbound": t_ai
         })
 
     # 6. Telegram
     if rules_cfg.get("proxy_tg"):
-        t_tg = rules_cfg.get("target_tg") or "PROXY"
-        target_out = "direct" if t_tg == "DIRECT" else "PROXY"
+        t_tg = safe_sb_target(rules_cfg.get("target_tg"), "PROXY")
         route_rules.append({
             "ip_cidr": [
                 "91.108.4.0/22", "91.108.8.0/22", "91.108.12.0/22", "91.108.16.0/22",
                 "91.108.56.0/22", "149.154.160.0/20", "149.154.164.0/22",
                 "149.154.168.0/22", "149.154.172.0/22"
             ],
-            "outbound": target_out
+            "outbound": t_tg
         })
 
     # 7. Media
     if rules_cfg.get("proxy_media"):
-        t_media = rules_cfg.get("target_media") or "PROXY"
-        target_out = "direct" if t_media == "DIRECT" else "PROXY"
+        t_media = safe_sb_target(rules_cfg.get("target_media"), "PROXY")
         route_rules.append({
             "domain_suffix": [
                 "youtube.com", "googlevideo.com", "netflix.com", "nflxvideo.net", "spotify.com"
             ],
-            "outbound": target_out
+            "outbound": t_media
         })
 
     # 8. Developer
     if rules_cfg.get("proxy_dev"):
-        t_dev = rules_cfg.get("target_dev") or "PROXY"
-        target_out = "direct" if t_dev == "DIRECT" else "PROXY"
+        t_dev = safe_sb_target(rules_cfg.get("target_dev"), "PROXY")
         route_rules.append({
             "domain_suffix": [
                 "github.com", "githubusercontent.com", "docker.com", "docker.io", "huggingface.co"
             ],
-            "outbound": target_out
+            "outbound": t_dev
         })
 
     # 9. Game platforms
     if rules_cfg.get("direct_games"):
-        t_games = rules_cfg.get("target_games") or "DIRECT"
-        target_out = "direct" if t_games == "DIRECT" else "PROXY"
+        t_games = safe_sb_target(rules_cfg.get("target_games"), "direct")
         route_rules.append({
             "domain_suffix": [
                 "steamserver.net", "steamcontent.com", "epicgames.com"
             ],
-            "outbound": target_out
+            "outbound": t_games
         })
 
     # 10. China Direct
@@ -2066,6 +2233,30 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "nodes": nodes})
             return
 
+        # Check if node has referencing subscription rules before deletion
+        if "/rules-check" in path and (path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")):
+            parts = path.rstrip("/").split("/")
+            idx = parts.index("rules-check")
+            node_id = parts[idx - 1]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT name FROM nodes WHERE id = ?", (node_id,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                self._send_json({"ok": False, "error": "节点不存在"}, 404)
+                return
+            node_name = row[0]
+            refs = get_rules_referencing_node(node_name)
+            self._send_json({
+                "ok": True,
+                "node_id": node_id,
+                "node_name": node_name,
+                "references": refs,
+                "has_references": len(refs) > 0
+            })
+            return
+
         if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
@@ -2233,6 +2424,12 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             conn.commit()
             conn.close()
             self._send_json({"ok": True, "msg": "订阅规则已保存生效"})
+            return
+
+        if path in ["/api/sub/rules/fix-dangling", "/api/node-mgr/sub/rules/fix-dangling"]:
+            fallback = body.get("fallback", "PROXY")
+            res = fix_all_dangling_rules(fallback)
+            self._send_json({"ok": True, "fixed_count": res["fixed"], "msg": f"已将 {res['fixed']} 条失效规则安全修复为 {fallback}"})
             return
 
         # Reset traffic baselines (calibrate to current)
@@ -2424,14 +2621,25 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        query = parse_qs(parsed.query)
         if path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/"):
             node_id = path.rstrip("/").split("/")[-1]
+            redirect_to = query.get("redirect_to", ["PROXY"])[0]
+
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
+            c.execute("SELECT name FROM nodes WHERE id = ?", (node_id,))
+            row = c.fetchone()
+            node_name = row[0] if row else ""
             c.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
             conn.commit()
             conn.close()
-            self._send_json({"ok": True})
+
+            redirected_count = 0
+            if node_name:
+                redirected_count = redirect_rules_for_node(node_name, redirect_to)
+
+            self._send_json({"ok": True, "redirected_count": redirected_count, "redirected_to": redirect_to})
             return
         self._send_json({"error": "not found"}, 404)
 

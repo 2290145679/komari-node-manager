@@ -628,6 +628,17 @@
 
         <!-- 可视化表格容器 -->
         <div id="ruleVisualContainer">
+          <!-- 失效规则报警提示横幅 -->
+          <div id="danglingRulesAlert" class="hidden p-3.5 mb-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div class="flex items-center gap-2">
+              <i data-lucide="alert-triangle" class="w-4 h-4 shrink-0 text-amber-500"></i>
+              <span>检测到有 <b id="danglingCountSpan" class="font-bold underline">0</b> 条分流规则的目标节点已失效（节点已被删除），已被系统自动安全兜底为 PROXY。</span>
+            </div>
+            <button type="button" onclick="fixAllDanglingRules()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0 active:scale-95 flex items-center justify-center gap-1">
+              <i data-lucide="wrench" class="w-3.5 h-3.5"></i> 一键重设为 PROXY
+            </button>
+          </div>
+
           <!-- 电脑端表格视图 -->
           <div class="desktop-table-view rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
             <table class="w-full text-left border-collapse">
@@ -1382,6 +1393,44 @@
     </div>
   </div>
 
+  <!-- Delete Node With Redirect Modal -->
+  <div id="deleteNodeRedirectModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
+    <div class="bg-white dark:bg-[#1a1a1a] rounded-t-3xl sm:rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 space-y-4">
+      <div class="w-10 h-1 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto sm:hidden -mt-1 mb-2"></div>
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-full bg-amber-500/10 text-amber-500 flex items-center justify-center shrink-0">
+          <i data-lucide="alert-triangle" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-sm text-slate-800 dark:text-slate-100">关联分流规则重定向</h3>
+          <p class="text-[11px] text-slate-400">检测到该节点正被以下分流规则引用为专属出站</p>
+        </div>
+      </div>
+
+      <div class="text-xs text-slate-600 dark:text-slate-300 space-y-2">
+        <p>即将删除的节点 <span id="delRedirectNodeName" class="font-bold text-rose-500"></span> 正被以下规则使用：</p>
+        <div id="delRedirectRulesList" class="max-h-36 overflow-y-auto p-2.5 rounded-xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-800 space-y-1.5 font-mono text-[11px]">
+        </div>
+      </div>
+
+      <div class="space-y-1.5">
+        <label class="block text-xs font-semibold text-slate-700 dark:text-slate-200">请选择这些规则重新指向的目标：</label>
+        <select id="delRedirectTargetSelect" class="w-full bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-semibold">
+        </select>
+        <p class="text-[11px] text-slate-400">确认删除后，系统会自动平滑更新上述规则，防止 FLClash/Clash 订阅解析报错。</p>
+      </div>
+
+      <div class="pt-2 flex items-center justify-end gap-2.5">
+        <button type="button" onclick="closeDeleteRedirectModal()" class="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          取消
+        </button>
+        <button type="button" onclick="confirmDeleteWithRedirect()" id="confirmDeleteRedirectBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold shadow-sm transition active:scale-95 flex items-center gap-1.5">
+          <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 确认删除并重定向
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- YAML Preview Modal (Bottom sheet on mobile) -->
   <div id="yamlPreviewModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4 hidden">
     <div class="bg-white dark:bg-[#1a1a1a] rounded-t-3xl sm:rounded-2xl max-w-3xl w-full p-4 sm:p-6 shadow-2xl border-t sm:border border-slate-200 dark:border-slate-800 space-y-3 sm:space-y-4 max-h-[85vh] flex flex-col">
@@ -1786,7 +1835,7 @@
       }
 
       if (!hasSelected && selectedTarget && !["PROXY", "DIRECT", "REJECT", "自动优选"].includes(selectedTarget)) {
-        html += `<optgroup label="已保存策略"><option value="${escapeHtml(selectedTarget)}" selected>🌐 节点: ${escapeHtml(selectedTarget)}</option></optgroup>`;
+        html += `<optgroup label="⚠️ 失效节点目标"><option value="${escapeHtml(selectedTarget)}" selected class="text-rose-500 font-bold">⚠️ 已删除节点: ${escapeHtml(selectedTarget)} (请重新选择)</option></optgroup>`;
       }
       return html;
     }
@@ -1955,6 +2004,27 @@
           sysKey: s.sysKey
         });
       });
+
+      // Check for dangling / deleted node targets
+      const activeNodeNames = new Set((currentNodes || []).map(n => n.name).filter(Boolean));
+      const validTargetsSet = new Set(["PROXY", "DIRECT", "REJECT", "自动优选", ...activeNodeNames]);
+      let danglingCount = 0;
+      allItems.forEach(item => {
+        if (item.target && !validTargetsSet.has(item.target) && !item.isFixedTarget) {
+          danglingCount++;
+        }
+      });
+
+      const alertEl = document.getElementById("danglingRulesAlert");
+      const countEl = document.getElementById("danglingCountSpan");
+      if (alertEl && countEl) {
+        if (danglingCount > 0) {
+          countEl.textContent = danglingCount;
+          alertEl.classList.remove("hidden");
+        } else {
+          alertEl.classList.add("hidden");
+        }
+      }
 
       // Update Tab Counts
       const countCustom = allItems.filter(i => i.category === "custom").length;
@@ -3615,16 +3685,125 @@
       }
     }
 
+    let pendingDeleteNodeId = null;
+
+    function openDeleteRedirectModal(id, nodeName, references) {
+      pendingDeleteNodeId = id;
+      document.getElementById("delRedirectNodeName").textContent = `「${nodeName}」`;
+
+      const listEl = document.getElementById("delRedirectRulesList");
+      listEl.innerHTML = references.map(r => `
+        <div class="flex items-center justify-between py-1 border-b border-slate-200/60 dark:border-slate-800/60 last:border-none">
+          <span class="text-slate-700 dark:text-slate-200 font-semibold">${escapeHtml(r.name)}</span>
+          <span class="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded font-mono">${r.type === 'preset' ? '常用预设' : '自定义分流'}</span>
+        </div>
+      `).join('');
+
+      // Populate redirection target select (exclude the node being deleted)
+      const sel = document.getElementById("delRedirectTargetSelect");
+      let optHtml = `
+        <option value="PROXY" selected>🚀 默认代理 (PROXY)（推荐）</option>
+        <option value="自动优选">⚡ 自动优选 (url-test)</option>
+        <option value="DIRECT">⚡ 走直连 (DIRECT)</option>
+      `;
+      if (currentNodes && currentNodes.length > 0) {
+        const otherNodes = currentNodes.filter(n => n.id != id && n.name !== nodeName);
+        if (otherNodes.length > 0) {
+          optHtml += `<optgroup label="重新指向其他在线节点">`;
+          otherNodes.forEach(n => {
+            optHtml += `<option value="${escapeHtml(n.name)}">🌐 节点: ${escapeHtml(n.name)}</option>`;
+          });
+          optHtml += `</optgroup>`;
+        }
+      }
+      sel.innerHTML = optHtml;
+
+      document.getElementById("deleteNodeRedirectModal").classList.remove("hidden");
+      lucide.createIcons();
+    }
+
+    function closeDeleteRedirectModal() {
+      pendingDeleteNodeId = null;
+      document.getElementById("deleteNodeRedirectModal").classList.add("hidden");
+    }
+
+    async function confirmDeleteWithRedirect() {
+      if (!pendingDeleteNodeId) return;
+      const target = document.getElementById("delRedirectTargetSelect").value || "PROXY";
+      const btn = document.getElementById("confirmDeleteRedirectBtn");
+      btn.disabled = true;
+      btn.innerHTML = `<span class="animate-spin inline-block w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full mr-1"></span> 处理中...`;
+
+      try {
+        const res = await fetch(`/api/node-mgr/nodes/${pendingDeleteNodeId}?redirect_to=${encodeURIComponent(target)}`, {
+          method: 'DELETE'
+        }).then(r => r.json());
+
+        if (res.ok) {
+          closeDeleteRedirectModal();
+          const rCount = res.redirected_count || 0;
+          if (rCount > 0) {
+            showToast(`节点已成功删除，关联的 ${rCount} 条分流规则已重新指向「${target}」！`, 'success');
+          } else {
+            showToast('节点已成功删除', 'success');
+          }
+          await loadData();
+          await loadSubRules();
+        } else {
+          showToast(res.error || "删除失败", 'error');
+        }
+      } catch (err) {
+        showToast("网络请求异常: " + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 确认删除并重定向`;
+        lucide.createIcons();
+      }
+    }
+
     async function deleteNode(id) {
-      if (!confirm("确定要删除这个节点吗？")) return;
+      const node = (currentNodes || []).find(n => n.id == id);
+      const nodeName = node ? node.name : `节点 #${id}`;
+
+      try {
+        const checkRes = await fetch(`/api/node-mgr/nodes/${id}/rules-check`).then(r => r.json());
+        if (checkRes.ok && checkRes.has_references) {
+          openDeleteRedirectModal(id, checkRes.node_name, checkRes.references);
+          return;
+        }
+      } catch (e) {
+        console.warn("检查规则依赖失败，回退为常规确认:", e);
+      }
+
+      if (!confirm(`确定要删除节点「${nodeName}」吗？`)) return;
       try {
         const res = await fetch(`/api/node-mgr/nodes/${id}`, { method: 'DELETE' }).then(r => r.json());
         if (res.ok) {
-          showToast('节点已删除', 'success');
+          showToast('节点已成功删除', 'success');
           loadData();
+          loadSubRules();
         }
       } catch (err) {
         showToast("删除失败: " + err.message, 'error');
+      }
+    }
+
+    async function fixAllDanglingRules() {
+      if (!confirm("确定要将所有指向已删除节点的规则一键重置为默认代理 (PROXY) 吗？")) return;
+      try {
+        const res = await fetch("/api/node-mgr/sub/rules/fix-dangling", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fallback: "PROXY" })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(res.msg || "已成功修复失效规则！", "success");
+          await loadSubRules();
+        } else {
+          showToast(res.error || "修复失败", "error");
+        }
+      } catch (e) {
+        showToast("请求失败: " + e.message, "error");
       }
     }
 
