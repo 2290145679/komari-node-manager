@@ -165,7 +165,7 @@
         gap: 12px !important;
       }
       #nodeCardsContainer > div:nth-child(2),
-      #nodeCardsContainer .rounded-2xl {
+      .mobile-node-list {
         background: transparent !important;
         border: none !important;
         box-shadow: none !important;
@@ -175,7 +175,7 @@
         gap: 12px !important;
       }
       #nodeCardsContainer > div:nth-child(2) > div,
-      #nodeCardsContainer .cursor-pointer {
+      .mobile-node-item {
         background-color: var(--km-card, #ffffff) !important;
         border: 1px solid var(--km-border, #e2e8f0) !important;
         border-radius: 16px !important;
@@ -188,14 +188,14 @@
         margin-bottom: 0 !important;
       }
       html.dark #nodeCardsContainer > div:nth-child(2) > div,
-      html.dark #nodeCardsContainer .cursor-pointer {
+      html.dark .mobile-node-item {
         background-color: #18181b !important;
         border-color: #27272a !important;
       }
 
       /* 7. 节点卡片内部信息流：协议标签、名称与服务器参数 */
       #nodeCardsContainer > div:nth-child(2) > div > div:first-child,
-      #nodeCardsContainer .cursor-pointer > div:first-child {
+      .mobile-node-item > div:first-child {
         display: flex !important;
         flex-direction: column !important;
         align-items: flex-start !important;
@@ -204,14 +204,14 @@
         min-width: 0 !important;
       }
       #nodeCardsContainer > div:nth-child(2) > div > div:first-child > span,
-      #nodeCardsContainer .cursor-pointer > div:first-child > span {
+      .mobile-node-item > div:first-child > span {
         font-size: 14px !important;
         padding: 3px 8px !important;
         border-radius: 6px !important;
         align-self: flex-start !important;
       }
       #nodeCardsContainer > div:nth-child(2) > div > div:first-child > div,
-      #nodeCardsContainer .cursor-pointer > div:first-child > div {
+      .mobile-node-item > div:first-child > div {
         width: 100% !important;
         min-width: 0 !important;
         display: flex !important;
@@ -219,7 +219,7 @@
         gap: 6px !important;
       }
       #nodeCardsContainer > div:nth-child(2) > div > div:first-child > div > div:first-child,
-      #nodeCardsContainer .cursor-pointer > div:first-child > div > div:first-child {
+      .mobile-node-item > div:first-child > div > div:first-child {
         font-size: 15px !important;
         font-weight: 700 !important;
         line-height: 1.4 !important;
@@ -232,7 +232,7 @@
         overflow-wrap: anywhere !important;
       }
       #nodeCardsContainer > div:nth-child(2) > div > div:first-child > div > div:last-child,
-      #nodeCardsContainer .cursor-pointer > div:first-child > div > div:last-child {
+      .mobile-node-item > div:first-child > div > div:last-child {
         font-size: 14px !important;
         line-height: 1.4 !important;
         color: #64748b !important;
@@ -247,21 +247,24 @@
 
       /* 8. 节点卡片操作栏与触控目标（触控区域 ≥ 44px） */
       #nodeCardsContainer > div:nth-child(2) > div > div:last-child,
-      #nodeCardsContainer .cursor-pointer > div:last-child {
+      .mobile-node-item > div:last-child {
         display: flex !important;
         align-items: center !important;
-        justify-content: space-between !important;
+        justify-content: flex-end !important;
         width: 100% !important;
         padding-top: 10px !important;
         border-top: 1px solid var(--km-border, #f1f5f9) !important;
         gap: 12px !important;
       }
       html.dark #nodeCardsContainer > div:nth-child(2) > div > div:last-child,
-      html.dark #nodeCardsContainer .cursor-pointer > div:last-child {
+      html.dark .mobile-node-item > div:last-child {
         border-top-color: #27272a !important;
       }
 
-      button[id^="mobilePingBtn-"] {
+      /* 测速按钮居左 */
+      #nodeCardsContainer > div:nth-child(2) > div > div:last-child > button[id^="mobilePingBtn-"],
+      .mobile-node-item > div:last-child > button[id^="mobilePingBtn-"] {
+        margin-right: auto !important;
         min-height: 44px !important;
         min-width: 68px !important;
         padding: 0 16px !important;
@@ -271,14 +274,83 @@
         justify-content: center !important;
         border-radius: 12px !important;
       }
+
+      /* 还原并加固 iOS 开关样式，杜绝背景被意外覆盖 */
       button[role="switch"] {
-        min-height: 44px !important;
-        min-width: 44px !important;
+        width: 38px !important;
+        height: 22px !important;
+        min-width: 38px !important;
+        max-width: 38px !important;
+        min-height: 22px !important;
+        max-height: 22px !important;
+        border-radius: 9999px !important;
+        padding: 0 !important;
+        border: 2px solid transparent !important;
+        position: relative !important;
         display: inline-flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        position: relative !important;
+        cursor: pointer !important;
+        box-shadow: none !important;
+        background-color: #10b981 !important;
       }
+      button[role="switch"][aria-checked="true"] {
+        background-color: #10b981 !important;
+      }
+      button[role="switch"][aria-checked="false"] {
+        background-color: #cbd5e1 !important;
+      }
+      html.dark button[role="switch"][aria-checked="false"] {
+        background-color: #3f3f46 !important;
+      }
+
+      /* 开关内的滑动圆钮 */
+      button[role="switch"] > span {
+        width: 18px !important;
+        height: 18px !important;
+        min-width: 18px !important;
+        max-width: 18px !important;
+        min-height: 18px !important;
+        max-height: 18px !important;
+        border-radius: 9999px !important;
+        background-color: #ffffff !important;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
+        display: inline-block !important;
+        transition: transform 0.2s ease-in-out !important;
+        pointer-events: none !important;
+      }
+      button[role="switch"][aria-checked="true"] > span {
+        transform: translateX(16px) !important;
+      }
+      button[role="switch"][aria-checked="false"] > span {
+        transform: translateX(0px) !important;
+      }
+
+      /* 触控热区扩展至 44px × 44px (满足触控标准且不破坏胶囊视觉) */
+      button[role="switch"]::after {
+        content: "" !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        width: 48px !important;
+        height: 44px !important;
+        min-width: 48px !important;
+        min-height: 44px !important;
+        background: transparent !important;
+        border: none !important;
+      }
+
+      /* 右侧箭头图标样式优化 */
+      .mobile-node-item > div:last-child > [data-lucide="chevron-right"],
+      .mobile-node-item > div:last-child > svg,
+      #nodeCardsContainer > div:nth-child(2) > div > div:last-child > [data-lucide="chevron-right"],
+      #nodeCardsContainer > div:nth-child(2) > div > div:last-child > svg {
+        width: 18px !important;
+        height: 18px !important;
+        color: #94a3b8 !important;
+        flex-shrink: 0 !important;
+      }
+
       #mobileBottomNav button {
         min-height: 44px !important;
         min-width: 44px !important;
@@ -2983,7 +3055,7 @@
         mobileContainer.appendChild(listHeader);
 
         mobileInsetGroup = document.createElement('div');
-        mobileInsetGroup.className = "rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200/80 dark:border-zinc-800/80 shadow-xs divide-y divide-slate-100 dark:divide-zinc-800/60 overflow-hidden";
+        mobileInsetGroup.className = "mobile-node-list rounded-2xl bg-white dark:bg-[#18181b] border border-slate-200/80 dark:border-zinc-800/80 shadow-xs divide-y divide-slate-100 dark:divide-zinc-800/60 overflow-hidden";
         mobileContainer.appendChild(mobileInsetGroup);
       }
 
@@ -3069,7 +3141,7 @@
           // 2. Mobile Responsive Row (iOS Inset Grouped Style)
           if (mobileInsetGroup) {
             const row = document.createElement('div');
-            row.className = "p-3 sm:p-3.5 flex items-center justify-between gap-3 active:bg-slate-50 dark:active:bg-zinc-800/50 transition cursor-pointer select-none";
+            row.className = "mobile-node-item p-3 sm:p-3.5 flex items-center justify-between gap-3 active:bg-slate-50 dark:active:bg-zinc-800/50 transition cursor-pointer select-none";
             row.onclick = () => openActionSheet(node.id);
 
             let protoShort = proto.toUpperCase();
