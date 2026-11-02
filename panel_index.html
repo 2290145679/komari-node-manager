@@ -111,12 +111,15 @@
         font-size: 14px !important;
       }
 
-      /* 4. 统计卡片与网格单列纵向排列（间距至少 12px） */
-      .grid.grid-cols-2,
-      .grid.grid-cols-3,
-      .grid.grid-cols-4 {
+      /* 4. 统计卡片单列纵向排列（间距至少 12px），不影响弹窗内 2x2 网格 */
+      #viewNodes > .grid,
+      #viewTraffic > .grid {
         grid-template-columns: 1fr !important;
         gap: 12px !important;
+      }
+      #bottomActionSheet .grid.grid-cols-2 {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+        gap: 10px !important;
       }
 
       /* 5. 统一订阅栏移动端重排与触控优化 */
@@ -1749,82 +1752,83 @@
   <!-- iOS Native Bottom Action Sheet (Surge / Apple Style)      -->
   <!-- ======================================================== -->
   <div id="bottomActionSheetBackdrop" onclick="closeActionSheet()" class="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 transition-opacity duration-300 opacity-0 pointer-events-none"></div>
-  <div id="bottomActionSheet" class="fixed bottom-0 inset-x-0 z-50 bg-white dark:bg-[#1c1c1e] rounded-t-[28px] shadow-2xl border-t border-slate-200/80 dark:border-zinc-800/80 transition-transform duration-300 transform translate-y-full max-w-lg mx-auto pb-safe">
-    <!-- Drag Handle -->
-    <div class="w-10 h-1 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mt-3 mb-3"></div>
-
-    <!-- Sheet Header -->
-    <div class="px-5 pb-3.5 border-b border-slate-100 dark:border-zinc-800/60">
-      <div class="flex items-start justify-between gap-3">
+  <div id="bottomActionSheet" class="fixed bottom-0 inset-x-0 z-50 bg-white dark:bg-[#1c1c1e] rounded-t-[28px] shadow-2xl border-t border-slate-200/80 dark:border-zinc-800/80 transition-transform duration-300 transform translate-y-full max-w-lg mx-auto max-h-[85vh] max-h-[85dvh] flex flex-col overflow-hidden pb-safe">
+    <!-- Sheet Header (Sticky Top / Never Pushed Off Screen) -->
+    <div class="shrink-0 bg-white dark:bg-[#1c1c1e] pt-3 pb-3 px-5 border-b border-slate-100 dark:border-zinc-800/60 rounded-t-[28px] z-10">
+      <div class="w-10 h-1 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3"></div>
+      <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
-            <span id="sheetProtoBadge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400">VLESS</span>
+            <span id="sheetProtoBadge" class="text-xs font-extrabold px-2 py-0.5 rounded-md uppercase tracking-wider bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-400 shrink-0">VLESS</span>
             <h3 id="sheetNodeName" class="font-bold text-base text-slate-900 dark:text-white truncate">节点名称</h3>
           </div>
           <p id="sheetNodeSub" class="text-xs text-slate-500 dark:text-zinc-400 mt-1 truncate">自建服务器 · 端口 8443</p>
         </div>
-        <button onclick="closeActionSheet()" class="p-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 transition active:scale-95">
-          <i data-lucide="x" class="w-4 h-4"></i>
+        <button onclick="closeActionSheet()" class="w-9 h-9 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 dark:text-zinc-400 hover:bg-slate-200 dark:hover:bg-zinc-700 flex items-center justify-center transition active:scale-95 shrink-0" title="关闭">
+          <i data-lucide="x" class="w-5 h-5"></i>
         </button>
       </div>
     </div>
 
-    <!-- 4 Big Thumb Action Buttons (2x2 Grid) -->
-    <div class="p-4 grid grid-cols-2 gap-2.5">
-      <button onclick="if(activeSheetNode){ copyNodeLinkById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
-          <i data-lucide="copy" class="w-5 h-5"></i>
-        </div>
-        <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">复制链接</span>
-      </button>
+    <!-- Scrollable Body Content -->
+    <div class="overflow-y-auto flex-1 custom-scrollbar overscroll-contain">
+      <!-- 4 Big Thumb Action Buttons (2x2 Grid) -->
+      <div class="p-4 grid grid-cols-2 gap-2.5">
+        <button onclick="if(activeSheetNode){ copyNodeLinkById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+          <div class="w-10 h-10 rounded-full bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="copy" class="w-5 h-5"></i>
+          </div>
+          <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">复制链接</span>
+        </button>
 
-      <button onclick="if(activeSheetNode){ showQrModalById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
-          <i data-lucide="qr-code" class="w-5 h-5"></i>
-        </div>
-        <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">二维码 / 扫码</span>
-      </button>
+        <button onclick="if(activeSheetNode){ showQrModalById(activeSheetNode.id); closeActionSheet(); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-purple-50 dark:hover:bg-purple-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+          <div class="w-10 h-10 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+            <i data-lucide="qr-code" class="w-5 h-5"></i>
+          </div>
+          <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">二维码 / 扫码</span>
+        </button>
 
-      <button onclick="if(activeSheetNode){ testNodePing(activeSheetNode.id); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-          <i data-lucide="zap" class="w-5 h-5"></i>
-        </div>
-        <div class="flex items-center gap-1">
-          <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">单点测速</span>
-          <span id="sheetPingValue" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold"></span>
-        </div>
-      </button>
+        <button onclick="if(activeSheetNode){ testNodePing(activeSheetNode.id); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+          <div class="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+            <i data-lucide="zap" class="w-5 h-5"></i>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-xs font-semibold text-slate-800 dark:text-slate-100">单点测速</span>
+            <span id="sheetPingValue" class="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold"></span>
+          </div>
+        </button>
 
-      <button onclick="if(activeSheetNode){ const nid = activeSheetNode.id; closeActionSheet(); deleteNode(nid); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
-        <div class="w-10 h-10 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
-          <i data-lucide="trash-2" class="w-5 h-5"></i>
-        </div>
-        <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">删除节点</span>
-      </button>
-    </div>
+        <button onclick="if(activeSheetNode){ const nid = activeSheetNode.id; closeActionSheet(); deleteNode(nid); }" class="flex flex-col items-center justify-center gap-2 p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-900/80 hover:bg-rose-50 dark:hover:bg-rose-950/40 border border-slate-200/60 dark:border-zinc-800 active:scale-95 transition">
+          <div class="w-10 h-10 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+            <i data-lucide="trash-2" class="w-5 h-5"></i>
+          </div>
+          <span class="text-xs font-semibold text-rose-600 dark:text-rose-400">删除节点</span>
+        </button>
+      </div>
 
-    <!-- IPv6 Clone Action Bar (Shown when server supports IPv6 and node is not already IPv6) -->
-    <div id="sheetIpv6Bar" class="px-4 pb-2.5 hidden">
-      <button onclick="createIpv6CloneFromSheet()" class="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm shadow-purple-500/20 active:scale-98 transition">
-        <i data-lucide="network" class="w-4 h-4"></i>
-        <span>一键衍生创建带 [IPv6] 后缀节点</span>
-      </button>
-    </div>
+      <!-- IPv6 Clone Action Bar (Shown when server supports IPv6 and node is not already IPv6) -->
+      <div id="sheetIpv6Bar" class="px-4 pb-2.5 hidden">
+        <button onclick="createIpv6CloneFromSheet()" class="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-500 hover:from-purple-700 hover:to-pink-600 text-white text-xs font-semibold flex items-center justify-center gap-2 shadow-sm shadow-purple-500/20 active:scale-98 transition">
+          <i data-lucide="network" class="w-4 h-4"></i>
+          <span>一键衍生创建带 [IPv6] 后缀节点</span>
+        </button>
+      </div>
 
-    <!-- Node Specs Group -->
-    <div class="px-4 pb-4">
-      <div class="rounded-xl bg-slate-50 dark:bg-zinc-900/60 p-3 text-xs font-mono space-y-1.5 border border-slate-200/60 dark:border-zinc-800">
-        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
-          <span>节点端口</span>
-          <span id="sheetPort" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
-        </div>
-        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
-          <span>SNI / 伪装域名</span>
-          <span id="sheetSni" class="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">-</span>
-        </div>
-        <div class="flex justify-between text-slate-500 dark:text-zinc-400">
-          <span>服务器 IP</span>
-          <span id="sheetIp" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
+      <!-- Node Specs Group -->
+      <div class="px-4 pb-4">
+        <div class="rounded-xl bg-slate-50 dark:bg-zinc-900/60 p-3 text-xs font-mono space-y-1.5 border border-slate-200/60 dark:border-zinc-800">
+          <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+            <span>节点端口</span>
+            <span id="sheetPort" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
+          </div>
+          <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+            <span>SNI / 伪装域名</span>
+            <span id="sheetSni" class="text-slate-800 dark:text-slate-200 font-semibold truncate max-w-[200px]">-</span>
+          </div>
+          <div class="flex justify-between text-slate-500 dark:text-zinc-400">
+            <span>服务器 IP</span>
+            <span id="sheetIp" class="text-slate-800 dark:text-slate-200 font-semibold">-</span>
+          </div>
         </div>
       </div>
     </div>
