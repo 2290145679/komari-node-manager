@@ -3156,6 +3156,9 @@
                     <i data-lucide="network" class="w-4 h-4 text-purple-500"></i>
                   </button>
                   ` : ''}
+                  <button onclick="testNodePing(${node.id})" id="desktopPingBtn-${node.id}" class="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-slate-800 rounded-lg transition" title="真实握手测速">
+                    <i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i>
+                  </button>
                   <button onclick="copyNodeLinkById(${node.id})" class="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded-lg transition" title="复制链接">
                     <i data-lucide="copy" class="w-4 h-4"></i>
                   </button>
@@ -3303,44 +3306,68 @@
       if (!node) return;
 
       const mobileBtn = document.getElementById(`mobilePingBtn-${id}`);
+      const desktopBtn = document.getElementById(`desktopPingBtn-${id}`);
       const sheetPingVal = document.getElementById('sheetPingValue');
 
       if (mobileBtn) {
-        mobileBtn.innerHTML = `⟳ 测速`;
+        mobileBtn.innerHTML = `⟳ 握手中...`;
         mobileBtn.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-amber-500/10 text-amber-600 animate-pulse";
       }
+      if (desktopBtn) {
+        desktopBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 text-amber-500 animate-spin"></i>`;
+        if (window.lucide) { try { lucide.createIcons({ root: desktopBtn }); } catch(e){} }
+      }
       if (sheetPingVal) {
-        sheetPingVal.textContent = '测速中...';
+        sheetPingVal.textContent = '真实握手中...';
       }
 
-      const t0 = performance.now();
       try {
-        const targetUrl = `/api/node-mgr/servers?_t=${Date.now()}`;
-        await fetch(targetUrl, { cache: 'no-store' });
-        const t1 = performance.now();
-        const latency = Math.max(12, Math.round(t1 - t0));
-        node.ping_ms = latency;
+        const res = await fetch(`/api/node-mgr/nodes/${id}/ping?_t=${Date.now()}`).then(r => r.json());
+        if (res.ok && res.latency_ms !== null) {
+          const latency = res.latency_ms;
+          const hType = res.handshake_type || 'TCP';
+          node.ping_ms = latency;
 
-        if (mobileBtn) {
-          mobileBtn.textContent = `${latency}ms`;
-          const colorClass = latency < 120 
+          const colorClass = latency < 100 
             ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400' 
-            : latency < 280 
+            : latency < 250 
               ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' 
               : 'bg-rose-500/10 text-rose-600 dark:text-rose-400';
-          mobileBtn.className = `px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition active:scale-90 ${colorClass}`;
+
+          if (mobileBtn) {
+            mobileBtn.textContent = `${latency}ms`;
+            mobileBtn.className = `px-2 py-0.5 rounded-full text-[10px] font-mono font-bold transition active:scale-90 ${colorClass}`;
+          }
+          if (desktopBtn) {
+            desktopBtn.innerHTML = `<span class="px-1.5 py-0.5 rounded text-[11px] font-mono font-bold ${colorClass}">${latency}ms</span>`;
+          }
+          if (sheetPingVal) {
+            sheetPingVal.textContent = `${latency} ms (${hType})`;
+          }
+          showToast(`【${node.name}】真实 ${hType} 握手延时: ${latency}ms`, 'success');
+        } else {
+          const errMsg = res.error || '连接失败';
+          if (mobileBtn) {
+            mobileBtn.textContent = '超时';
+            mobileBtn.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-rose-500/10 text-rose-600";
+          }
+          if (desktopBtn) {
+            desktopBtn.innerHTML = `<span class="px-1.5 py-0.5 rounded text-[11px] font-mono text-rose-500" title="${escapeHtml(errMsg)}">超时</span>`;
+          }
+          if (sheetPingVal) sheetPingVal.textContent = errMsg;
+          showToast(`【${node.name}】握手失败: ${errMsg}`, 'error');
         }
-        if (sheetPingVal) {
-          sheetPingVal.textContent = `${latency} ms`;
-        }
-        showToast(`【${node.name}】响应延时: ${latency}ms`, 'success');
       } catch (err) {
         if (mobileBtn) {
           mobileBtn.textContent = '异常';
           mobileBtn.className = "px-2 py-0.5 rounded-full text-[10px] font-mono font-medium bg-rose-500/10 text-rose-600";
         }
-        if (sheetPingVal) sheetPingVal.textContent = '异常';
-        showToast(`测速超时: ${err.message}`, 'error');
+        if (desktopBtn) {
+          desktopBtn.innerHTML = `<i data-lucide="zap" class="w-4 h-4 text-emerald-500"></i>`;
+          if (window.lucide) { try { lucide.createIcons({ root: desktopBtn }); } catch(e){} }
+        }
+        if (sheetPingVal) sheetPingVal.textContent = '测速异常';
+        showToast(`测速请求异常: ${err.message}`, 'error');
       }
     }
 

@@ -13,6 +13,7 @@ import urllib.request
 import concurrent.futures
 import threading
 import socket
+import ssl
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -384,6 +385,86 @@ def fix_all_dangling_rules(default_fallback="PROXY"):
 
     conn.close()
     return {"fixed": fixed_count}
+
+def ping_node_handshake(server_ip, port, protocol="", sni="", timeout=3.5):
+    """
+    真实发起网络握手检测节点连通性与延时
+    1. 自适应解析 IPv4 与 IPv6 (socket.getaddrinfo)
+    2. 发起真实 TCP 三次握手 (SYN -> SYN-ACK -> ACK)
+    3. 若为 TLS/Reality/Trojan，尝试发起真实 TLS 握手 (ClientHello -> ServerHello)
+    """
+    if not server_ip or not port:
+        return {"success": False, "latency_ms": None, "error": "缺少服务器IP或端口"}
+
+    host = str(server_ip).strip("[] \t\r\n")
+    try:
+        port = int(port)
+    except Exception:
+        return {"success": False, "latency_ms": None, "error": "无效的端口号"}
+
+    t0 = time.perf_counter()
+    sock = None
+    try:
+        infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not infos:
+            return {"success": False, "latency_ms": None, "error": "无法解析目标主机地址"}
+
+        family, socktype, proto_num, canonname, sockaddr = infos[0]
+        sock = socket.socket(family, socktype, proto_num)
+        sock.settimeout(timeout)
+
+        # 真实 TCP 三次握手
+        sock.connect(sockaddr)
+        t_tcp = round((time.perf_counter() - t0) * 1000)
+
+        latency = t_tcp
+        handshake_type = "TCP"
+
+        # 判断是否可继续进行 TLS 握手 (VLESS-Reality / Trojan / TLS)
+        has_tls = any(k in str(protocol).lower() for k in ["tls", "reality", "trojan"]) or bool(sni)
+        if has_tls and sni:
+            try:
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                rem_timeout = max(1.5, timeout - (t_tcp / 1000.0))
+                sock.settimeout(rem_timeout)
+                ssock = ctx.wrap_socket(sock, server_hostname=sni)
+                t_tls = round((time.perf_counter() - t0) * 1000)
+                latency = t_tls
+                handshake_type = "TLS"
+                ssock.close()
+                sock = None
+            except Exception:
+                handshake_type = "TCP"
+
+        if sock:
+            try: sock.close()
+            except Exception: pass
+
+        return {
+            "success": True,
+            "latency_ms": max(1, latency),
+            "handshake_type": handshake_type
+        }
+    except socket.timeout:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        return {"success": False, "latency_ms": None, "error": "连接超时 (节点离线或端口被阻断)"}
+    except ConnectionRefusedError:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        return {"success": False, "latency_ms": None, "error": "连接被拒绝 (节点核心未运行或端口未监听)"}
+    except Exception as e:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        err_msg = str(e)
+        if "Network is unreachable" in err_msg or "101" in err_msg:
+            err_msg = "网络不可达 (IPv6路由缺失或网络阻断)"
+        return {"success": False, "latency_ms": None, "error": err_msg}
 
 def get_reality_keypair():
     try:
@@ -2256,6 +2337,60 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 "references": refs,
                 "has_references": len(refs) > 0
             })
+            return
+
+        # Real TCP/TLS handshake ping endpoint for single node
+        if "/ping" in path and (path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")):
+            parts = path.rstrip("/").split("/")
+            idx = parts.index("ping")
+            node_id = parts[idx - 1]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE id = ?", (node_id,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                self._send_json({"ok": False, "error": "节点不存在"}, 404)
+                return
+
+            nid, name, server_ip, port, proto, sni = row
+            result = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
+            self._send_json({
+                "ok": result["success"],
+                "node_id": nid,
+                "node_name": name,
+                "latency_ms": result["latency_ms"],
+                "handshake_type": result.get("handshake_type", "TCP"),
+                "error": result.get("error", None)
+            })
+            return
+
+        # Real TCP/TLS handshake ping endpoint for all enabled nodes (concurrent)
+        if path in ["/api/nodes/ping-all", "/api/node-mgr/nodes/ping-all"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
+            rows = c.fetchall()
+            conn.close()
+
+            results = {}
+            def _check(r):
+                nid, name, server_ip, port, proto, sni = r
+                res = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
+                return nid, {
+                    "ok": res["success"],
+                    "node_id": nid,
+                    "node_name": name,
+                    "latency_ms": res["latency_ms"],
+                    "handshake_type": res.get("handshake_type", "TCP"),
+                    "error": res.get("error", None)
+                }
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                for nid, data in executor.map(_check, rows):
+                    results[nid] = data
+
+            self._send_json({"ok": True, "results": results})
             return
 
         if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":
