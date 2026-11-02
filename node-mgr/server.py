@@ -179,7 +179,7 @@ def init_db():
         ("server_expiration", "服务器到期续费提醒", "core", "按到期时间提前 30/15/7/3/1 天阶梯预警，防止机器被回收", 1, json.dumps({"remind_days": [30, 15, 7, 3, 1]})),
         ("traffic_surge", "突发大流量激增 / 盗刷告警", "monitor", "10分钟突发流量 > 5GB 或流速持续 > 100Mbps 异常大流量拦截预警", 1, json.dumps({"burst_mbps": 100, "cooldown_sec": 3600})),
         ("resource_exhaustion", "物理硬件资源枯竭告警", "monitor", "CPU / 内存 / 磁盘使用率持续超过 90% 时预警，防止 OOM 崩溃或日志爆盘", 1, json.dumps({"cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "cooldown_sec": 1800})),
-        ("network_block", "节点网络恶化 / GFW 阻断疑似预警", "monitor", "丢包率持续 > 70% 或节点代理端口从外部无法连通时预警", 1, json.dumps({"loss_pct": 70, "cooldown_sec": 3600})),
+        ("network_block", "TCP 阻断 / GFW 被墙离线监测", "monitor", "通过真实 TCP/TLS 握手定期实测各节点端口连通性，当端口无法连通 (疑似被墙) 时即时告警，恢复时推送解除通知", 1, json.dumps({"fail_threshold": 2, "notify_on_recovery": True})),
         ("cert_reality_check", "Reality 伪装域名 / 证书失效预警", "monitor", "Reality 伪装 SNI 域名握手异常或 SSL 证书到期前 7 天预警", 1, json.dumps({"remind_days": 7, "cooldown_sec": 86400})),
         ("admin_login", "管理面板安全登录提醒", "security", "管理员账号从新设备 / 异地 IP 登录时即时推送安全日志", 1, json.dumps({"notify_all_login": True})),
         ("daily_report", "每日定时运维简报", "report", "每天固定时间推送全网运行状态、在线率、当日总消耗与即将到期概览", 1, json.dumps({"report_time": "09:00"}))
@@ -189,6 +189,14 @@ def init_db():
             INSERT OR IGNORE INTO notification_rules (rule_key, name, category, description, enabled, config)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (r_key, r_name, r_cat, r_desc, r_en, r_cfg))
+
+    # Update title and description for network_block to reflect TCP block detection
+    c.execute("""
+        UPDATE notification_rules 
+        SET name = 'TCP 阻断 / GFW 被墙离线监测',
+            description = '通过真实 TCP/TLS 握手定期实测各节点端口连通性，当端口无法连通 (疑似被墙) 时即时告警，恢复时推送解除通知'
+        WHERE rule_key = 'network_block'
+    """)
 
     # Ensure default subscription
     c.execute("SELECT token FROM subscriptions LIMIT 1")
@@ -2134,6 +2142,74 @@ def check_and_notify_events():
                 level="report",
                 rule_key="daily_report"
             )
+
+    # F. Check Node TCP Connectivity / GFW Block (rule: network_block)
+    if "network_block" in enabled_rules:
+        rule_cfg = enabled_rules.get("network_block") or {}
+        fail_threshold = int(rule_cfg.get("fail_threshold", 2))
+        try:
+            c_n.execute("SELECT id, name, server_name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
+            nodes_to_check = c_n.fetchall()
+            if nodes_to_check:
+                def check_single_node(n_row):
+                    nid, nname, sname, ip, port, proto, sni = n_row
+                    res = ping_node_handshake(ip, port, protocol=proto, sni=sni, timeout=3.5)
+                    return n_row, res
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(nodes_to_check))) as pool:
+                    results = list(pool.map(check_single_node, nodes_to_check))
+
+                for (nid, nname, sname, ip, port, proto, sni), res in results:
+                    last_tcp_st = get_state(f"node_tcp_st:{nid}")
+                    fail_cnt = int(get_state(f"node_tcp_fail:{nid}", "0"))
+
+                    if not res.get("success"):
+                        fail_cnt += 1
+                        set_state(f"node_tcp_fail:{nid}", str(fail_cnt))
+                        if fail_cnt >= fail_threshold and last_tcp_st != "blocked":
+                            set_state(f"node_tcp_st:{nid}", "blocked")
+                            set_state(f"node_tcp_block_time:{nid}", str(now))
+                            err_msg = res.get("error") or "连接超时 (Connection timed out)"
+                            dispatch_notification(
+                                title="🚫 节点 TCP 疑似被墙 / 无法连通告警",
+                                message=(
+                                    f"<b>节点名称</b>: <code>{nname}</code>\n"
+                                    f"<b>归属主机</b>: <code>{sname}</code>\n"
+                                    f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
+                                    f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
+                                    f"<b>检测结果</b>: <b>TCP 握手失败</b> ({err_msg})\n"
+                                    f"<b>判定说明</b>: 端口连续 {fail_cnt} 次握手失败，疑似该 IP 或端口已被 GFW 阻断/被墙。\n"
+                                    f"<i>建议检查服务器运行状态或更换监听端口。</i>"
+                                ),
+                                level="danger",
+                                rule_key="network_block"
+                            )
+                    else:
+                        set_state(f"node_tcp_fail:{nid}", "0")
+                        if last_tcp_st == "blocked":
+                            set_state(f"node_tcp_st:{nid}", "ok")
+                            block_start = int(get_state(f"node_tcp_block_time:{nid}", str(now)))
+                            dur_s = max(0, now - block_start)
+                            dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
+                            lat = res.get("latency_ms", 0)
+                            dispatch_notification(
+                                title="🟢 节点 TCP 阻断已恢复解除",
+                                message=(
+                                    f"<b>节点名称</b>: <code>{nname}</code>\n"
+                                    f"<b>归属主机</b>: <code>{sname}</code>\n"
+                                    f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
+                                    f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
+                                    f"<b>恢复状态</b>: <b>TCP 握手成功</b> (延时: <code>{lat} ms</code>)\n"
+                                    f"<b>阻断持续时长</b>: {dur_txt}\n"
+                                    f"<i>该节点已恢复正常访问与转发能力。</i>"
+                                ),
+                                level="success",
+                                rule_key="network_block"
+                            )
+                        elif not last_tcp_st:
+                            set_state(f"node_tcp_st:{nid}", "ok")
+        except Exception as e:
+            print("Check node TCP block error:", e)
 
     conn_n.close()
 
