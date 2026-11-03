@@ -13,8 +13,12 @@
 
 在全新的 Linux VPS（支持 Debian、Ubuntu、CentOS、AlmaLinux、Rocky、Alpine）上以 **root** 权限执行以下命令：
 
-### 方式一：一键远程静默 / 交互安装（推荐）
+### 方式一：一键远程交互安装（推荐）
 
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/install-hub.sh)
+```
+*或使用管道安装（全自动兼容终端交互与默认值）：*
 ```bash
 curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/install-hub.sh | sudo bash
 ```

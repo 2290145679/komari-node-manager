@@ -68,20 +68,43 @@ echo -e "${YELLOW}   · 系统架构: ${ARCH_RAW} (${ARCH})${PLAIN}"
 echo -e "${PURPLE}==================================================================${PLAIN}"
 echo ""
 
-# 4. 获取公网 IP
-PUBLIC_IP=$(curl -s4 --max-time 3 https://api.ipify.org || curl -s4 --max-time 3 https://ifconfig.me || echo "127.0.0.1")
-
-# 5. 用户交互配置 (非交互模式自动使用默认值)
-read -p "$(echo -e "${CYAN}请输入主控端绑定域名或公网IP [默认: ${PUBLIC_IP}]: ${PLAIN}")" USER_DOMAIN
-SERVER_NAME="${USER_DOMAIN:-$PUBLIC_IP}"
-
-read -p "$(echo -e "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}")" USER_PORT
-WEB_PORT="${USER_PORT:-80}"
+# 4. 获取公网 IP (兼容 IPv4 与 IPv6)
+PUBLIC_IP=$(curl -s4 --max-time 3 https://api.ipify.org 2>/dev/null || curl -s4 --max-time 3 https://ifconfig.me 2>/dev/null || curl -s6 --max-time 3 https://api64.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
+PUBLIC_IP="${PUBLIC_IP:-127.0.0.1}"
 
 # 生成默认密码
-DEFAULT_PASS=$(tr -dc A-Za-z0-9 2>/dev/null < /dev/urandom | head -c 12 || echo "Komari_2026")
-read -p "$(echo -e "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}")" USER_PASS
+DEFAULT_PASS=$(tr -dc A-Za-z0-9 2>/dev/null < /dev/urandom | head -c 12 || echo "")
+if [ -z "$DEFAULT_PASS" ]; then
+    DEFAULT_PASS="Komari_$(date +%s | tail -c 5)"
+fi
+
+USER_DOMAIN=""
+USER_PORT=""
+USER_PASS=""
+
+# 5. 用户交互配置 (兼容 curl ... | sudo bash 管道模式，优先从 /dev/tty 获取终端真实交互)
+if [ -t 0 ]; then
+    read -r -p "$(echo -e "${CYAN}请输入主控端绑定域名或公网IP [默认: ${PUBLIC_IP}]: ${PLAIN}")" USER_DOMAIN || true
+    read -r -p "$(echo -e "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}")" USER_PORT || true
+    read -r -p "$(echo -e "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}")" USER_PASS || true
+elif [ -e /dev/tty ] && [ -r /dev/tty ]; then
+    echo -ne "${CYAN}请输入主控端绑定域名或公网IP [默认: ${PUBLIC_IP}]: ${PLAIN}" > /dev/tty
+    read -r USER_DOMAIN < /dev/tty || true
+    echo -ne "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}" > /dev/tty
+    read -r USER_PORT < /dev/tty || true
+    echo -ne "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}" > /dev/tty
+    read -r USER_PASS < /dev/tty || true
+fi
+
+# 严格兜底，绝不允许核心配置变量为空
+SERVER_NAME="${USER_DOMAIN:-$PUBLIC_IP}"
+SERVER_NAME="${SERVER_NAME:-127.0.0.1}"
+
+WEB_PORT="${USER_PORT:-80}"
+WEB_PORT="${WEB_PORT:-80}"
+
 ADMIN_PASS="${USER_PASS:-$DEFAULT_PASS}"
+ADMIN_PASS="${ADMIN_PASS:-Komari_2026}"
 
 echo ""
 info "正在准备安装环境并下载依赖..."
@@ -153,7 +176,8 @@ fi
 
 chmod +x /opt/komari/komari /opt/komari/agent
 chmod +x /opt/komari/node-mgr/server.py
-ok "服务端主控核心与前端资源释放完毕"
+sed -i "s|DOMAIN = \".*\"|DOMAIN = \"${SERVER_NAME}\"|g" /opt/komari/node-mgr/server.py
+ok "服务端主控核心与前端资源释放完毕 (已绑定主控: ${SERVER_NAME})"
 
 # 8. 初始化数据库
 info "正在初始化数据库结构..."
@@ -203,7 +227,8 @@ info "正在启动主控端服务..."
 systemctl restart komari
 sleep 3
 # 初始化管理员密码
-/opt/komari/komari chpasswd -p "$ADMIN_PASS" 2>/dev/null || true
+(cd /opt/komari && ./komari chpasswd -p "$ADMIN_PASS" -d /opt/komari/data/komari.db) 2>/dev/null || \
+/opt/komari/komari chpasswd -p "$ADMIN_PASS" -d /opt/komari/data/komari.db 2>/dev/null || true
 systemctl restart komari-node-mgr
 sleep 2
 
