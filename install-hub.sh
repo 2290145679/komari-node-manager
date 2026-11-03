@@ -278,11 +278,35 @@ fi
 # 12. 清理临时目录
 rm -rf "$WORK_DIR"
 
-# 13. 输出完成信息
+# 13. 域名 SSL / HTTPS 自动化证书申请
 SCHEME="http"
 [ "$WEB_PORT" = "443" ] && SCHEME="https"
+
+if [ "$SERVER_NAME" != "$PUBLIC_IP" ] && [ "$SERVER_NAME" != "127.0.0.1" ]; then
+    info "检测到已绑定域名 [${SERVER_NAME}]，正在配置免费 Let's Encrypt SSL 证书 (HTTPS)..."
+    if [ "$OS_TYPE" = "debian" ]; then
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq certbot python3-certbot-nginx >/dev/null 2>&1 || true
+    elif [ "$OS_TYPE" = "centos" ]; then
+        dnf install -y certbot python3-certbot-nginx >/dev/null 2>&1 || yum install -y certbot python3-certbot-nginx >/dev/null 2>&1 || true
+    fi
+    if command -v certbot >/dev/null 2>&1; then
+        if certbot --nginx -d "${SERVER_NAME}" --non-interactive --agree-tos --register-unsafely-without-email --redirect >/dev/null 2>&1; then
+            SCHEME="https"
+            if command -v iptables >/dev/null 2>&1; then
+                iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+            fi
+            ok "🎉 SSL 证书已成功签发并自动配置！HTTPS 已启用 (自动强制跳转)"
+        else
+            warn "SSL 证书自动签发跳过 (可能因为解析尚未完全生效或端口被拦截)，已保持 HTTP 访问"
+        fi
+    fi
+fi
+
+# 14. 输出完成信息
 PORT_SUFFIX=""
-if [ "$WEB_PORT" != "80" ] && [ "$WEB_PORT" != "443" ]; then
+if [ "$SCHEME" = "http" ] && [ "$WEB_PORT" != "80" ]; then
+    PORT_SUFFIX=":${WEB_PORT}"
+elif [ "$SCHEME" = "https" ] && [ "$WEB_PORT" != "443" ] && [ "$WEB_PORT" != "80" ]; then
     PORT_SUFFIX=":${WEB_PORT}"
 fi
 
