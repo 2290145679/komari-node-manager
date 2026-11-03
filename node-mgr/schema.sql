@@ -69,3 +69,40 @@ CREATE TABLE IF NOT EXISTS subscription_rules (
 
 INSERT OR IGNORE INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules)
 VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '');
+
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    config TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notification_rules (
+    rule_key TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    description TEXT NOT NULL,
+    enabled INTEGER DEFAULT 1,
+    config TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notification_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    rule_key TEXT,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS notification_states (
+    state_key TEXT PRIMARY KEY,
+    state_val TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
