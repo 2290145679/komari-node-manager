@@ -72,30 +72,20 @@ echo ""
 PUBLIC_IP=$(curl -s4 --max-time 3 https://api.ipify.org 2>/dev/null || curl -s4 --max-time 3 https://ifconfig.me 2>/dev/null || curl -s6 --max-time 3 https://api64.ipify.org 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
 PUBLIC_IP="${PUBLIC_IP:-127.0.0.1}"
 
-# 生成默认密码
-DEFAULT_PASS=$(tr -dc A-Za-z0-9 2>/dev/null < /dev/urandom | head -c 12 || echo "")
-if [ -z "$DEFAULT_PASS" ]; then
-    DEFAULT_PASS="Komari_$(date +%s | tail -c 5)"
-fi
-
 USER_DOMAIN_RAW=""
 USER_DOMAIN=""
 USER_PORT=""
-USER_PASS=""
 
 # 5. 用户交互配置 (兼容 curl ... | sudo bash 管道模式，优先从 /dev/tty 获取终端真实交互)
 PROMPT_DOMAIN="请输入主控端域名 (直接输入域名如 jgw2.yohoo.xyz，留空或输入 N 则使用公网 IP: ${PUBLIC_IP}): "
 if [ -t 0 ]; then
     read -r -p "$(echo -e "${CYAN}${PROMPT_DOMAIN}${PLAIN}")" USER_DOMAIN_RAW || true
     read -r -p "$(echo -e "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}")" USER_PORT || true
-    read -r -p "$(echo -e "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}")" USER_PASS || true
 elif [ -e /dev/tty ] && [ -r /dev/tty ]; then
     echo -ne "${CYAN}${PROMPT_DOMAIN}${PLAIN}" > /dev/tty
     read -r USER_DOMAIN_RAW < /dev/tty || true
     echo -ne "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}" > /dev/tty
     read -r USER_PORT < /dev/tty || true
-    echo -ne "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}" > /dev/tty
-    read -r USER_PASS < /dev/tty || true
 fi
 
 # 智能识别输入：支持直接输入域名、输入 y 唤起输入、以及直接回车/输入 N 使用公网 IP
@@ -120,9 +110,6 @@ SERVER_NAME="${SERVER_NAME:-127.0.0.1}"
 
 WEB_PORT="${USER_PORT:-80}"
 WEB_PORT="${WEB_PORT:-80}"
-
-ADMIN_PASS="${USER_PASS:-$DEFAULT_PASS}"
-ADMIN_PASS="${ADMIN_PASS:-Komari_2026}"
 
 echo ""
 info "正在准备安装环境并下载依赖..."
@@ -258,13 +245,10 @@ fi
 
 ok "Nginx 网关配置完成 (端口 ${WEB_PORT} 防火墙已放行)"
 
-# 11. 启动服务并初始化密码
+# 11. 启动主控端服务
 info "正在启动主控端服务..."
 systemctl restart komari
-sleep 3
-# 初始化管理员密码
-(cd /opt/komari && ./komari chpasswd -p "$ADMIN_PASS" -d /opt/komari/data/komari.db) 2>/dev/null || \
-/opt/komari/komari chpasswd -p "$ADMIN_PASS" -d /opt/komari/data/komari.db 2>/dev/null || true
+sleep 2
 systemctl restart komari-node-mgr
 sleep 2
 
@@ -318,9 +302,8 @@ echo -e "${BOLD}${GREEN}               🎉 Komari 主控端部署成功！${PLA
 echo -e "${GREEN}==================================================================${PLAIN}"
 echo -e "${BOLD}1. 管理后台面板:${PLAIN}    ${CYAN}${BASE_URL}/admin/dashboard${PLAIN}"
 echo -e "${BOLD}2. 节点管理独立面板:${PLAIN}${CYAN}${BASE_URL}/api/admin/plugin/node-manager/panel/index.html${PLAIN}"
-echo -e "${BOLD}3. 管理员初始账号:${PLAIN}  ${YELLOW}admin${PLAIN}"
-echo -e "${BOLD}4. 管理员初始密码:${PLAIN}  ${YELLOW}${ADMIN_PASS}${PLAIN}"
-echo -e "${BOLD}5. 统一订阅地址:${PLAIN}    ${CYAN}${BASE_URL}/sub/${SUB_TOKEN}${PLAIN}"
+echo -e "${BOLD}3. 初始账号设置:${PLAIN}    ${YELLOW}首次在浏览器打开面板时，按网页指引创建管理员账号与密码${PLAIN}"
+echo -e "${BOLD}4. 统一订阅地址:${PLAIN}    ${CYAN}${BASE_URL}/sub/${SUB_TOKEN}${PLAIN}"
 echo -e "${GREEN}------------------------------------------------------------------${PLAIN}"
 echo -e "${BOLD}💡 探针被控端一键接入指令 (去其他 VPS 执行即可秒级上线):${PLAIN}"
 echo -e "${PURPLE}wget -qO- ${BASE_URL}/install-node.sh | sudo bash -s -- -e ${BASE_URL} -t <AGENT_TOKEN>${PLAIN}"
