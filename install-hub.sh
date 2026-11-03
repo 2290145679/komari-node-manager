@@ -78,25 +78,33 @@ if [ -z "$DEFAULT_PASS" ]; then
     DEFAULT_PASS="Komari_$(date +%s | tail -c 5)"
 fi
 
+USER_BIND_DOMAIN="n"
 USER_DOMAIN=""
 USER_PORT=""
 USER_PASS=""
 
 # 5. 用户交互配置 (兼容 curl ... | sudo bash 管道模式，优先从 /dev/tty 获取终端真实交互)
 if [ -t 0 ]; then
-    read -r -p "$(echo -e "${CYAN}请输入主控端绑定域名或公网IP [默认: ${PUBLIC_IP}]: ${PLAIN}")" USER_DOMAIN || true
+    read -r -p "$(echo -e "${CYAN}是否绑定自定义域名? (y/N) [默认: N (直接使用公网IP: ${PUBLIC_IP})]: ${PLAIN}")" USER_BIND_DOMAIN || true
+    if [[ "$USER_BIND_DOMAIN" =~ ^[Yy]$ ]]; then
+        read -r -p "$(echo -e "${CYAN}请输入你的自定义域名 (如 komari.example.com): ${PLAIN}")" USER_DOMAIN || true
+    fi
     read -r -p "$(echo -e "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}")" USER_PORT || true
     read -r -p "$(echo -e "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}")" USER_PASS || true
 elif [ -e /dev/tty ] && [ -r /dev/tty ]; then
-    echo -ne "${CYAN}请输入主控端绑定域名或公网IP [默认: ${PUBLIC_IP}]: ${PLAIN}" > /dev/tty
-    read -r USER_DOMAIN < /dev/tty || true
+    echo -ne "${CYAN}是否绑定自定义域名? (y/N) [默认: N (直接使用公网IP: ${PUBLIC_IP})]: ${PLAIN}" > /dev/tty
+    read -r USER_BIND_DOMAIN < /dev/tty || true
+    if [[ "$USER_BIND_DOMAIN" =~ ^[Yy]$ ]]; then
+        echo -ne "${CYAN}请输入你的自定义域名 (如 komari.example.com): ${PLAIN}" > /dev/tty
+        read -r USER_DOMAIN < /dev/tty || true
+    fi
     echo -ne "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}" > /dev/tty
     read -r USER_PORT < /dev/tty || true
     echo -ne "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}" > /dev/tty
     read -r USER_PASS < /dev/tty || true
 fi
 
-# 严格兜底，绝不允许核心配置变量为空
+# 严格兜底：如果不绑定域名或域名为空，则直接使用公网 IP
 SERVER_NAME="${USER_DOMAIN:-$PUBLIC_IP}"
 SERVER_NAME="${SERVER_NAME:-127.0.0.1}"
 
@@ -211,8 +219,8 @@ if [ -d /etc/nginx/sites-available ]; then
     mkdir -p /etc/nginx/sites-enabled
     ln -sf "$NGINX_CONF_DEST" /etc/nginx/sites-enabled/komari.conf
     # 如果有冲突的 default 站点监听同一端口，则暂时停用
-    if [ "$WEB_PORT" = "80" ] && [ -L /etc/nginx/sites-enabled/default ]; then
-        rm -f /etc/nginx/sites-enabled/default
+    if [ "$WEB_PORT" = "80" ]; then
+        rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     fi
 elif [ -d /etc/nginx/conf.d ]; then
     sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${SERVER_NAME}|g" /opt/komari/conf/nginx-komari.conf > /etc/nginx/conf.d/komari.conf
