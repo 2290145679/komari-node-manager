@@ -163,10 +163,14 @@ else
     curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js" -o /opt/komari/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js
     curl -fsSL "${REPO_BASE}/web-patch/assets/komari-singbox-helper.js" -o /opt/komari/web-patch/assets/komari-singbox-helper.js
 
-    # 下载插件前端
+    # 下载插件前端与静态资源 (包含 Tailwind, Lucide, QRCode)
+    mkdir -p /opt/komari/data/plugin/node-manager/panel/assets
     curl -fsSL "${REPO_BASE}/plugin/node-manager/komari-plugin.json" -o /opt/komari/data/plugin/node-manager/komari-plugin.json
     curl -fsSL "${REPO_BASE}/plugin/node-manager/script.js" -o /opt/komari/data/plugin/node-manager/script.js
     curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/index.html" -o /opt/komari/data/plugin/node-manager/panel/index.html
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/tailwind.js" -o /opt/komari/data/plugin/node-manager/panel/assets/tailwind.js
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/lucide.min.js" -o /opt/komari/data/plugin/node-manager/panel/assets/lucide.min.js
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/qrcode.min.js" -o /opt/komari/data/plugin/node-manager/panel/assets/qrcode.min.js
 
     # 下载后端服务与数据库模板
     curl -fsSL "${REPO_BASE}/node-mgr/server.py" -o /opt/komari/node-mgr/server.py

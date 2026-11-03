@@ -10,4 +10,4 @@ if ('caches' in window) {
   });
 }
 
-console.log('[Komari] Pure Native React Node Manager active (Zero Iframe)');
+console.log('[Komari] Node Manager active');
