@@ -162,15 +162,11 @@ def init_db():
         )
     ''')
 
-    # Seed Telegram channel with user credentials if empty
-    c.execute("SELECT count(*) FROM notification_channels")
-    if c.fetchone()[0] == 0:
-        tg_conf = json.dumps({
-            "bot_token": "8731954829:AAG6HlNgKnth8_2yIYAtMyV4gPx_c-I2bJY",
-            "chat_id": "791298471"
-        })
-        c.execute("INSERT INTO notification_channels (type, name, enabled, config) VALUES (?, ?, ?, ?)",
-                  ("telegram", "Telegram 机器人 (@vpssend_bot)", 1, tg_conf))
+    # Migration: ensure updated_at column exists in notification_channels
+    try:
+        c.execute("ALTER TABLE notification_channels ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+    except Exception:
+        pass
 
     default_rules = [
         ("traffic_threshold", "流量消耗预警", "core", "单节点或全网流量达到 80%/90%/100% 阈值提醒；每月1号清零提醒", 1, json.dumps({"thresholds": [80, 90, 100], "cycle_reset_notify": True})),
@@ -1628,8 +1624,8 @@ $DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/h
 echo "[4/4] Installing Node Configuration Sync Daemon..."
 cat << 'EOF' > /usr/local/bin/komari-node-sync.sh
 #!/bin/bash
-MASTER_URL="''' + f"https://{DOMAIN}" + '''"
-TOKEN="''' + '$TOKEN' + '''"
+MASTER_URL="__MASTER_URL__"
+TOKEN="__TOKEN__"
 CONFIG_FILE="/etc/sing-box/config.json"
 MD5_FILE="/etc/sing-box/config.md5"
 
@@ -1648,7 +1644,7 @@ while true; do
       mkdir -p /etc/sing-box
       openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
         -subj "/CN=bing.com" \
-        -addext "subjectAltName=DNS:bing.com,DNS:*.bing.com,DNS:addons.mozilla.org,DNS:gateway.icloud.com,DNS:www.apple.com,DNS:komari.yohoo.xyz,IP:127.0.0.1" >/dev/null 2>&1 || \
+        -addext "subjectAltName=DNS:bing.com,DNS:*.bing.com,DNS:addons.mozilla.org,DNS:gateway.icloud.com,DNS:www.apple.com,IP:127.0.0.1" >/dev/null 2>&1 || \
       openssl req -x509 -newkey rsa:2048 -nodes -keyout /etc/sing-box/cert.key -out /etc/sing-box/cert.pem -days 3650 \
         -subj "/CN=bing.com" >/dev/null 2>&1 || true
     fi
@@ -1666,7 +1662,7 @@ while true; do
         echo "$NEW_MD5" > "$MD5_FILE"
 
         # Auto open firewall ports for all inbounds
-        PORTS=$(grep -o '"listen_port":[0-9]*' "$CONFIG_FILE" | cut -d':' -f2 | sort -u)
+        PORTS=$(grep -oE '"listen_port"[[:space:]]*:[[:space:]]*[0-9]+' "$CONFIG_FILE" | grep -oE '[0-9]+' | sort -u)
         for p in $PORTS; do
           if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
             firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
@@ -1676,10 +1672,10 @@ while true; do
             ufw allow ${p}/tcp >/dev/null 2>&1 || true
             ufw allow ${p}/udp >/dev/null 2>&1 || true
           fi
-          iptables -I INPUT -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          iptables -I INPUT -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          ip6tables -I INPUT -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          ip6tables -I INPUT -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          iptables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          iptables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
         done
         if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
           firewall-cmd --reload >/dev/null 2>&1 || true
@@ -1696,7 +1692,8 @@ while true; do
 done
 EOF
 
-sed -i "s|\$TOKEN|$TOKEN|g" /usr/local/bin/komari-node-sync.sh
+sed -i "s|__MASTER_URL__|$MASTER_URL|g" /usr/local/bin/komari-node-sync.sh
+sed -i "s|__TOKEN__|$TOKEN|g" /usr/local/bin/komari-node-sync.sh
 chmod +x /usr/local/bin/komari-node-sync.sh
 
 # Fetch and apply initial config immediately
@@ -1705,6 +1702,11 @@ INIT_CFG=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>
 if [ -n "$INIT_CFG" ] && echo "$INIT_CFG" | grep -q '"inbounds"'; then
   echo "$INIT_CFG" > /etc/sing-box/config.json
   echo "$INIT_CFG" | md5sum | awk '{print $1}' > /etc/sing-box/config.md5
+  PORTS=$(grep -oE '"listen_port"[[:space:]]*:[[:space:]]*[0-9]+' /etc/sing-box/config.json | grep -oE '[0-9]+' | sort -u)
+  for p in $PORTS; do
+    iptables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+    iptables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+  done
   if [ "$INIT_SYSTEM" = "openrc" ]; then
     rc-service sing-box restart >/dev/null 2>&1 || rc-service sing-box start >/dev/null 2>&1 || true
   else
@@ -2538,17 +2540,26 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             enabled = 1 if body.get("enabled", True) else 0
             config = json.dumps(body.get("config", {}))
 
-            conn = sqlite3.connect(NODES_DB)
-            c = conn.cursor()
-            if ch_id:
-                c.execute("UPDATE notification_channels SET type=?, name=?, enabled=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                          (ch_type, name, enabled, config, ch_id))
-            else:
-                c.execute("INSERT INTO notification_channels (type, name, enabled, config) VALUES (?, ?, ?, ?)",
-                          (ch_type, name, enabled, config))
-            conn.commit()
-            conn.close()
-            self._send_json({"ok": True})
+            try:
+                conn = sqlite3.connect(NODES_DB)
+                c = conn.cursor()
+                if not ch_id:
+                    c.execute("SELECT id FROM notification_channels WHERE type = ? LIMIT 1", (ch_type,))
+                    row = c.fetchone()
+                    if row:
+                        ch_id = row[0]
+
+                if ch_id:
+                    c.execute("UPDATE notification_channels SET type=?, name=?, enabled=?, config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                              (ch_type, name, enabled, config, ch_id))
+                else:
+                    c.execute("INSERT INTO notification_channels (type, name, enabled, config) VALUES (?, ?, ?, ?)",
+                              (ch_type, name, enabled, config))
+                conn.commit()
+                conn.close()
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
             return
 
         if path in ["/api/notifications/channels/toggle", "/api/node-mgr/notifications/channels/toggle"]:

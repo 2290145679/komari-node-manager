@@ -4627,18 +4627,19 @@
       const token = document.getElementById('tgBotToken').value.trim();
       const chatId = document.getElementById('tgChatId').value.trim();
       const enabled = document.getElementById('tgEnabledSwitch').checked;
-      if (!token || !chatId) {
-        showToast('请完整输入 Telegram Bot Token 与 Chat ID', 'warning');
+      if (enabled && (!token || !chatId)) {
+        showToast('开启机器人通知时，必须填写 Bot Token 与 Chat ID', 'warning');
         return;
       }
       try {
+        const tg = (notificationConfig && notificationConfig.channels) ? notificationConfig.channels.find(c => c.type === 'telegram') : null;
         const res = await fetch('/api/node-mgr/notifications/channels/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: 1,
+            id: tg ? tg.id : null,
             type: 'telegram',
-            name: 'Telegram 机器人 (@vpssend_bot)',
+            name: 'Telegram 机器人',
             enabled: enabled,
             config: { bot_token: token, chat_id: chatId }
           })
@@ -4648,7 +4649,7 @@
           showToast('Telegram 渠道配置已保存！', 'success');
           loadNotificationConfig();
         } else {
-          showToast('保存失败', 'error');
+          showToast('保存失败: ' + (data.error || '未知错误'), 'error');
         }
       } catch (err) {
         showToast('网络异常: ' + err.message, 'error');
