@@ -78,30 +78,40 @@ if [ -z "$DEFAULT_PASS" ]; then
     DEFAULT_PASS="Komari_$(date +%s | tail -c 5)"
 fi
 
-USER_BIND_DOMAIN="n"
+USER_DOMAIN_RAW=""
 USER_DOMAIN=""
 USER_PORT=""
 USER_PASS=""
 
 # 5. 用户交互配置 (兼容 curl ... | sudo bash 管道模式，优先从 /dev/tty 获取终端真实交互)
+PROMPT_DOMAIN="请输入主控端域名 (直接输入域名如 jgw2.yohoo.xyz，留空或输入 N 则使用公网 IP: ${PUBLIC_IP}): "
 if [ -t 0 ]; then
-    read -r -p "$(echo -e "${CYAN}是否绑定自定义域名? (y/N) [默认: N (直接使用公网IP: ${PUBLIC_IP})]: ${PLAIN}")" USER_BIND_DOMAIN || true
-    if [[ "$USER_BIND_DOMAIN" =~ ^[Yy]$ ]]; then
-        read -r -p "$(echo -e "${CYAN}请输入你的自定义域名 (如 komari.example.com): ${PLAIN}")" USER_DOMAIN || true
-    fi
+    read -r -p "$(echo -e "${CYAN}${PROMPT_DOMAIN}${PLAIN}")" USER_DOMAIN_RAW || true
     read -r -p "$(echo -e "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}")" USER_PORT || true
     read -r -p "$(echo -e "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}")" USER_PASS || true
 elif [ -e /dev/tty ] && [ -r /dev/tty ]; then
-    echo -ne "${CYAN}是否绑定自定义域名? (y/N) [默认: N (直接使用公网IP: ${PUBLIC_IP})]: ${PLAIN}" > /dev/tty
-    read -r USER_BIND_DOMAIN < /dev/tty || true
-    if [[ "$USER_BIND_DOMAIN" =~ ^[Yy]$ ]]; then
-        echo -ne "${CYAN}请输入你的自定义域名 (如 komari.example.com): ${PLAIN}" > /dev/tty
-        read -r USER_DOMAIN < /dev/tty || true
-    fi
+    echo -ne "${CYAN}${PROMPT_DOMAIN}${PLAIN}" > /dev/tty
+    read -r USER_DOMAIN_RAW < /dev/tty || true
     echo -ne "${CYAN}请输入 Web 访问端口 [默认: 80]: ${PLAIN}" > /dev/tty
     read -r USER_PORT < /dev/tty || true
     echo -ne "${CYAN}请设置管理员密码 (留空随机生成) [默认: ${DEFAULT_PASS}]: ${PLAIN}" > /dev/tty
     read -r USER_PASS < /dev/tty || true
+fi
+
+# 智能识别输入：支持直接输入域名、输入 y 唤起输入、以及直接回车/输入 N 使用公网 IP
+TRIMMED_DOMAIN=$(echo "$USER_DOMAIN_RAW" | tr -d '[:space:]')
+if [[ "$TRIMMED_DOMAIN" =~ ^[Yy]$ ]]; then
+    if [ -t 0 ]; then
+        read -r -p "$(echo -e "${CYAN}请输入你的自定义域名: ${PLAIN}")" USER_DOMAIN || true
+    elif [ -e /dev/tty ] && [ -r /dev/tty ]; then
+        echo -ne "${CYAN}请输入你的自定义域名: ${PLAIN}" > /dev/tty
+        read -r USER_DOMAIN < /dev/tty || true
+    fi
+elif [[ "$TRIMMED_DOMAIN" =~ ^[Nn]$ ]] || [ -z "$TRIMMED_DOMAIN" ]; then
+    USER_DOMAIN=""
+else
+    # 用户直接输入了域名 (如 jgw2.yohoo.xyz)
+    USER_DOMAIN="$TRIMMED_DOMAIN"
 fi
 
 # 严格兜底：如果不绑定域名或域名为空，则直接使用公网 IP
@@ -213,9 +223,14 @@ ok "守护服务注册完毕"
 
 # 10. 配置 Nginx 反向代理
 info "正在配置 Nginx 反向代理网关..."
+NGINX_HOSTS="${SERVER_NAME}"
+if [ "${SERVER_NAME}" != "${PUBLIC_IP}" ] && [ -n "${PUBLIC_IP}" ]; then
+    NGINX_HOSTS="${SERVER_NAME} ${PUBLIC_IP}"
+fi
+
 NGINX_CONF_DEST="/etc/nginx/sites-available/komari.conf"
 if [ -d /etc/nginx/sites-available ]; then
-    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${SERVER_NAME}|g" /opt/komari/conf/nginx-komari.conf > "$NGINX_CONF_DEST"
+    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" /opt/komari/conf/nginx-komari.conf > "$NGINX_CONF_DEST"
     mkdir -p /etc/nginx/sites-enabled
     ln -sf "$NGINX_CONF_DEST" /etc/nginx/sites-enabled/komari.conf
     # 如果有冲突的 default 站点监听同一端口，则暂时停用
@@ -223,7 +238,7 @@ if [ -d /etc/nginx/sites-available ]; then
         rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     fi
 elif [ -d /etc/nginx/conf.d ]; then
-    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${SERVER_NAME}|g" /opt/komari/conf/nginx-komari.conf > /etc/nginx/conf.d/komari.conf
+    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" /opt/komari/conf/nginx-komari.conf > /etc/nginx/conf.d/komari.conf
 fi
 
 nginx -t >/dev/null 2>&1 || warn "Nginx 语法测试有告警，请在安装后检查配置"
