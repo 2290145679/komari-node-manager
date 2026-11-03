@@ -228,7 +228,20 @@ fi
 
 nginx -t >/dev/null 2>&1 || warn "Nginx 语法测试有告警，请在安装后检查配置"
 systemctl restart nginx 2>/dev/null || systemctl reload nginx 2>/dev/null || true
-ok "Nginx 网关配置完成"
+
+# 自动放行防火墙端口 (兼容 Oracle Cloud / iptables / ufw / firewalld)
+if command -v iptables >/dev/null 2>&1; then
+    iptables -I INPUT -p tcp --dport "${WEB_PORT}" -j ACCEPT 2>/dev/null || true
+fi
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+    ufw allow "${WEB_PORT}/tcp" >/dev/null 2>&1 || true
+fi
+if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+    firewall-cmd --add-port="${WEB_PORT}/tcp" --permanent >/dev/null 2>&1 || true
+    firewall-cmd --reload >/dev/null 2>&1 || true
+fi
+
+ok "Nginx 网关配置完成 (端口 ${WEB_PORT} 防火墙已放行)"
 
 # 11. 启动服务并初始化密码
 info "正在启动主控端服务..."
