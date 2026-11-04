@@ -587,6 +587,24 @@ def get_servers_with_stats():
     clients = c_k.fetchall()
     conn_k.close()
 
+    # Auto-cleanup orphan nodes whose server was deleted from Komari
+    try:
+        valid_uuids = set(r[0] for r in clients)
+        conn_clean = sqlite3.connect(NODES_DB)
+        c_clean = conn_clean.cursor()
+        c_clean.execute("SELECT id, server_uuid, name FROM nodes WHERE is_external = 0 AND server_uuid != 'external'")
+        all_self_nodes = c_clean.fetchall()
+        orphan_nodes = [r for r in all_self_nodes if r[1] not in valid_uuids]
+        if orphan_nodes:
+            orphan_ids = [r[0] for r in orphan_nodes]
+            c_clean.execute(f"DELETE FROM nodes WHERE id IN ({','.join('?' * len(orphan_ids))})", orphan_ids)
+            conn_clean.commit()
+            for oid, osuuid, oname in orphan_nodes:
+                redirect_rules_for_node(oname, "PROXY")
+        conn_clean.close()
+    except Exception as e:
+        pass
+
     conn_n = sqlite3.connect(NODES_DB)
     c_n = conn_n.cursor()
     c_n.execute("SELECT token, last_seen FROM agent_heartbeats")
@@ -2426,6 +2444,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
 
+            # Filter out orphan nodes whose server no longer exists
+            nodes = [n for n in nodes if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in servers_map]
+
             for n in nodes:
                 n["link"] = build_node_share_link(n)
                 if n["id"] in _node_latency_cache:
@@ -2522,6 +2543,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             cols = [d[0] for d in c.description]
             nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
+            # Filter out orphan nodes whose server no longer exists
+            nodes = [n for n in nodes if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in servers_map]
 
             online_node_count = 0
             for n in nodes:
@@ -2997,6 +3021,21 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        if path.startswith("/api/servers/") or path.startswith("/api/node-mgr/servers/"):
+            server_uuid = path.rstrip("/").split("/")[-1]
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT name FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            deleted_names = [r[0] for r in c.fetchall()]
+            c.execute("DELETE FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            c.execute("DELETE FROM server_traffic_baselines WHERE uuid = ?", (server_uuid,))
+            conn.commit()
+            conn.close()
+            for nname in deleted_names:
+                redirect_rules_for_node(nname, "PROXY")
+            self._send_json({"ok": True, "deleted_nodes": len(deleted_names)})
+            return
         if path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/"):
             node_id = path.rstrip("/").split("/")[-1]
             redirect_to = query.get("redirect_to", ["PROXY"])[0]
