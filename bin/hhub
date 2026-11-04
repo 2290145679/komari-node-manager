@@ -482,10 +482,11 @@ renew_ssl() {
     fi
 }
 
-# 9. 一键在线更新系统与优化补丁
+# 9. 一键在线热更新系统与优化补丁 (零停机平滑重载)
 update_system() {
-    echo -e "\n${BOLD}${CYAN}=== 一键升级系统与前端补丁 ===${PLAIN}"
-    echo -e "${YELLOW}注意: 更新过程会自动保留你的数据库(nodes.db)与全部服务器配置，安全无损！${PLAIN}\n"
+    echo -e "\n${BOLD}${CYAN}=== 一键热更新系统与前端补丁 (零停机平滑重载) ===${PLAIN}"
+    echo -e "${YELLOW}说明: 热更新仅平滑更新前端魔改补丁与节点管理核心，不中断主控探针监控进程！${PLAIN}"
+    echo -e "${YELLOW}注意: 数据库(nodes.db/komari.db)与全部服务器配置自动保留，安全无损！${PLAIN}\n"
     read -r -p "确认现在从 GitHub 拉取最新前端补丁与代码吗？[Y/n]: " confirm_update
     if [[ "$confirm_update" =~ ^[Nn]$ ]]; then
         echo -e "${YELLOW}[CANCEL] 取消更新。${PLAIN}"
@@ -497,16 +498,15 @@ update_system() {
     cp -r "${WEB_PATCH_DIR}" "${KOMARI_DIR}/cache/backup_pre_update/" 2>/dev/null || true
     cp "${NODE_MGR_DIR}/server.py" "${KOMARI_DIR}/cache/backup_pre_update/" 2>/dev/null || true
 
-    echo -e "${CYAN}[INFO] 2/4 正在拉取最新前端补丁与样式 (手机端对称卡片、发光状态灯、一键部署弹窗)...${PLAIN}"
+    echo -e "${CYAN}[INFO] 2/4 正在拉取最新前端补丁与样式 (手机端对称卡片、发光状态灯、去除文档主页)...${PLAIN}"
     curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-index-BfURcdSr.js" -o "${WEB_PATCH_DIR}/assets/chunk-index-BfURcdSr.js"
-    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/komari-singbox-helper.js" -o "${WEB_PATCH_DIR}/assets/komari-singbox-helper.js"
     curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-_layout-KM9Ke-Y5.js" -o "${WEB_PATCH_DIR}/assets/chunk-_layout-KM9Ke-Y5.js"
     curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js" -o "${WEB_PATCH_DIR}/assets/chunk-plugin_page-Xen4h3Tc.js"
+    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/komari-singbox-helper.js" -o "${WEB_PATCH_DIR}/assets/komari-singbox-helper.js"
 
     echo -e "${CYAN}[INFO] 3/4 正在更新节点管理面板资源与后端核心...${PLAIN}"
     curl -fsSL "${REPO_RAW_BASE}/plugin/node-manager/panel/index.html" -o "${DATA_DIR}/plugin/node-manager/panel/index.html" 2>/dev/null || true
     
-    # 记录当前已配置的 DOMAIN
     local cur_domain
     cur_domain=$(get_current_domain)
     curl -fsSL "${REPO_RAW_BASE}/node-mgr/server.py" -o "${NODE_MGR_DIR}/server.py"
@@ -516,65 +516,115 @@ update_system() {
     # 更新 hhub 自身
     curl -fsSL "${REPO_RAW_BASE}/bin/hhub" -o /usr/local/bin/hhub && chmod +x /usr/local/bin/hhub 2>/dev/null || true
 
-    echo -e "${CYAN}[INFO] 4/4 正在重载服务...${PLAIN}"
+    echo -e "${CYAN}[INFO] 4/4 正在平滑重载服务 (Nginx reload & 服务平滑生效)...${PLAIN}"
     chmod 644 "${WEB_PATCH_DIR}/assets/"* 2>/dev/null || true
     systemctl restart komari-node-mgr
-    systemctl reload nginx
+    nginx -s reload 2>/dev/null || systemctl reload nginx 2>/dev/null || true
 
-    echo -e "\n${GREEN}[OK] 🎉 更新成功！所有核心组件与前端补丁已同步至最新版。${PLAIN}"
+    echo -e "\n${GREEN}[OK] 🎉 热更新成功！前端补丁与后端核心已平滑更新完毕（探针监控零停机）。${PLAIN}"
 }
 
-# 10. 数据库备份与还原
+# 10. 数据库备份、一键导出与还原
 backup_restore_db() {
-    echo -e "\n${BOLD}${CYAN}=== 节点管理数据库备份与还原 ===${PLAIN}"
-    echo -e "  1. 立即创建完整数据备份"
-    echo -e "  2. 还原历史数据备份"
+    echo -e "\n${BOLD}${CYAN}=== 数据备份、全量导出与还原 ===${PLAIN}"
+    echo -e "  1. 一键导出全量数据 JSON (包含所有服务器、延迟检测任务、节点配置、分流规则、订阅)"
+    echo -e "  2. 打包全量 SQLite 数据库压缩包 (.tar.gz)"
+    echo -e "  3. 还原/导入数据备份 (支持 .json 或 .tar.gz)"
     echo -e "  0. 返回上级菜单"
     echo ""
-    read -r -p "请选择操作 [0-2]: " br_choice
+    read -r -p "请选择操作 [0-3]: " br_choice
     case "$br_choice" in
         1)
             mkdir -p "${BACKUP_DIR}"
             local timestamp
             timestamp=$(date +"%Y%m%d_%H%M%S")
+            local export_json="${BACKUP_DIR}/komari_full_export_${timestamp}.json"
+            echo -e "${CYAN}[INFO] 正在从系统核心提取完整数据 (服务器、延迟任务、节点、订阅、规则)...${PLAIN}"
+            if curl -s -f http://127.0.0.1:25775/api/data/export -o "$export_json"; then
+                local j_size
+                j_size=$(ls -lh "$export_json" | awk '{print $5}')
+                echo -e "${GREEN}[OK] 🎉 全量数据成功导出为 JSON 文件！${PLAIN}"
+                echo -e "文件路径: ${BOLD}${CYAN}${export_json}${PLAIN} (${j_size})"
+                echo -e "${YELLOW}提示: 此文件包含了您所有的服务器纳管数据与延迟检测规则，可用于新机器一键秒级恢复！${PLAIN}"
+            else
+                echo -e "${RED}[ERROR] 导出失败，请确认 komari-node-mgr 服务正在运行。${PLAIN}"
+            fi
+            ;;
+        2)
+            mkdir -p "${BACKUP_DIR}"
+            local timestamp
+            timestamp=$(date +"%Y%m%d_%H%M%S")
             local backup_file="${BACKUP_DIR}/komari_backup_${timestamp}.tar.gz"
-            echo -e "${CYAN}[INFO] 正在打包数据库与配置...${PLAIN}"
+            echo -e "${CYAN}[INFO] 正在打包数据库文件...${PLAIN}"
             tar -czf "$backup_file" -C "${DATA_DIR}" nodes.db komari.db 2>/dev/null || tar -czf "$backup_file" -C "${DATA_DIR}" nodes.db
             local b_size
             b_size=$(ls -lh "$backup_file" | awk '{print $5}')
             echo -e "${GREEN}[OK] 备份成功！文件存放在: ${BOLD}${backup_file}${PLAIN} (${b_size})"
             ;;
-        2)
-            if [ ! -d "${BACKUP_DIR}" ] || [ -z "$(ls -A "${BACKUP_DIR}" 2>/dev/null)" ]; then
-                echo -e "${YELLOW}[WARN] 暂未找到任何备份文件 (目录: ${BACKUP_DIR})${PLAIN}"
+        3)
+            echo -e "\n${CYAN}请选择要还原的数据源:${PLAIN}"
+            echo -e "  1. 从历史备份目录 (${BACKUP_DIR}) 中选择文件还原"
+            echo -e "  2. 手动输入服务器本地备份文件的绝对路径"
+            read -r -p "请输入 [1-2]: " src_type
+            local restore_target=""
+            if [ "$src_type" = "1" ]; then
+                if [ ! -d "${BACKUP_DIR}" ] || [ -z "$(ls -A "${BACKUP_DIR}" 2>/dev/null)" ]; then
+                    echo -e "${YELLOW}[WARN] 暂未找到任何备份文件 (目录: ${BACKUP_DIR})${PLAIN}"
+                    return
+                fi
+                local idx=1
+                local files=()
+                for f in "${BACKUP_DIR}"/*; do
+                    [ -f "$f" ] || continue
+                    files+=("$f")
+                    echo "  ${idx}. $(basename "$f") ($(ls -lh "$f" | awk '{print $5}'))"
+                    idx=$((idx + 1))
+                done
+                if [ ${#files[@]} -eq 0 ]; then
+                    echo -e "${YELLOW}无有效备份文件。${PLAIN}"
+                    return
+                fi
+                read -r -p "请输入要还原的备份编号 [1-${#files[@]}]: " f_num
+                if [[ ! "$f_num" =~ ^[0-9]+$ ]] || [ "$f_num" -lt 1 ] || [ "$f_num" -gt ${#files[@]} ]; then
+                    echo -e "${RED}[ERROR] 输入无效。${PLAIN}"
+                    return
+                fi
+                restore_target="${files[$((f_num - 1))]}"
+            else
+                read -r -p "请输入备份文件完整路径 (例如 /tmp/backup.json 或 /tmp/backup.tar.gz): " restore_target
+                restore_target=$(echo "$restore_target" | tr -d '[:space:]')
+            fi
+
+            if [ ! -f "$restore_target" ]; then
+                echo -e "${RED}[ERROR] 指定文件不存在: ${restore_target}${PLAIN}"
                 return
             fi
-            echo -e "\n${CYAN}可供还原的备份文件列表:${PLAIN}"
-            local idx=1
-            local files=()
-            for f in "${BACKUP_DIR}"/*.tar.gz; do
-                [ -e "$f" ] || continue
-                files+=("$f")
-                echo "  ${idx}. $(basename "$f") ($(ls -lh "$f" | awk '{print $5}'))"
-                idx=$((idx + 1))
-            done
-            if [ ${#files[@]} -eq 0 ]; then
-                echo -e "${YELLOW}无有效备份文件。${PLAIN}"
+
+            echo -e "${YELLOW}[WARN] 还原操作将导入并覆盖现有的对应数据！${PLAIN}"
+            read -r -p "确认继续还原吗？[y/N]: " confirm_r
+            if [[ ! "$confirm_r" =~ ^[Yy]$ ]]; then
+                echo -e "${YELLOW}[CANCEL] 取消还原。${PLAIN}"
                 return
             fi
-            read -r -p "请输入要还原的备份编号 [1-${#files[@]}]: " f_num
-            if [[ ! "$f_num" =~ ^[0-9]+$ ]] || [ "$f_num" -lt 1 ] || [ "$f_num" -gt ${#files[@]} ]; then
-                echo -e "${RED}[ERROR] 输入无效。${PLAIN}"
-                return
-            fi
-            local chosen="${files[$((f_num - 1))]}"
-            echo -e "${YELLOW}[WARN] 还原备份将覆盖现有的 nodes.db / komari.db 数据！${PLAIN}"
-            read -r -p "确认还原吗？[y/N]: " confirm_r
-            if [[ "$confirm_r" =~ ^[Yy]$ ]]; then
+
+            if [[ "$restore_target" =~ \.json$ ]]; then
+                echo -e "${CYAN}[INFO] 正在通过 API 导入全量 JSON 数据...${PLAIN}"
+                local resp
+                resp=$(curl -s -X POST http://127.0.0.1:25775/api/data/import -H "Content-Type: application/json" -d @"$restore_target")
+                if echo "$resp" | grep -q '"ok":\s*true'; then
+                    echo -e "${GREEN}[OK] 🎉 JSON 数据导入恢复成功！${PLAIN}"
+                    systemctl restart komari komari-node-mgr
+                else
+                    echo -e "${RED}[ERROR] 导入失败: ${resp}${PLAIN}"
+                fi
+            elif [[ "$restore_target" =~ \.tar\.gz$ ]]; then
+                echo -e "${CYAN}[INFO] 正在解压并恢复 SQLite 数据库...${PLAIN}"
                 systemctl stop komari komari-node-mgr
-                tar -xzf "$chosen" -C "${DATA_DIR}"
+                tar -xzf "$restore_target" -C "${DATA_DIR}"
                 systemctl start komari komari-node-mgr
-                echo -e "${GREEN}[OK] 数据库还原完成！服务已重启。${PLAIN}"
+                echo -e "${GREEN}[OK] 🎉 数据库压缩包还原成功！${PLAIN}"
+            else
+                echo -e "${RED}[ERROR] 不支持的备份格式 (仅支持 .json 或 .tar.gz)${PLAIN}"
             fi
             ;;
         *)
@@ -582,44 +632,119 @@ backup_restore_db() {
     esac
 }
 
-# 11. 查看 / 重置分流订阅 Token
+# 11. 多用户订阅管理 (新建用户 / 独立订阅链接 / 重置Token / 启禁用)
 manage_sub_token() {
-    echo -e "\n${BOLD}${CYAN}=== 统一分流订阅 Token 管理 ===${PLAIN}"
-    local cur_token
-    cur_token=$(get_sub_token)
-    local base_url
-    base_url=$(get_access_url)
-
-    echo -e "当前默认分流订阅 Token: ${YELLOW}${cur_token}${PLAIN}"
-    echo -e "完整订阅链接: ${BOLD}${CYAN}${base_url}/sub/${cur_token}${PLAIN}\n"
-
-    echo -e "  1. 重新生成随机订阅 Token"
-    echo -e "  2. 手动指定自定义 Token"
-    echo -e "  0. 返回上级菜单"
-    echo ""
-    read -r -p "请选择操作 [0-2]: " t_choice
-    case "$t_choice" in
-        1)
-            local new_tok
-            new_tok=$(tr -dc a-f0-9 < /dev/urandom | head -c 32 || echo "sub$(date +%s)")
-            sqlite3 "${DATA_DIR}/nodes.db" "UPDATE subscriptions SET token='${new_tok}' WHERE name='default' OR id=1;" 2>/dev/null \
-              || sqlite3 "${DATA_DIR}/nodes.db" "INSERT INTO subscriptions (token, name) VALUES ('${new_tok}', 'default');"
-            echo -e "${GREEN}[OK] 已生成新订阅 Token: ${BOLD}${new_tok}${PLAIN}"
-            echo -e "新订阅地址: ${BOLD}${CYAN}${base_url}/sub/${new_tok}${PLAIN}"
-            ;;
-        2)
-            read -r -p "请输入自定义订阅 Token (字母数字组合): " custom_tok
-            custom_tok=$(echo "$custom_tok" | tr -d '[:space:]')
-            if [ -n "$custom_tok" ]; then
-                sqlite3 "${DATA_DIR}/nodes.db" "UPDATE subscriptions SET token='${custom_tok}' WHERE name='default' OR id=1;" 2>/dev/null \
-                  || sqlite3 "${DATA_DIR}/nodes.db" "INSERT INTO subscriptions (token, name) VALUES ('${custom_tok}', 'default');"
-                echo -e "${GREEN}[OK] 订阅 Token 已更新为: ${BOLD}${custom_tok}${PLAIN}"
-                echo -e "新订阅地址: ${BOLD}${CYAN}${base_url}/sub/${custom_tok}${PLAIN}"
-            fi
-            ;;
-        *)
-            ;;
-    esac
+    while true; do
+        echo -e "\n${BOLD}${CYAN}=== 👥 用户订阅管理中心 ===${PLAIN}"
+        echo -e "说明: 为不同用户/好友创建独立的订阅链接，支持单独刷新 Token、随时启用/禁用或删除。\n"
+        
+        # 读取现有用户列表
+        local user_json
+        user_json=$(curl -s http://127.0.0.1:25775/api/sub/users 2>/dev/null || echo '{"users":[]}')
+        
+        echo -e "${BOLD}当前用户订阅列表:${PLAIN}"
+        echo -e "------------------------------------------------------------------"
+        python3 -c '
+import json, sys
+data = json.loads(sys.argv[1])
+users = data.get("users", [])
+if not users:
+    print("  (暂无用户)")
+for u in users:
+    status = "\033[0;32m[🟢 启用]\033[0m" if u.get("enabled") else "\033[0;31m[🔴 禁用]\033[0m"
+    rem = f" ({u.get(\x27remark\x27)})" if u.get("remark") else ""
+    print(f"  ID: {u.get(\x27id\x27)} | 用户名: \033[1m{u.get(\x27name\x27)}\033[0m{rem} {status}")
+    print(f"  订阅链接: \033[0;36m{u.get(\x27sub_url\x27)}\033[0m\n")
+' "$user_json" 2>/dev/null
+        echo -e "------------------------------------------------------------------"
+        echo -e "  1. 新建用户订阅 (添加新用户并生成专属链接)"
+        echo -e "  2. 刷新 / 重置指定用户的订阅 Token"
+        echo -e "  3. 启用 / 禁用指定用户 (禁用后该链接立即 403 阻断)"
+        echo -e "  4. 删除指定用户订阅"
+        echo -e "  0. 返回上级菜单"
+        echo ""
+        read -r -p "请选择操作 [0-4]: " u_opt
+        case "$u_opt" in
+            1)
+                read -r -p "请输入新用户名 (例如: 张三 / user2): " new_u_name
+                new_u_name=$(echo "$new_u_name" | tr -d '[:space:]')
+                if [ -z "$new_u_name" ]; then
+                    echo -e "${YELLOW}[CANCEL] 用户名不能为空。${PLAIN}"
+                    continue
+                fi
+                read -r -p "请输入备注信息 (选填，直接回车留空): " new_u_rem
+                local create_resp
+                create_resp=$(curl -s -X POST http://127.0.0.1:25775/api/sub/users/create \
+                    -H "Content-Type: application/json" \
+                    -d "{\"name\":\"${new_u_name}\",\"remark\":\"${new_u_rem}\"}")
+                if echo "$create_resp" | grep -q '"ok":\s*true'; then
+                    echo -e "${GREEN}[OK] 🎉 新用户订阅创建成功！${PLAIN}"
+                else
+                    echo -e "${RED}[ERROR] 创建失败: ${create_resp}${PLAIN}"
+                fi
+                ;;
+            2)
+                read -r -p "请输入要刷新 Token 的用户 ID: " r_uid
+                if [[ ! "$r_uid" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}[ERROR] 无效的用户 ID。${PLAIN}"
+                    continue
+                fi
+                local reset_resp
+                reset_resp=$(curl -s -X POST http://127.0.0.1:25775/api/sub/users/reset \
+                    -H "Content-Type: application/json" \
+                    -d "{\"id\":${r_uid}}")
+                if echo "$reset_resp" | grep -q '"ok":\s*true'; then
+                    echo -e "${GREEN}[OK] 🎉 该用户的订阅 Token 已刷新！旧链接已作废，新链接已生效。${PLAIN}"
+                else
+                    echo -e "${RED}[ERROR] 刷新失败: ${reset_resp}${PLAIN}"
+                fi
+                ;;
+            3)
+                read -r -p "请输入要切换状态的用户 ID: " t_uid
+                if [[ ! "$t_uid" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}[ERROR] 无效的用户 ID。${PLAIN}"
+                    continue
+                fi
+                echo -e "请选择目标状态: 1=启用  0=禁用"
+                read -r -p "请输入 [0/1]: " t_stat
+                local en_val=1
+                [ "$t_stat" = "0" ] && en_val=0
+                local tog_resp
+                tog_resp=$(curl -s -X POST http://127.0.0.1:25775/api/sub/users/toggle \
+                    -H "Content-Type: application/json" \
+                    -d "{\"id\":${t_uid},\"enabled\":${en_val}}")
+                if echo "$tog_resp" | grep -q '"ok":\s*true'; then
+                    echo -e "${GREEN}[OK] 状态已更新！${PLAIN}"
+                else
+                    echo -e "${RED}[ERROR] 更新失败: ${tog_resp}${PLAIN}"
+                fi
+                ;;
+            4)
+                read -r -p "请输入要删除的用户 ID: " d_uid
+                if [[ ! "$d_uid" =~ ^[0-9]+$ ]]; then
+                    echo -e "${RED}[ERROR] 无效的用户 ID。${PLAIN}"
+                    continue
+                fi
+                read -r -p "确认删除用户 ID ${d_uid} 的订阅吗？[y/N]: " conf_del
+                if [[ "$conf_del" =~ ^[Yy]$ ]]; then
+                    local del_resp
+                    del_resp=$(curl -s -X POST http://127.0.0.1:25775/api/sub/users/delete \
+                        -H "Content-Type: application/json" \
+                        -d "{\"id\":${d_uid}}")
+                    if echo "$del_resp" | grep -q '"ok":\s*true'; then
+                        echo -e "${GREEN}[OK] 用户订阅已删除。${PLAIN}"
+                    else
+                        echo -e "${RED}[ERROR] 删除失败: ${del_resp}${PLAIN}"
+                    fi
+                fi
+                ;;
+            0)
+                break
+                ;;
+            *)
+                ;;
+        esac
+    done
 }
 
 # 12. 重置面板管理员密码

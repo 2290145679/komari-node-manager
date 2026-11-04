@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token TEXT UNIQUE NOT NULL,
     name TEXT DEFAULT 'default',
+    enabled INTEGER DEFAULT 1,
+    remark TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

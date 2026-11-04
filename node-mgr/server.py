@@ -66,9 +66,23 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             token TEXT UNIQUE NOT NULL,
             name TEXT DEFAULT 'default',
+            enabled INTEGER DEFAULT 1,
+            remark TEXT DEFAULT '',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    c.execute("PRAGMA table_info(subscriptions)")
+    sub_cols = [r[1] for r in c.fetchall()]
+    if 'enabled' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN enabled INTEGER DEFAULT 1")
+        except Exception:
+            pass
+    if 'remark' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN remark TEXT DEFAULT ''")
+        except Exception:
+            pass
     c.execute('''
         CREATE TABLE IF NOT EXISTS agent_heartbeats (
             token TEXT PRIMARY KEY,
@@ -2348,11 +2362,15 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             token = path.split("/sub/")[1].strip("/")
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id FROM subscriptions WHERE token = ?", (token,))
+            c.execute("SELECT id, enabled, name FROM subscriptions WHERE token = ?", (token,))
             sub = c.fetchone()
             if not sub:
                 conn.close()
                 self._send_text("Invalid Subscription Token", 404)
+                return
+            if len(sub) > 1 and sub[1] == 0:
+                conn.close()
+                self._send_text("Subscription has been disabled or expired", 403)
                 return
             
             c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
@@ -2650,11 +2668,112 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT token FROM subscriptions LIMIT 1")
+            c.execute("SELECT token FROM subscriptions ORDER BY id ASC LIMIT 1")
             row = c.fetchone()
             conn.close()
             token = row[0] if row else ""
             self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}"})
+            return
+
+        # User subscriptions list endpoint
+        if path in ["/api/sub/users", "/api/node-mgr/sub/users"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, token, enabled, remark, created_at FROM subscriptions ORDER BY id ASC")
+            users = []
+            for r in c.fetchall():
+                users.append({
+                    "id": r[0],
+                    "name": r[1] or "默认用户",
+                    "token": r[2],
+                    "enabled": bool(r[3]),
+                    "remark": r[4] or "",
+                    "created_at": str(r[5]),
+                    "sub_url": f"https://{DOMAIN}/sub/{r[2]}"
+                })
+            conn.close()
+            self._send_json({"ok": True, "users": users})
+            return
+
+        # Full Data Export endpoint (Servers, Ping tasks, Nodes, Subscriptions, Rules)
+        if path in ["/api/data/export", "/api/node-mgr/data/export"]:
+            def _clean_val(v):
+                if isinstance(v, bytes):
+                    try:
+                        return v.decode("utf-8")
+                    except UnicodeDecodeError:
+                        import base64
+                        return "__b64__:" + base64.b64encode(v).decode("ascii")
+                if hasattr(v, "isoformat"):
+                    return v.isoformat()
+                return v
+
+            def _clean_row(d):
+                return {k: _clean_val(v) for k, v in d.items()}
+
+            export_data = {
+                "version": "1.0",
+                "export_time": datetime.now().isoformat(),
+                "domain": DOMAIN,
+                "servers": [],
+                "ping_tasks": [],
+                "nodes": [],
+                "subscriptions": [],
+                "subscription_rules": {},
+                "notification_channels": [],
+                "notification_rules": []
+            }
+            if os.path.exists(KOMARI_DB):
+                try:
+                    k_conn = sqlite3.connect(KOMARI_DB)
+                    k_conn.row_factory = sqlite3.Row
+                    k_c = k_conn.cursor()
+                    k_c.execute("SELECT * FROM clients")
+                    export_data["servers"] = [_clean_row(dict(r)) for r in k_c.fetchall()]
+                    try:
+                        k_c.execute("SELECT * FROM ping_tasks")
+                        export_data["ping_tasks"] = [_clean_row(dict(r)) for r in k_c.fetchall()]
+                    except Exception:
+                        pass
+                    k_conn.close()
+                except Exception as e:
+                    print(f"Export komari.db error: {e}")
+
+            if os.path.exists(NODES_DB):
+                try:
+                    n_conn = sqlite3.connect(NODES_DB)
+                    n_conn.row_factory = sqlite3.Row
+                    n_c = n_conn.cursor()
+                    n_c.execute("SELECT * FROM nodes")
+                    export_data["nodes"] = [_clean_row(dict(r)) for r in n_c.fetchall()]
+
+                    n_c.execute("SELECT * FROM subscriptions")
+                    export_data["subscriptions"] = [_clean_row(dict(r)) for r in n_c.fetchall()]
+
+                    n_c.execute("SELECT * FROM subscription_rules WHERE id = 1")
+                    rule_row = n_c.fetchone()
+                    if rule_row:
+                        export_data["subscription_rules"] = _clean_row(dict(rule_row))
+
+                    n_c.execute("SELECT * FROM notification_channels")
+                    export_data["notification_channels"] = [_clean_row(dict(r)) for r in n_c.fetchall()]
+
+                    n_c.execute("SELECT * FROM notification_rules")
+                    export_data["notification_rules"] = [_clean_row(dict(r)) for r in n_c.fetchall()]
+
+                    n_conn.close()
+                except Exception as e:
+                    print(f"Export nodes.db error: {e}")
+
+            json_bytes = json.dumps(export_data, indent=2, ensure_ascii=False).encode("utf-8")
+            filename = f"komari_full_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(json_bytes)))
+            self.end_headers()
+            self.wfile.write(json_bytes)
             return
 
         # Agent config sync endpoint
@@ -2899,12 +3018,174 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             new_token = secrets.token_hex(16)
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("DELETE FROM subscriptions")
-            c.execute("INSERT INTO subscriptions (token, name) VALUES (?, 'default')", (new_token,))
+            c.execute("UPDATE subscriptions SET token = ? WHERE name = 'default' OR id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_token,))
+            if c.rowcount == 0:
+                c.execute("INSERT INTO subscriptions (token, name) VALUES (?, 'default')", (new_token,))
             conn.commit()
             conn.close()
             new_sub_url = f"https://{DOMAIN}/sub/{new_token}"
             self._send_json({"ok": True, "token": new_token, "sub_url": new_sub_url})
+            return
+
+        # User subscriptions management endpoints
+        if path in ["/api/sub/users/create", "/api/node-mgr/sub/users/create"]:
+            name = str(body.get("name") or "").strip()
+            remark = str(body.get("remark") or "").strip()
+            if not name:
+                self._send_json({"ok": False, "error": "用户名不能为空"}, 400)
+                return
+            new_tok = secrets.token_hex(16)
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("INSERT INTO subscriptions (token, name, enabled, remark) VALUES (?, ?, 1, ?)", (new_tok, name, remark))
+            new_id = c.lastrowid
+            conn.commit()
+            conn.close()
+            self._send_json({
+                "ok": True,
+                "user": {
+                    "id": new_id,
+                    "name": name,
+                    "token": new_tok,
+                    "enabled": True,
+                    "remark": remark,
+                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}"
+                }
+            })
+            return
+
+        if path in ["/api/sub/users/reset", "/api/node-mgr/sub/users/reset"]:
+            uid = body.get("id")
+            token = body.get("token")
+            new_tok = secrets.token_hex(16)
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if uid is not None:
+                c.execute("UPDATE subscriptions SET token = ? WHERE id = ?", (new_tok, uid))
+            elif token:
+                c.execute("UPDATE subscriptions SET token = ? WHERE token = ?", (new_tok, token))
+            else:
+                c.execute("UPDATE subscriptions SET token = ? WHERE id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_tok,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True, "token": new_tok, "sub_url": f"https://{DOMAIN}/sub/{new_tok}"})
+            return
+
+        if path in ["/api/sub/users/toggle", "/api/node-mgr/sub/users/toggle"]:
+            uid = body.get("id")
+            enabled = 1 if body.get("enabled", True) else 0
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE subscriptions SET enabled = ? WHERE id = ?", (enabled, uid))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/sub/users/delete", "/api/node-mgr/sub/users/delete"]:
+            uid = body.get("id")
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("DELETE FROM subscriptions WHERE id = ?", (uid,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True})
+            return
+
+        # Full Data Import endpoint
+        if path in ["/api/data/import", "/api/node-mgr/data/import"]:
+            def _import_val(v):
+                if isinstance(v, str) and v.startswith("__b64__:"):
+                    import base64
+                    try:
+                        return base64.b64decode(v[8:])
+                    except Exception:
+                        return v
+                return v
+
+            data = body
+            imported_counts = {"servers": 0, "ping_tasks": 0, "nodes": 0, "subscriptions": 0}
+
+            if "servers" in data and os.path.exists(KOMARI_DB):
+                try:
+                    k_conn = sqlite3.connect(KOMARI_DB)
+                    k_c = k_conn.cursor()
+                    for s in data.get("servers", []):
+                        cols = list(s.keys())
+                        placeholders = ",".join(["?"] * len(cols))
+                        col_names = ",".join([f"`{c}`" for c in cols])
+                        vals = [_import_val(v) for v in s.values()]
+                        k_c.execute(f"INSERT OR REPLACE INTO clients ({col_names}) VALUES ({placeholders})", vals)
+                        imported_counts["servers"] += 1
+
+                    for p in data.get("ping_tasks", []):
+                        cols = list(p.keys())
+                        placeholders = ",".join(["?"] * len(cols))
+                        col_names = ",".join([f"`{c}`" for c in cols])
+                        vals = [_import_val(v) for v in p.values()]
+                        k_c.execute(f"INSERT OR REPLACE INTO ping_tasks ({col_names}) VALUES ({placeholders})", vals)
+                        imported_counts["ping_tasks"] += 1
+
+                    k_conn.commit()
+                    k_conn.close()
+                except Exception as e:
+                    print(f"Import komari.db error: {e}")
+
+            if os.path.exists(NODES_DB):
+                try:
+                    n_conn = sqlite3.connect(NODES_DB)
+                    n_c = n_conn.cursor()
+                    for n in data.get("nodes", []):
+                        cols = [k for k in n.keys() if k != "id"]
+                        placeholders = ",".join(["?"] * len(cols))
+                        col_names = ",".join([f"`{c}`" for c in cols])
+                        vals = [_import_val(n[k]) for k in cols]
+                        n_c.execute(f"INSERT OR REPLACE INTO nodes ({col_names}) VALUES ({placeholders})", vals)
+                        imported_counts["nodes"] += 1
+
+                    for sub in data.get("subscriptions", []):
+                        cols = [k for k in sub.keys() if k != "id"]
+                        placeholders = ",".join(["?"] * len(cols))
+                        col_names = ",".join([f"`{c}`" for c in cols])
+                        vals = [_import_val(sub[k]) for k in cols]
+                        n_c.execute(f"INSERT OR REPLACE INTO subscriptions ({col_names}) VALUES ({placeholders})", vals)
+                        imported_counts["subscriptions"] += 1
+
+                    rules = data.get("subscription_rules")
+                    if rules:
+                        cols = [k for k in rules.keys() if k != "id"]
+                        set_clause = ",".join([f"`{c}`=?" for c in cols])
+                        vals = [_import_val(rules[k]) for k in cols]
+                        n_c.execute(f"UPDATE subscription_rules SET {set_clause} WHERE id = 1", vals)
+
+                    n_conn.commit()
+                    n_conn.close()
+                except Exception as e:
+                    print(f"Import nodes.db error: {e}")
+
+            self._send_json({"ok": True, "imported": imported_counts, "msg": "数据已成功导入并恢复！"})
+            return
+
+        # System Hot Update endpoint
+        if path in ["/api/system/hot-update", "/api/node-mgr/system/hot-update"]:
+            def _async_hot_update():
+                try:
+                    web_patch_dir = "/opt/komari/web-patch"
+                    cmd = f"""
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-index-BfURcdSr.js -o {web_patch_dir}/assets/chunk-index-BfURcdSr.js
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-_layout-KM9Ke-Y5.js -o {web_patch_dir}/assets/chunk-_layout-KM9Ke-Y5.js
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js -o {web_patch_dir}/assets/chunk-plugin_page-Xen4h3Tc.js
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/komari-singbox-helper.js -o {web_patch_dir}/assets/komari-singbox-helper.js
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/plugin/node-manager/panel/index.html -o /opt/komari/data/plugin/node-manager/panel/index.html
+                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/bin/hhub -o /usr/local/bin/hhub && chmod +x /usr/local/bin/hhub
+                    chmod 644 {web_patch_dir}/assets/*
+                    nginx -s reload || systemctl reload nginx
+                    """
+                    subprocess.run(cmd, shell=True, check=True)
+                except Exception as e:
+                    print(f"Hot update failed: {e}")
+            threading.Thread(target=_async_hot_update, daemon=True).start()
+            self._send_json({"ok": True, "msg": "热更新已在后台触发，约 3 秒后重载生效（主控监控零停机）"})
             return
 
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
