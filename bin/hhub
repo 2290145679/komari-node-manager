@@ -212,8 +212,8 @@ show_dashboard() {
     echo -e "${PURPLE}==================================================================${PLAIN}"
     echo -e "  ${BOLD}[1]${PLAIN} 重启全部服务         ${BOLD}[2]${PLAIN} 停止全部服务         ${BOLD}[3]${PLAIN} 启动全部服务"
     echo -e "  ${BOLD}[4]${PLAIN} 查看实时运行日志     ${BOLD}[5]${PLAIN} 更改绑定域名         ${BOLD}[6]${PLAIN} 不使用域名(纯IP访问)"
-    echo -e "  ${BOLD}[7]${PLAIN} 更改 Web 访问端口    ${BOLD}[8]${PLAIN} 重新申请/续签 SSL     ${BOLD}[9]${PLAIN} 一键升级系统与补丁"
-    echo -e "  ${BOLD}[10]${PLAIN} 备份/还原数据库     ${BOLD}[11]${PLAIN} 查看/重置订阅 Token  ${BOLD}[12]${PLAIN} 重置管理员密码"
+    echo -e "  ${BOLD}[7]${PLAIN} 更改 Web 访问端口    ${BOLD}[8]${PLAIN} 重新申请/续签 SSL     ${BOLD}[9]${PLAIN} 一键平滑热更新系统"
+    echo -e "  ${BOLD}[10]${PLAIN} 全量数据备份与还原   ${BOLD}[11]${PLAIN} 👥 多用户订阅管理     ${BOLD}[12]${PLAIN} 重置管理员密码"
     echo -e "  ${BOLD}[13]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
     echo -e "${PURPLE}==================================================================${PLAIN}"
 }
