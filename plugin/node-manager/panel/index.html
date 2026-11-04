@@ -523,7 +523,7 @@
             <button onclick="switchTab('rules')" class="text-[11px] sm:text-xs bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold px-2.5 py-1 rounded-full transition">
               <i data-lucide="sliders" class="w-3 h-3"></i> 分流配置
             </button>
-            <button onclick="openUsersModal()" class="text-[11px] sm:text-xs bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 font-semibold px-2.5 py-1 rounded-full transition" title="多用户独立订阅">
+            <button onclick="switchTab('users')" class="text-[11px] sm:text-xs bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 hover:underline flex items-center gap-1 font-semibold px-2.5 py-1 rounded-full transition" title="多用户独立订阅">
               <i data-lucide="users" class="w-3 h-3"></i> 用户管理
             </button>
             <button onclick="openBackupModal()" class="text-[11px] sm:text-xs bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 font-semibold px-2.5 py-1 rounded-full transition" title="全量数据备份与还原">
@@ -1483,6 +1483,75 @@
         </div>
       </div>
     </div>
+
+    <!-- ========================================== -->
+    <!-- VIEW 5: 用户独立订阅管理 (User Subscriptions) -->
+    <!-- ========================================== -->
+    <div id="viewUsers" class="space-y-4 sm:space-y-6 hidden">
+      <!-- View 5 Header -->
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h1 class="text-xl sm:text-2xl font-bold flex items-center gap-2 flex-wrap">
+            <span class="p-1.5 sm:p-2 bg-purple-500/10 text-purple-600 dark:text-purple-400 rounded-xl shrink-0">
+              <i data-lucide="users" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+            </span>
+            <span class="truncate">用户独立订阅管理</span>
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              独立凭据与独享UUID隔离
+            </span>
+          </h1>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
+            为不同使用者分配独立订阅链接与独享 UUID · 重置订阅时自动轮换并作废旧凭据，不影响其他用户
+          </p>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button onclick="loadUsersList()" class="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-xl bg-purple-50 dark:bg-purple-950/60 hover:bg-purple-100 dark:hover:bg-purple-900/60 text-purple-600 dark:text-purple-400 border border-purple-200/50 dark:border-purple-800/50 flex items-center gap-1.5 transition active:scale-95">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+            <span>刷新列表</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Create User Card -->
+      <div class="bg-white dark:bg-[#1a1a1a] p-4 sm:p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100">新建独立用户订阅</h2>
+            <p class="text-[11px] text-slate-400">系统将自动为该用户分配唯一的独立订阅 Token 与全新专属 UUID 凭据</p>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+          <input type="text" id="viewNewUserNameInput" placeholder="输入用户标识或姓名 (如: 朋友A / iPad-Client)..." class="text-xs sm:text-sm bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2.5 flex-1 text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500">
+          <button onclick="createViewUserSubscription()" class="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs sm:text-sm font-semibold transition active:scale-95 flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>创建专属订阅</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- User List Card -->
+      <div class="bg-white dark:bg-[#1a1a1a] rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm">
+        <div class="p-3.5 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <h2 class="font-bold text-sm sm:text-base flex items-center gap-1.5 sm:gap-2">
+              <i data-lucide="users" class="w-4 h-4 text-purple-500"></i>
+              所有用户订阅列表
+            </h2>
+            <span class="text-xs text-slate-400" id="viewUsersCountBadge">(0 位用户)</span>
+          </div>
+        </div>
+
+        <div id="viewUsersListContainer" class="p-3.5 sm:p-5 space-y-3">
+          <!-- Rendered dynamically -->
+        </div>
+      </div>
+    </div>
+
   </div> <!-- /max-w-7xl -->
 
     <!-- Client Import & Universal QR Modal (Bottom sheet on mobile) -->
@@ -1870,7 +1939,7 @@
           </div>
           <p class="text-xs text-slate-500 dark:text-slate-400">完整包含服务器主机资产、探针Token、延迟检测任务、分流规则以及所有用户订阅记录。</p>
           <div class="pt-1">
-            <a href="/api/data/export" download="komari_full_backup.json" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition shadow-sm active:scale-95">
+            <a href="/api/node-mgr/data/export" download="komari_full_backup.json" class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl transition shadow-sm active:scale-95">
               <i data-lucide="download-cloud" class="w-4 h-4"></i> 立即导出 JSON 备份
             </a>
           </div>
@@ -2008,6 +2077,10 @@
       <i data-lucide="bell" class="w-5 h-5 mb-0.5"></i>
       <span class="text-[10px] tracking-tight">通知</span>
     </button>
+    <button onclick="switchTab('users')" id="mobileNavUsers" class="flex flex-col items-center justify-center py-1 px-3 rounded-2xl text-slate-400 dark:text-zinc-500 hover:text-slate-600 dark:hover:text-zinc-300 font-medium transition active:scale-90">
+      <i data-lucide="users" class="w-5 h-5 mb-0.5"></i>
+      <span class="text-[10px] tracking-tight">用户</span>
+    </button>
   </nav>
 
   <script>
@@ -2055,18 +2128,20 @@
 
     function switchTab(tab) {
       if (!tab) tab = 'nodes';
-      if (!['nodes', 'traffic', 'rules', 'notifications'].includes(tab)) tab = 'nodes';
+      if (!['nodes', 'traffic', 'rules', 'notifications', 'users'].includes(tab)) tab = 'nodes';
       currentTab = tab;
 
       const viewNodes = document.getElementById('viewNodes');
       const viewTraffic = document.getElementById('viewTraffic');
       const viewRules = document.getElementById('viewRules');
       const viewNotifications = document.getElementById('viewNotifications');
+      const viewUsers = document.getElementById('viewUsers');
 
       if (viewNodes) viewNodes.classList.add('hidden');
       if (viewTraffic) viewTraffic.classList.add('hidden');
       if (viewRules) viewRules.classList.add('hidden');
       if (viewNotifications) viewNotifications.classList.add('hidden');
+      if (viewUsers) viewUsers.classList.add('hidden');
 
       let activeEl = null;
       if (tab === 'nodes') {
@@ -2088,6 +2163,11 @@
         if (typeof loadNotificationLogs === 'function' && !notifLogsLoadedOnce) {
           notifLogsLoadedOnce = true;
           loadNotificationLogs();
+        }
+      } else if (tab === 'users') {
+        if (viewUsers) { viewUsers.classList.remove('hidden'); activeEl = viewUsers; }
+        if (typeof loadUsersList === 'function') {
+          loadUsersList();
         }
       }
 
@@ -2140,7 +2220,7 @@
         if (window.parent && window.parent !== window) {
           const pu = new URLSearchParams(window.parent.location.search);
           const pTab = pu.get('tab');
-          if (pTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(pTab)) return pTab;
+          if (pTab && ['nodes', 'traffic', 'rules', 'notifications', 'users'].includes(pTab)) return pTab;
         }
       } catch (e) {}
 
@@ -2148,7 +2228,7 @@
       try {
         const u = new URLSearchParams(window.location.search);
         const lTab = u.get('tab');
-        if (lTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(lTab)) return lTab;
+        if (lTab && ['nodes', 'traffic', 'rules', 'notifications', 'users'].includes(lTab)) return lTab;
       } catch (e) {}
 
       return 'nodes';
@@ -2168,7 +2248,7 @@
         if (window.parent && window.parent !== window) {
           const pu = new URLSearchParams(window.parent.location.search);
           const pTab = pu.get('tab');
-          if (pTab && pTab !== currentTab && ['nodes', 'traffic', 'rules', 'notifications'].includes(pTab)) {
+          if (pTab && pTab !== currentTab && ['nodes', 'traffic', 'rules', 'notifications', 'users'].includes(pTab)) {
             switchTab(pTab);
           }
         }
@@ -5062,13 +5142,24 @@
 
     async function loadUsersList() {
       const container = document.getElementById('usersListContainer');
-      container.innerHTML = '<div class="text-center py-6 text-xs text-slate-400">正在加载用户订阅列表...</div>';
+      const viewContainer = document.getElementById('viewUsersListContainer');
+      const viewBadge = document.getElementById('viewUsersCountBadge');
+
+      if (container) container.innerHTML = '<div class="text-center py-6 text-xs text-slate-400">正在加载用户订阅列表...</div>';
+      if (viewContainer) viewContainer.innerHTML = '<div class="text-center py-8 text-xs text-slate-400">正在加载用户订阅列表...</div>';
+
       try {
-        const res = await fetch('/api/sub/users').then(r => r.json());
+        const res = await fetch('/api/node-mgr/sub/users').then(r => r.json());
         if (!res.ok || !res.users || res.users.length === 0) {
-          container.innerHTML = '<div class="text-center py-8 text-xs text-slate-400">暂无独立用户，可在上方输入名称新建用户订阅</div>';
+          const emptyHtml = '<div class="text-center py-8 text-xs text-slate-400">暂无独立用户，可在上方输入名称新建用户订阅</div>';
+          if (container) container.innerHTML = emptyHtml;
+          if (viewContainer) viewContainer.innerHTML = emptyHtml;
+          if (viewBadge) viewBadge.textContent = '(0 位用户)';
           return;
         }
+
+        if (viewBadge) viewBadge.textContent = `(${res.users.length} 位用户)`;
+
         let html = '';
         res.users.forEach(u => {
           const isEnabled = u.enabled;
@@ -5076,50 +5167,83 @@
             ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>启用中</span>'
             : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 dark:bg-zinc-800 dark:text-zinc-400 border border-slate-200 dark:border-zinc-700"><span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>已禁用</span>';
           
+          const uuidDisplay = u.user_uuid ? `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 truncate" title="专属独立 UUID: ${escapeHtml(u.user_uuid)}">独享UUID: ${escapeHtml(u.user_uuid.slice(0, 8))}...</span>` : '';
+
           html += `
-            <div class="p-3 bg-slate-50 dark:bg-black/20 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
-              <div class="flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                  <div class="w-7 h-7 rounded-lg ${isEnabled ? 'bg-purple-500/10 text-purple-600' : 'bg-slate-200 text-slate-500'} flex items-center justify-center font-bold text-xs">
+            <div class="p-3.5 sm:p-4 bg-slate-50/70 dark:bg-black/20 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-xl ${isEnabled ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400' : 'bg-slate-200 text-slate-500'} flex items-center justify-center font-bold text-xs shrink-0">
                     ${escapeHtml((u.name || 'U').slice(0, 1).toUpperCase())}
                   </div>
                   <div>
-                    <div class="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                    <div class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5 flex-wrap">
                       <span>${escapeHtml(u.name)}</span>
                       ${statusBadge}
+                      ${uuidDisplay}
                     </div>
-                    <div class="text-[10px] text-slate-400">ID: ${u.id} · 创建于 ${u.created_at || '-'}</div>
+                    <div class="text-[10px] sm:text-[11px] text-slate-400 mt-0.5">创建于 ${u.created_at || '-'}</div>
                   </div>
                 </div>
-                <div class="flex items-center gap-1">
-                  <button onclick="toggleUserSubscription(${u.id}, ${isEnabled})" class="px-2 py-1 text-[11px] font-medium rounded-lg ${isEnabled ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30' : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'} transition">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <button onclick="toggleUserSubscription(${u.id}, ${isEnabled})" class="px-2.5 py-1 text-xs font-semibold rounded-xl ${isEnabled ? 'text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30' : 'text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'} transition active:scale-95">
                     ${isEnabled ? '禁用' : '启用'}
                   </button>
-                  <button onclick="resetUserSubscription(${u.id})" class="px-2 py-1 text-[11px] font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-zinc-700 rounded-lg transition">
-                    重置Token
+                  <button onclick="resetUserSubscription(${u.id})" class="px-2.5 py-1 text-xs font-semibold text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 rounded-xl transition flex items-center gap-1 active:scale-95" title="重新生成订阅 Token 并轮换作废该用户旧 UUID 凭据">
+                    <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+                    <span>重置并作废旧凭据</span>
                   </button>
-                  <button onclick="deleteUserSubscription(${u.id}, '${escapeHtml(u.name)}')" class="px-2 py-1 text-[11px] font-medium text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-lg transition">
+                  <button onclick="deleteUserSubscription(${u.id}, '${escapeHtml(u.name)}')" class="px-2 py-1 text-xs font-semibold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition active:scale-95">
                     删除
                   </button>
                 </div>
               </div>
               <div class="flex items-center gap-1.5">
-                <input type="text" readonly value="${u.sub_url}" class="text-[11px] bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 rounded-lg px-2.5 py-1.5 w-full text-slate-600 dark:text-slate-300 font-mono select-all">
-                <button onclick="copyToClipboard('${u.sub_url}', '用户【${escapeHtml(u.name)}】订阅链接已复制！')" class="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-semibold rounded-lg whitespace-nowrap transition active:scale-95 shadow-sm">
-                  复制
+                <input type="text" readonly value="${u.sub_url}" class="text-xs bg-white dark:bg-black/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 w-full text-slate-700 dark:text-slate-300 font-mono select-all">
+                <button onclick="copyToClipboard('${u.sub_url}', '用户【${escapeHtml(u.name)}】订阅链接已复制！')" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl whitespace-nowrap transition active:scale-95 shadow-sm">
+                  复制链接
                 </button>
               </div>
             </div>
           `;
         });
-        container.innerHTML = html;
+
+        if (container) container.innerHTML = html;
+        if (viewContainer) viewContainer.innerHTML = html;
         if (window.lucide) lucide.createIcons();
       } catch (e) {
-        container.innerHTML = `<div class="text-center py-6 text-xs text-rose-500">加载失败: ${e.message}</div>`;
+        const errHtml = `<div class="text-center py-6 text-xs text-rose-500">加载失败: ${e.message}</div>`;
+        if (container) container.innerHTML = errHtml;
+        if (viewContainer) viewContainer.innerHTML = errHtml;
       }
     }
 
-    async function createUserSubscription() {
+    async function createViewUserSubscription() {
+      const input = document.getElementById('viewNewUserNameInput');
+      const name = (input.value || '').trim();
+      if (!name) {
+        showToast('请输入用户名称', 'warning');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/sub/users/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`已成功创建用户【${name}】的独立订阅及专属 UUID！`, 'success');
+          input.value = '';
+          loadUsersList();
+        } else {
+          showToast(res.error || '创建失败', 'error');
+        }
+      } catch (e) {
+        showToast('请求异常: ' + e.message, 'error');
+      }
+    }
+
+    function createUserSubscription() {
       const input = document.getElementById('newUserNameInput');
       const name = (input.value || '').trim();
       if (!name) {
@@ -5127,7 +5251,7 @@
         return;
       }
       try {
-        const res = await fetch('/api/sub/users/create', {
+        const res = await fetch('/api/node-mgr/sub/users/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name: name })
@@ -5147,7 +5271,7 @@
     async function toggleUserSubscription(id, currentEnabled) {
       const newEnabled = !currentEnabled;
       try {
-        const res = await fetch('/api/sub/users/toggle', {
+        const res = await fetch('/api/node-mgr/sub/users/toggle', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: id, enabled: newEnabled })
@@ -5164,9 +5288,9 @@
     }
 
     async function resetUserSubscription(id) {
-      if (!confirm('确定要重置该用户的订阅 Token 吗？旧链接将立即失效！')) return;
+      if (!confirm('确定要重置该用户的专属订阅吗？重置后将自动生成新订阅并轮换作废该用户的旧 UUID 凭据，旧客户端连接将立即断开！')) return;
       try {
-        const res = await fetch('/api/sub/users/reset', {
+        const res = await fetch('/api/node-mgr/sub/users/reset', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: id })
@@ -5185,7 +5309,7 @@
     async function deleteUserSubscription(id, name) {
       if (!confirm(`确定要彻底删除用户【${name}】吗？删除后该订阅链接将无法继续使用！`)) return;
       try {
-        const res = await fetch('/api/sub/users/delete', {
+        const res = await fetch('/api/node-mgr/sub/users/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: id })
@@ -5227,7 +5351,7 @@
             return;
           }
           showToast('正在导入恢复数据...', 'info');
-          const res = await fetch('/api/data/import', {
+          const res = await fetch('/api/node-mgr/data/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(json)

@@ -78,6 +78,18 @@ def init_db():
             c.execute("ALTER TABLE subscriptions ADD COLUMN enabled INTEGER DEFAULT 1")
         except Exception:
             pass
+    if 'user_uuid' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN user_uuid TEXT DEFAULT ''")
+        except Exception:
+            pass
+    try:
+        c.execute("SELECT id, user_uuid FROM subscriptions")
+        for sub_row in c.fetchall():
+            if not sub_row[1]:
+                c.execute("UPDATE subscriptions SET user_uuid = ? WHERE id = ?", (str(uuid.uuid4()), sub_row[0]))
+    except Exception:
+        pass
     if 'remark' not in sub_cols:
         try:
             c.execute("ALTER TABLE subscriptions ADD COLUMN remark TEXT DEFAULT ''")
@@ -1404,6 +1416,19 @@ def build_sing_box_config(nodes_for_server):
     seen_ports = set()
     cert_path = "/etc/sing-box/cert.pem"
     key_path = "/etc/sing-box/cert.key"
+
+    # Gather all active user_uuid from subscriptions to allow multi-user authorization
+    active_user_uuids = []
+    try:
+        conn_sub = sqlite3.connect(NODES_DB)
+        c_sub = conn_sub.cursor()
+        c_sub.execute("SELECT user_uuid FROM subscriptions WHERE enabled = 1")
+        for row in c_sub.fetchall():
+            if row[0] and str(row[0]).strip() and str(row[0]).strip() not in active_user_uuids:
+                active_user_uuids.append(str(row[0]).strip())
+        conn_sub.close()
+    except Exception:
+        pass
     
     for n in nodes_for_server:
         if not n.get("enabled"):
@@ -1418,19 +1443,20 @@ def build_sing_box_config(nodes_for_server):
         tag = f"{proto}-{n.get('id')}"
         u = n.get("uuid_or_passwd")
         sni = n.get("sni") or "addons.mozilla.org"
+
+        all_uuids = [u] if u else []
+        for au in active_user_uuids:
+            if au not in all_uuids:
+                all_uuids.append(au)
         
         if proto == "vless_reality":
+            users_list = [{"uuid": su, "flow": n.get("flow") or "xtls-rprx-vision"} for su in all_uuids]
             inbounds.append({
                 "type": "vless",
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [
-                    {
-                        "uuid": u,
-                        "flow": n.get("flow") or "xtls-rprx-vision"
-                    }
-                ],
+                "users": users_list,
                 "tls": {
                     "enabled": True,
                     "server_name": sni,
@@ -1451,7 +1477,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"password": u}],
+                "users": [{"password": su} for su in all_uuids],
                 "tls": {
                     "enabled": True,
                     "certificate_path": cert_path,
@@ -1464,7 +1490,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"uuid": u, "password": u}],
+                "users": [{"uuid": su, "password": su} for su in all_uuids],
                 "congestion_control": "bbr",
                 "tls": {
                     "enabled": True,
@@ -1478,7 +1504,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"password": u}],
+                "users": [{"password": su} for su in all_uuids],
                 "tls": {
                     "enabled": True,
                     "certificate_path": cert_path,
@@ -1491,7 +1517,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"uuid": u}],
+                "users": [{"uuid": su} for su in all_uuids],
                 "transport": {
                     "type": "ws",
                     "path": n.get("ws_path") or "/vmess"
@@ -2390,7 +2416,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             token = path.split("/sub/")[1].strip("/")
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, enabled, name FROM subscriptions WHERE token = ?", (token,))
+            c.execute("SELECT id, enabled, name, user_uuid FROM subscriptions WHERE token = ?", (token,))
             sub = c.fetchone()
             if not sub:
                 conn.close()
@@ -2401,10 +2427,24 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 self._send_text("Subscription has been disabled or expired", 403)
                 return
             
+            sub_uuid = sub[3] if len(sub) > 3 and sub[3] else None
+
             c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
             all_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
+            # Personalize nodes with this user's dedicated UUID
+            if sub_uuid:
+                personalized_all_nodes = []
+                for n in all_nodes:
+                    if n.get("is_external") or n.get("server_uuid") == "external":
+                        personalized_all_nodes.append(n)
+                    else:
+                        n_copy = dict(n)
+                        n_copy["uuid_or_passwd"] = sub_uuid
+                        personalized_all_nodes.append(n_copy)
+                all_nodes = personalized_all_nodes
 
             # Dynamic health filter: omit self-hosted nodes whose server / Sing-box core is offline
             servers_data = get_cached_servers_with_stats()
@@ -2707,7 +2747,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         if path in ["/api/sub/users", "/api/node-mgr/sub/users"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, token, enabled, remark, created_at FROM subscriptions ORDER BY id ASC")
+            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid FROM subscriptions ORDER BY id ASC")
             users = []
             for r in c.fetchall():
                 users.append({
@@ -2717,6 +2757,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                     "enabled": bool(r[3]),
                     "remark": r[4] or "",
                     "created_at": str(r[5]),
+                    "user_uuid": r[6] if len(r) > 6 and r[6] else "",
                     "sub_url": f"https://{DOMAIN}/sub/{r[2]}"
                 })
             conn.close()
@@ -3044,15 +3085,18 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
         if path == "/api/sub/reset" or path == "/api/node-mgr/sub/reset":
             new_token = secrets.token_hex(16)
+            new_uuid = str(uuid.uuid4())
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("UPDATE subscriptions SET token = ? WHERE name = 'default' OR id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_token,))
+            c.execute("UPDATE subscriptions SET token = ?, user_uuid = ? WHERE name = 'default' OR id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_token, new_uuid))
             if c.rowcount == 0:
-                c.execute("INSERT INTO subscriptions (token, name) VALUES (?, 'default')", (new_token,))
+                c.execute("INSERT INTO subscriptions (token, name, user_uuid) VALUES (?, 'default', ?)", (new_token, new_uuid))
+            # Also rotate the default uuid_or_passwd on all self-hosted nodes
+            c.execute("UPDATE nodes SET uuid_or_passwd = ? WHERE is_external = 0", (new_uuid,))
             conn.commit()
             conn.close()
             new_sub_url = f"https://{DOMAIN}/sub/{new_token}"
-            self._send_json({"ok": True, "token": new_token, "sub_url": new_sub_url})
+            self._send_json({"ok": True, "token": new_token, "user_uuid": new_uuid, "sub_url": new_sub_url})
             return
 
         # User subscriptions management endpoints
@@ -3063,9 +3107,10 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "用户名不能为空"}, 400)
                 return
             new_tok = secrets.token_hex(16)
+            new_uuid = str(uuid.uuid4())
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("INSERT INTO subscriptions (token, name, enabled, remark) VALUES (?, ?, 1, ?)", (new_tok, name, remark))
+            c.execute("INSERT INTO subscriptions (token, name, enabled, remark, user_uuid) VALUES (?, ?, 1, ?, ?)", (new_tok, name, remark, new_uuid))
             new_id = c.lastrowid
             conn.commit()
             conn.close()
@@ -3077,6 +3122,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                     "token": new_tok,
                     "enabled": True,
                     "remark": remark,
+                    "user_uuid": new_uuid,
                     "sub_url": f"https://{DOMAIN}/sub/{new_tok}"
                 }
             })
@@ -3086,17 +3132,18 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             uid = body.get("id")
             token = body.get("token")
             new_tok = secrets.token_hex(16)
+            new_uuid = str(uuid.uuid4())
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             if uid is not None:
-                c.execute("UPDATE subscriptions SET token = ? WHERE id = ?", (new_tok, uid))
+                c.execute("UPDATE subscriptions SET token = ?, user_uuid = ? WHERE id = ?", (new_tok, new_uuid, uid))
             elif token:
-                c.execute("UPDATE subscriptions SET token = ? WHERE token = ?", (new_tok, token))
+                c.execute("UPDATE subscriptions SET token = ?, user_uuid = ? WHERE token = ?", (new_tok, new_uuid, token))
             else:
-                c.execute("UPDATE subscriptions SET token = ? WHERE id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_tok,))
+                c.execute("UPDATE subscriptions SET token = ?, user_uuid = ? WHERE id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_tok, new_uuid))
             conn.commit()
             conn.close()
-            self._send_json({"ok": True, "token": new_tok, "sub_url": f"https://{DOMAIN}/sub/{new_tok}"})
+            self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"https://{DOMAIN}/sub/{new_tok}"})
             return
 
         if path in ["/api/sub/users/toggle", "/api/node-mgr/sub/users/toggle"]:
