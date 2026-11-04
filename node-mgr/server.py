@@ -24,7 +24,7 @@ NODES_DB = "/opt/komari/data/nodes.db"
 METRICS_DB = "/opt/komari/data/metrics.db"
 CERT_DIR = "/opt/komari/data/certs"
 PORT = 25775
-DOMAIN = "komari.yohoo.xyz"
+DOMAIN = "jgw2.yohoo.xyz"
 
 os.makedirs(CERT_DIR, exist_ok=True)
 os.makedirs("/opt/komari/data", exist_ok=True)
@@ -1512,6 +1512,8 @@ set -e
 
 TOKEN=""
 MASTER_URL="https://{DOMAIN}"
+INSTALL_PROBE=1
+INSTALL_SINGBOX=1
 
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -1523,6 +1525,14 @@ while [[ $# -gt 0 ]]; do
     -e|--endpoint)
       MASTER_URL="$2"
       shift 2
+      ;;
+    --skip-probe)
+      INSTALL_PROBE=0
+      shift
+      ;;
+    --skip-singbox)
+      INSTALL_SINGBOX=0
+      shift
       ;;
     *)
       EXTRA_ARGS+=("$1")
@@ -1562,7 +1572,8 @@ elif [ -x "$(command -v apk)" ]; then
 fi
 
 # 2. Install Sing-box core
-echo "[2/4] Installing Sing-box high performance core..."
+if [ "$INSTALL_SINGBOX" -eq 1 ]; then
+  echo "[2/4] Installing Sing-box high performance core..."
 ARCH=$(uname -m)
 case $ARCH in
   x86_64) SING_ARCH="amd64" ;;
@@ -1648,8 +1659,11 @@ EOF
   systemctl enable --now sing-box.service || true
 fi
 
+fi
+
 # 3. Install Komari Monitor Agent using official installer
-echo "[3/4] Installing Komari Monitor Agent..."
+if [ "$INSTALL_PROBE" -eq 1 ]; then
+  echo "[3/4] Installing Komari Monitor Agent..."
 DOWNLOADER=""
 if command -v curl >/dev/null 2>&1; then
   DOWNLOADER="curl -fsSL"
@@ -1658,8 +1672,11 @@ elif command -v wget >/dev/null 2>&1; then
 fi
 $DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh | bash -s -- -e "$MASTER_URL" -t "$TOKEN" "${EXTRA_ARGS[@]}"
 
+fi
+
 # 4. Install Node-Sync Agent Daemon
-echo "[4/4] Installing Node Configuration Sync Daemon..."
+if [ "$INSTALL_SINGBOX" -eq 1 ]; then
+  echo "[4/4] Installing Node Configuration Sync Daemon..."
 cat << 'EOF' > /usr/local/bin/komari-node-sync.sh
 #!/bin/bash
 MASTER_URL="__MASTER_URL__"
@@ -1688,7 +1705,7 @@ while true; do
     fi
   fi
 
-  RES=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
+  RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
   if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
     NEW_MD5=$(echo "$RES" | md5sum | awk '{print $1}')
     OLD_MD5=$(cat "$MD5_FILE" 2>/dev/null || true)
@@ -1736,7 +1753,7 @@ chmod +x /usr/local/bin/komari-node-sync.sh
 
 # Fetch and apply initial config immediately
 echo "Fetching initial proxy configuration..."
-INIT_CFG=$(curl -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
+INIT_CFG=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
 if [ -n "$INIT_CFG" ] && echo "$INIT_CFG" | grep -q '"inbounds"'; then
   echo "$INIT_CFG" > /etc/sing-box/config.json
   echo "$INIT_CFG" | md5sum | awk '{print $1}' > /etc/sing-box/config.md5
@@ -1788,6 +1805,7 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
   systemctl enable --now komari-node-sync.service
+fi
 fi
 
 echo ""
@@ -2354,7 +2372,8 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/install-node.sh":
-            script = INSTALL_SCRIPT_TEMPLATE.replace("{DOMAIN}", DOMAIN)
+            req_host = self.headers.get("Host", DOMAIN).split(":")[0]
+            script = INSTALL_SCRIPT_TEMPLATE.replace("{DOMAIN}", req_host)
             self._send_text(script, 200, "text/x-shellscript")
             return
 
