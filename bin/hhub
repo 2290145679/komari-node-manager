@@ -1,0 +1,719 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# Komari Monitor & Node Manager - 专属终端控制中心 (hhub)
+# 终端输入: hhub
+# 项目主页: https://github.com/2290145679/komari-node-manager
+# ==============================================================================
+
+set -u
+
+# 颜色与样式定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+PLAIN='\033[0m'
+BOLD='\033[1m'
+DIM='\033[2m'
+
+# 核心路径常量
+KOMARI_DIR="/opt/komari"
+DATA_DIR="${KOMARI_DIR}/data"
+CONF_DIR="${KOMARI_DIR}/conf"
+NODE_MGR_DIR="${KOMARI_DIR}/node-mgr"
+WEB_PATCH_DIR="${KOMARI_DIR}/web-patch"
+BACKUP_DIR="${KOMARI_DIR}/backups"
+REPO_RAW_BASE="https://raw.githubusercontent.com/2290145679/komari-node-manager/main"
+
+# 权限校验
+check_root() {
+    if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+        echo -e "${RED}[ERROR] 请使用 root 权限运行此命令！(例如: sudo hhub)${PLAIN}"
+        exit 1
+    fi
+}
+
+# 获取公网 IP (优先 IPv4)
+get_public_ip() {
+    local ip
+    ip=$(curl -s4 --max-time 3 https://api.ipify.org 2>/dev/null \
+      || curl -s4 --max-time 3 https://ifconfig.me 2>/dev/null \
+      || curl -s6 --max-time 3 https://api64.ipify.org 2>/dev/null \
+      || hostname -I 2>/dev/null | awk '{print $1}')
+    echo "${ip:-127.0.0.1}"
+}
+
+# 检测 Nginx 配置文件路径
+get_nginx_conf() {
+    if [ -f /etc/nginx/sites-available/komari.conf ]; then
+        echo "/etc/nginx/sites-available/komari.conf"
+    elif [ -f /etc/nginx/conf.d/komari.conf ]; then
+        echo "/etc/nginx/conf.d/komari.conf"
+    else
+        echo "/etc/nginx/sites-available/komari.conf"
+    fi
+}
+
+# 检测当前绑定的域名或 IP
+get_current_domain() {
+    local domain=""
+    local conf
+    conf=$(get_nginx_conf)
+    if [ -f "$conf" ]; then
+        local s_names
+        s_names=$(grep -E '^\s*server_name\s+' "$conf" 2>/dev/null | head -n 1 | sed 's/server_name//' | sed 's/;//')
+        for name in $s_names; do
+            if [ "$name" != "_" ] && [[ ! "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                domain="$name"
+                break
+            fi
+        done
+        if [ -z "$domain" ]; then
+            domain=$(echo "$s_names" | awk '{print $1}')
+        fi
+    fi
+    if [ -z "$domain" ] && [ -f "${NODE_MGR_DIR}/server.py" ]; then
+        domain=$(grep -E '^\s*DOMAIN\s*=' "${NODE_MGR_DIR}/server.py" 2>/dev/null | head -n 1 | sed -E 's/.*=\s*"([^"]+)".*/\1/')
+    fi
+    echo "${domain:-$(get_public_ip)}"
+}
+
+# 检测当前 Web 端口
+get_current_web_port() {
+    local port="80"
+    local conf
+    conf=$(get_nginx_conf)
+    if [ -f "$conf" ]; then
+        local found_port
+        found_port=$(grep -E '^\s*listen\s+' "$conf" 2>/dev/null | grep -v '443' | head -n 1 | awk '{print $2}' | sed 's/;//')
+        [ -n "$found_port" ] && port="$found_port"
+    fi
+    echo "$port"
+}
+
+# 检测 SSL 启用状态
+check_ssl_active() {
+    local conf
+    conf=$(get_nginx_conf)
+    if [ -f "$conf" ] && grep -q 'listen 443 ssl' "$conf" 2>/dev/null; then
+        echo "1"
+    else
+        echo "0"
+    fi
+}
+
+# 获取订阅 Token
+get_sub_token() {
+    local token="default"
+    if [ -f "${DATA_DIR}/nodes.db" ] && command -v sqlite3 >/dev/null 2>&1; then
+        token=$(sqlite3 "${DATA_DIR}/nodes.db" "SELECT token FROM subscriptions LIMIT 1;" 2>/dev/null || echo "default")
+    fi
+    echo "${token:-default}"
+}
+
+# 获取完整 Web 访问 URL
+get_access_url() {
+    local domain
+    local ssl_on
+    local port
+    domain=$(get_current_domain)
+    ssl_on=$(check_ssl_active)
+    port=$(get_current_web_port)
+
+    if [ "$ssl_on" = "1" ]; then
+        echo "https://${domain}"
+    elif [ "$port" = "80" ]; then
+        echo "http://${domain}"
+    else
+        echo "http://${domain}:${port}"
+    fi
+}
+
+# 绘制状态面板
+show_dashboard() {
+    [ -t 1 ] && [ -n "${TERM:-}" ] && clear
+    local pub_ip
+    local cur_domain
+    local ssl_on
+    local base_url
+    local sub_token
+    pub_ip=$(get_public_ip)
+    cur_domain=$(get_current_domain)
+    ssl_on=$(check_ssl_active)
+    base_url=$(get_access_url)
+    sub_token=$(get_sub_token)
+
+    # 服务状态判定
+    local komari_status komari_mgr_status nginx_status
+    if systemctl is-active --quiet komari 2>/dev/null; then
+        local k_pid
+        k_pid=$(systemctl show -p MainPID komari 2>/dev/null | cut -d= -f2)
+        komari_status="${GREEN}● 运行中${PLAIN} ${DIM}(PID: ${k_pid})${PLAIN}"
+    else
+        komari_status="${RED}○ 已停止${PLAIN}"
+    fi
+
+    if systemctl is-active --quiet komari-node-mgr 2>/dev/null; then
+        local km_pid
+        km_pid=$(systemctl show -p MainPID komari-node-mgr 2>/dev/null | cut -d= -f2)
+        komari_mgr_status="${GREEN}● 运行中${PLAIN} ${DIM}(PID: ${km_pid})${PLAIN}"
+    else
+        komari_mgr_status="${RED}○ 已停止${PLAIN}"
+    fi
+
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        local n_pid
+        n_pid=$(systemctl show -p MainPID nginx 2>/dev/null | cut -d= -f2)
+        nginx_status="${GREEN}● 运行中${PLAIN} ${DIM}(PID: ${n_pid})${PLAIN}"
+    else
+        nginx_status="${RED}○ 已停止${PLAIN}"
+    fi
+
+    # 资源状态
+    local cpu_usage="0%" mem_usage="0MB/0MB" disk_usage="0%"
+    if command -v top >/dev/null 2>&1; then
+        local cpu_val
+        cpu_val=$(top -bn1 2>/dev/null | grep -E '%Cpu\(s\)|CPU' | head -n 1 | awk '{print $2 + $4}' 2>/dev/null)
+        [ -n "$cpu_val" ] && cpu_usage="${cpu_val}%"
+    fi
+    if command -v free >/dev/null 2>&1; then
+        mem_usage=$(free -m 2>/dev/null | awk '/Mem:/ {printf "%dMB / %dMB", $3, $2}')
+    fi
+    if command -v df >/dev/null 2>&1; then
+        disk_usage=$(df -h / 2>/dev/null | awk 'NR==2 {print $5}')
+    fi
+
+    local ssl_badge
+    if [ "$ssl_on" = "1" ]; then
+        ssl_badge="${GREEN}[HTTPS / 已开证书]${PLAIN}"
+    else
+        ssl_badge="${YELLOW}[HTTP / 未开证书]${PLAIN}"
+    fi
+
+    echo -e "${PURPLE}==================================================================${PLAIN}"
+    echo -e "${BOLD}${CYAN}        🌸 Komari Monitor & Node Manager 控制中心 (hhub)${PLAIN}"
+    echo -e "${PURPLE}==================================================================${PLAIN}"
+    echo -e "  ${BOLD}核心服务状态:${PLAIN}"
+    echo -e "  · Komari 监控核心:   ${komari_status}"
+    echo -e "  · 节点管理代理核心:   ${komari_mgr_status}"
+    echo -e "  · Nginx 反向代理网关: ${nginx_status}"
+    echo -e ""
+    echo -e "  ${BOLD}网络与访问模式:${PLAIN}"
+    echo -e "  · 当前绑定地址:       ${BOLD}${CYAN}${cur_domain}${PLAIN} ${ssl_badge}"
+    echo -e "  · 服务器公网 IP:      ${pub_ip}"
+    echo -e "  · 管理面板地址:       ${BOLD}${GREEN}${base_url}/admin/dashboard${PLAIN}"
+    echo -e "  · 节点列表与分流面板: ${BOLD}${GREEN}${base_url}/api/admin/plugin/node-manager/panel/index.html${PLAIN}"
+    echo -e "  · 统一分流订阅链接:   ${CYAN}${base_url}/sub/${sub_token}${PLAIN}"
+    echo -e ""
+    echo -e "  ${BOLD}系统资源占用:${PLAIN}"
+    echo -e "  · CPU: ${CYAN}${cpu_usage}${PLAIN}  |  内存: ${CYAN}${mem_usage}${PLAIN}  |  磁盘: ${CYAN}${disk_usage}${PLAIN}"
+    echo -e "${PURPLE}==================================================================${PLAIN}"
+    echo -e "  ${BOLD}[1]${PLAIN} 重启全部服务         ${BOLD}[2]${PLAIN} 停止全部服务         ${BOLD}[3]${PLAIN} 启动全部服务"
+    echo -e "  ${BOLD}[4]${PLAIN} 查看实时运行日志     ${BOLD}[5]${PLAIN} 更改绑定域名         ${BOLD}[6]${PLAIN} 不使用域名(纯IP访问)"
+    echo -e "  ${BOLD}[7]${PLAIN} 更改 Web 访问端口    ${BOLD}[8]${PLAIN} 重新申请/续签 SSL     ${BOLD}[9]${PLAIN} 一键升级系统与补丁"
+    echo -e "  ${BOLD}[10]${PLAIN} 备份/还原数据库     ${BOLD}[11]${PLAIN} 查看/重置订阅 Token  ${BOLD}[12]${PLAIN} 重置管理员密码"
+    echo -e "  ${BOLD}[13]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
+    echo -e "${PURPLE}==================================================================${PLAIN}"
+}
+
+# 1. 重启服务
+restart_all_services() {
+    echo -e "\n${CYAN}[INFO] 正在重启全部服务...${PLAIN}"
+    systemctl restart komari
+    systemctl restart komari-node-mgr
+    systemctl restart nginx
+    sleep 2
+    if systemctl is-active --quiet komari && systemctl is-active --quiet komari-node-mgr && systemctl is-active --quiet nginx; then
+        echo -e "${GREEN}[OK] 全部服务重启成功！${PLAIN}"
+    else
+        echo -e "${YELLOW}[WARN] 某些服务未处于 active 状态，请查看日志诊断${PLAIN}"
+    fi
+}
+
+# 2. 停止服务
+stop_all_services() {
+    echo -e "\n${YELLOW}[INFO] 正在停止 Komari 与节点管理服务...${PLAIN}"
+    systemctl stop komari komari-node-mgr
+    echo -e "${GREEN}[OK] 服务已停止。${PLAIN}"
+}
+
+# 3. 启动服务
+start_all_services() {
+    echo -e "\n${CYAN}[INFO] 正在启动全部服务...${PLAIN}"
+    systemctl start komari komari-node-mgr nginx
+    sleep 2
+    if systemctl is-active --quiet komari && systemctl is-active --quiet komari-node-mgr; then
+        echo -e "${GREEN}[OK] 服务启动成功！${PLAIN}"
+    else
+        echo -e "${RED}[ERROR] 服务启动遇到异常，请检查 systemctl status komari${PLAIN}"
+    fi
+}
+
+# 4. 查看日志
+view_logs() {
+    echo -e "\n${BOLD}${CYAN}请选择要查看的日志:${PLAIN}"
+    echo -e "  1. Komari 主控核心日志"
+    echo -e "  2. 节点管理后台服务日志"
+    echo -e "  3. Nginx 访问与错误日志"
+    echo -e "  0. 返回上级菜单"
+    echo ""
+    read -r -p "请输入选项 [0-3]: " log_choice
+    case "$log_choice" in
+        1)
+            echo -e "${CYAN}正在查看 Komari 实时日志 (按 Ctrl+C 退出)...${PLAIN}"
+            journalctl -u komari -f -n 50
+            ;;
+        2)
+            echo -e "${CYAN}正在查看节点管理服务实时日志 (按 Ctrl+C 退出)...${PLAIN}"
+            journalctl -u komari-node-mgr -f -n 50
+            ;;
+        3)
+            echo -e "${CYAN}正在查看 Nginx 错误日志 (按 Ctrl+C 退出)...${PLAIN}"
+            tail -f -n 50 /var/log/nginx/error.log
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# 5. 更改绑定域名
+change_domain() {
+    echo -e "\n${BOLD}${CYAN}=== 更改主控端绑定域名 ===${PLAIN}"
+    local pub_ip
+    pub_ip=$(get_public_ip)
+    echo -e "当前服务器公网 IP 为: ${YELLOW}${pub_ip}${PLAIN}"
+    echo -e "请确保你的域名已添加 A 记录解析至此 IP 地址！\n"
+
+    read -r -p "请输入新的主控端完整域名 (例如: panel.yohoo.xyz): " new_domain
+    new_domain=$(echo "$new_domain" | tr -d '[:space:]')
+
+    if [ -z "$new_domain" ]; then
+        echo -e "${YELLOW}[CANCEL] 域名输入为空，已取消操作。${PLAIN}"
+        return
+    fi
+
+    # 检查域名 DNS 解析
+    echo -e "${CYAN}[INFO] 正在验证域名解析 [${new_domain}]...${PLAIN}"
+    local resolved_ip=""
+    if command -v getent >/dev/null 2>&1; then
+        resolved_ip=$(getent ahosts "$new_domain" 2>/dev/null | awk '{print $1}' | head -n 1)
+    fi
+    if [ -n "$resolved_ip" ] && [ "$resolved_ip" != "$pub_ip" ]; then
+        echo -e "${YELLOW}[WARN] 域名解析 IP (${resolved_ip}) 与本机公网 IP (${pub_ip}) 不一致！${PLAIN}"
+        read -r -p "是否仍要强制绑定此域名？[y/N]: " force_bind
+        if [[ ! "$force_bind" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}[CANCEL] 操作已中止。${PLAIN}"
+            return
+        fi
+    fi
+
+    local web_port
+    web_port=$(get_current_web_port)
+    local nginx_conf
+    nginx_conf=$(get_nginx_conf)
+
+    echo -e "${CYAN}[INFO] 正在更新 Nginx 反代配置...${PLAIN}"
+    local nginx_hosts="${new_domain} ${pub_ip}"
+    if [ -f "${CONF_DIR}/nginx-komari.conf" ]; then
+        sed -e "s|__PORT__|${web_port}|g" -e "s|__SERVER_NAME__|${nginx_hosts}|g" "${CONF_DIR}/nginx-komari.conf" > "$nginx_conf"
+    else
+        sed -i -E "s/server_name\s+[^;]+;/server_name ${nginx_hosts};/g" "$nginx_conf"
+    fi
+
+    # 更新 server.py 中的 DOMAIN
+    if [ -f "${NODE_MGR_DIR}/server.py" ]; then
+        sed -i -E "s|^\s*DOMAIN\s*=.*|DOMAIN = \"${new_domain}\"|g" "${NODE_MGR_DIR}/server.py"
+    fi
+
+    echo -e "${CYAN}[INFO] 正在测试 Nginx 语法...${PLAIN}"
+    if ! nginx -t >/dev/null 2>&1; then
+        echo -e "${RED}[ERROR] Nginx 语法测试失败，请检查配置！${PLAIN}"
+        return
+    fi
+    systemctl reload nginx
+
+    # 询问是否申请 SSL 证书
+    echo ""
+    read -r -p "是否为域名 [${new_domain}] 申请/配置免费 Let's Encrypt SSL 证书 (HTTPS)? [Y/n]: " setup_ssl
+    if [[ ! "$setup_ssl" =~ ^[Nn]$ ]]; then
+        echo -e "${CYAN}[INFO] 正在调用 Certbot 申请证书...${PLAIN}"
+        if command -v certbot >/dev/null 2>&1; then
+            if certbot --nginx -d "${new_domain}" --non-interactive --agree-tos --register-unsafely-without-email --redirect; then
+                echo -e "${GREEN}[OK] 🎉 SSL 证书申请并配置成功！HTTPS 强制跳转已生效。${PLAIN}"
+                # 放行 443 端口
+                if command -v iptables >/dev/null 2>&1; then
+                    iptables -I INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+                fi
+            else
+                echo -e "${YELLOW}[WARN] SSL 证书自动签发失败（可能是 DNS 解析生效延迟），已保持 HTTP 访问。${PLAIN}"
+                echo -e "${YELLOW}待解析生效后，可随时在主菜单选择 [8] 重新申请 SSL。${PLAIN}"
+            fi
+        else
+            echo -e "${YELLOW}[WARN] 未检测到 certbot 命令，跳过证书申请。${PLAIN}"
+        fi
+    fi
+
+    systemctl restart komari-node-mgr
+    echo -e "\n${GREEN}[OK] 🎉 域名绑定成功！当前访问地址: $(get_access_url)${PLAIN}"
+}
+
+# 6. 不使用域名 / 恢复纯公网 IP 直连
+disable_domain_mode() {
+    echo -e "\n${BOLD}${CYAN}=== 切换为纯公网 IP 访问模式 (移除域名与 SSL 强制跳转) ===${PLAIN}"
+    local pub_ip
+    pub_ip=$(get_public_ip)
+    local cur_port
+    cur_port=$(get_current_web_port)
+
+    echo -e "即将切换为主控公网 IP 访问: ${YELLOW}http://${pub_ip}:${cur_port}${PLAIN}"
+    read -r -p "确认切换为纯 IP 访问吗？[y/N]: " confirm_ip
+    if [[ ! "$confirm_ip" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}[CANCEL] 已取消操作。${PLAIN}"
+        return
+    fi
+
+    local nginx_conf
+    nginx_conf=$(get_nginx_conf)
+
+    echo -e "${CYAN}[INFO] 正在重置 Nginx 配置为纯 HTTP 模式...${PLAIN}"
+    local nginx_hosts="${pub_ip} _"
+    if [ -f "${CONF_DIR}/nginx-komari.conf" ]; then
+        sed -e "s|__PORT__|${cur_port}|g" -e "s|__SERVER_NAME__|${nginx_hosts}|g" "${CONF_DIR}/nginx-komari.conf" > "$nginx_conf"
+    fi
+
+    # 更新 server.py 中的 DOMAIN
+    if [ -f "${NODE_MGR_DIR}/server.py" ]; then
+        local ip_domain="${pub_ip}"
+        [ "$cur_port" != "80" ] && ip_domain="${pub_ip}:${cur_port}"
+        sed -i -E "s|^\s*DOMAIN\s*=.*|DOMAIN = \"${ip_domain}\"|g" "${NODE_MGR_DIR}/server.py"
+    fi
+
+    if nginx -t >/dev/null 2>&1; then
+        systemctl restart nginx
+        systemctl restart komari-node-mgr
+        echo -e "\n${GREEN}[OK] 🎉 已成功切换为纯公网 IP 直连访问！${PLAIN}"
+        echo -e "访问地址: ${BOLD}${GREEN}http://${pub_ip}:${cur_port}/admin/dashboard${PLAIN}"
+    else
+        echo -e "${RED}[ERROR] Nginx 语法验证失败，请检查配置。${PLAIN}"
+    fi
+}
+
+# 7. 更改 Web 访问端口
+change_web_port() {
+    echo -e "\n${BOLD}${CYAN}=== 更改 Web 访问端口 ===${PLAIN}"
+    local cur_port
+    cur_port=$(get_current_web_port)
+    echo -e "当前 Web 监听端口为: ${YELLOW}${cur_port}${PLAIN}"
+    read -r -p "请输入新的端口 [1-65535]: " new_port
+    new_port=$(echo "$new_port" | tr -d '[:space:]')
+
+    if [[ ! "$new_port" =~ ^[0-9]+$ ]] || [ "$new_port" -lt 1 ] || [ "$new_port" -gt 65535 ]; then
+        echo -e "${RED}[ERROR] 端口输入无效！必须在 1-65535 之间。${PLAIN}"
+        return
+    fi
+
+    if [ "$new_port" = "25774" ] || [ "$new_port" = "25775" ]; then
+        echo -e "${RED}[ERROR] 端口 ${new_port} 已被 Komari 内部核心占用，请选择其他端口！${PLAIN}"
+        return
+    fi
+
+    local nginx_conf
+    nginx_conf=$(get_nginx_conf)
+    echo -e "${CYAN}[INFO] 正在修改 Nginx 监听端口为 ${new_port}...${PLAIN}"
+    sed -i -E "s/listen\s+[0-9]+;/listen ${new_port};/g" "$nginx_conf"
+
+    if ! nginx -t >/dev/null 2>&1; then
+        echo -e "${RED}[ERROR] Nginx 测试失败，回滚中...${PLAIN}"
+        sed -i -E "s/listen\s+[0-9]+;/listen ${cur_port};/g" "$nginx_conf"
+        return
+    fi
+
+    systemctl reload nginx
+
+    # 自动放行防火墙
+    echo -e "${CYAN}[INFO] 正在放行防火墙端口 ${new_port}...${PLAIN}"
+    if command -v iptables >/dev/null 2>&1; then
+        iptables -I INPUT -p tcp --dport "${new_port}" -j ACCEPT 2>/dev/null || true
+    fi
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+        ufw allow "${new_port}/tcp" >/dev/null 2>&1 || true
+    fi
+    if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+        firewall-cmd --add-port="${new_port}/tcp" --permanent >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    fi
+
+    echo -e "${GREEN}[OK] 🎉 端口修改完成！当前 Web 端口: ${new_port}${PLAIN}"
+    echo -e "访问地址: ${BOLD}${GREEN}$(get_access_url)${PLAIN}"
+}
+
+# 8. 重新申请 / 续签 SSL 证书
+renew_ssl() {
+    echo -e "\n${BOLD}${CYAN}=== 申请 / 强制续签 SSL 证书 ===${PLAIN}"
+    local domain
+    domain=$(get_current_domain)
+    local pub_ip
+    pub_ip=$(get_public_ip)
+
+    if [ "$domain" = "$pub_ip" ] || [ -z "$domain" ]; then
+        echo -e "${RED}[ERROR] 当前为公网 IP 模式，无法为 IP 申请 Let's Encrypt 证书！${PLAIN}"
+        echo -e "${YELLOW}请先在主菜单选择 [5] 绑定自定义域名。${PLAIN}"
+        return
+    fi
+
+    echo -e "当前绑定域名: ${CYAN}${domain}${PLAIN}"
+    if ! command -v certbot >/dev/null 2>&1; then
+        echo -e "${CYAN}[INFO] 正在安装 Certbot...${PLAIN}"
+        if [ -f /etc/debian_version ]; then
+            apt-get update -y && apt-get install -y certbot python3-certbot-nginx
+        elif [ -f /etc/redhat-release ]; then
+            dnf install -y certbot python3-certbot-nginx || yum install -y certbot python3-certbot-nginx
+        fi
+    fi
+
+    echo -e "${CYAN}[INFO] 正在尝试签发/续签证书...${PLAIN}"
+    if certbot --nginx -d "${domain}" --agree-tos --register-unsafely-without-email --redirect --force-renewal; then
+        echo -e "${GREEN}[OK] 🎉 SSL 证书已成功申请并重载！${PLAIN}"
+        systemctl reload nginx
+    else
+        echo -e "${RED}[ERROR] 证书申请失败，请检查域名解析是否生效以及 80/443 端口是否可通。${PLAIN}"
+    fi
+}
+
+# 9. 一键在线更新系统与优化补丁
+update_system() {
+    echo -e "\n${BOLD}${CYAN}=== 一键升级系统与前端补丁 ===${PLAIN}"
+    echo -e "${YELLOW}注意: 更新过程会自动保留你的数据库(nodes.db)与全部服务器配置，安全无损！${PLAIN}\n"
+    read -r -p "确认现在从 GitHub 拉取最新前端补丁与代码吗？[Y/n]: " confirm_update
+    if [[ "$confirm_update" =~ ^[Nn]$ ]]; then
+        echo -e "${YELLOW}[CANCEL] 取消更新。${PLAIN}"
+        return
+    fi
+
+    echo -e "${CYAN}[INFO] 1/4 正在备份当前文件...${PLAIN}"
+    mkdir -p "${KOMARI_DIR}/cache/backup_pre_update"
+    cp -r "${WEB_PATCH_DIR}" "${KOMARI_DIR}/cache/backup_pre_update/" 2>/dev/null || true
+    cp "${NODE_MGR_DIR}/server.py" "${KOMARI_DIR}/cache/backup_pre_update/" 2>/dev/null || true
+
+    echo -e "${CYAN}[INFO] 2/4 正在拉取最新前端补丁与样式 (手机端对称卡片、发光状态灯、一键部署弹窗)...${PLAIN}"
+    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-index-BfURcdSr.js" -o "${WEB_PATCH_DIR}/assets/chunk-index-BfURcdSr.js"
+    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/komari-singbox-helper.js" -o "${WEB_PATCH_DIR}/assets/komari-singbox-helper.js"
+    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-_layout-KM9Ke-Y5.js" -o "${WEB_PATCH_DIR}/assets/chunk-_layout-KM9Ke-Y5.js"
+    curl -fsSL "${REPO_RAW_BASE}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js" -o "${WEB_PATCH_DIR}/assets/chunk-plugin_page-Xen4h3Tc.js"
+
+    echo -e "${CYAN}[INFO] 3/4 正在更新节点管理面板资源与后端核心...${PLAIN}"
+    curl -fsSL "${REPO_RAW_BASE}/plugin/node-manager/panel/index.html" -o "${DATA_DIR}/plugin/node-manager/panel/index.html" 2>/dev/null || true
+    
+    # 记录当前已配置的 DOMAIN
+    local cur_domain
+    cur_domain=$(get_current_domain)
+    curl -fsSL "${REPO_RAW_BASE}/node-mgr/server.py" -o "${NODE_MGR_DIR}/server.py"
+    sed -i -E "s|^\s*DOMAIN\s*=.*|DOMAIN = \"${cur_domain}\"|g" "${NODE_MGR_DIR}/server.py"
+    chmod +x "${NODE_MGR_DIR}/server.py"
+
+    # 更新 hhub 自身
+    curl -fsSL "${REPO_RAW_BASE}/bin/hhub" -o /usr/local/bin/hhub && chmod +x /usr/local/bin/hhub 2>/dev/null || true
+
+    echo -e "${CYAN}[INFO] 4/4 正在重载服务...${PLAIN}"
+    chmod 644 "${WEB_PATCH_DIR}/assets/"* 2>/dev/null || true
+    systemctl restart komari-node-mgr
+    systemctl reload nginx
+
+    echo -e "\n${GREEN}[OK] 🎉 更新成功！所有核心组件与前端补丁已同步至最新版。${PLAIN}"
+}
+
+# 10. 数据库备份与还原
+backup_restore_db() {
+    echo -e "\n${BOLD}${CYAN}=== 节点管理数据库备份与还原 ===${PLAIN}"
+    echo -e "  1. 立即创建完整数据备份"
+    echo -e "  2. 还原历史数据备份"
+    echo -e "  0. 返回上级菜单"
+    echo ""
+    read -r -p "请选择操作 [0-2]: " br_choice
+    case "$br_choice" in
+        1)
+            mkdir -p "${BACKUP_DIR}"
+            local timestamp
+            timestamp=$(date +"%Y%m%d_%H%M%S")
+            local backup_file="${BACKUP_DIR}/komari_backup_${timestamp}.tar.gz"
+            echo -e "${CYAN}[INFO] 正在打包数据库与配置...${PLAIN}"
+            tar -czf "$backup_file" -C "${DATA_DIR}" nodes.db komari.db 2>/dev/null || tar -czf "$backup_file" -C "${DATA_DIR}" nodes.db
+            local b_size
+            b_size=$(ls -lh "$backup_file" | awk '{print $5}')
+            echo -e "${GREEN}[OK] 备份成功！文件存放在: ${BOLD}${backup_file}${PLAIN} (${b_size})"
+            ;;
+        2)
+            if [ ! -d "${BACKUP_DIR}" ] || [ -z "$(ls -A "${BACKUP_DIR}" 2>/dev/null)" ]; then
+                echo -e "${YELLOW}[WARN] 暂未找到任何备份文件 (目录: ${BACKUP_DIR})${PLAIN}"
+                return
+            fi
+            echo -e "\n${CYAN}可供还原的备份文件列表:${PLAIN}"
+            local idx=1
+            local files=()
+            for f in "${BACKUP_DIR}"/*.tar.gz; do
+                [ -e "$f" ] || continue
+                files+=("$f")
+                echo "  ${idx}. $(basename "$f") ($(ls -lh "$f" | awk '{print $5}'))"
+                idx=$((idx + 1))
+            done
+            if [ ${#files[@]} -eq 0 ]; then
+                echo -e "${YELLOW}无有效备份文件。${PLAIN}"
+                return
+            fi
+            read -r -p "请输入要还原的备份编号 [1-${#files[@]}]: " f_num
+            if [[ ! "$f_num" =~ ^[0-9]+$ ]] || [ "$f_num" -lt 1 ] || [ "$f_num" -gt ${#files[@]} ]; then
+                echo -e "${RED}[ERROR] 输入无效。${PLAIN}"
+                return
+            fi
+            local chosen="${files[$((f_num - 1))]}"
+            echo -e "${YELLOW}[WARN] 还原备份将覆盖现有的 nodes.db / komari.db 数据！${PLAIN}"
+            read -r -p "确认还原吗？[y/N]: " confirm_r
+            if [[ "$confirm_r" =~ ^[Yy]$ ]]; then
+                systemctl stop komari komari-node-mgr
+                tar -xzf "$chosen" -C "${DATA_DIR}"
+                systemctl start komari komari-node-mgr
+                echo -e "${GREEN}[OK] 数据库还原完成！服务已重启。${PLAIN}"
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# 11. 查看 / 重置分流订阅 Token
+manage_sub_token() {
+    echo -e "\n${BOLD}${CYAN}=== 统一分流订阅 Token 管理 ===${PLAIN}"
+    local cur_token
+    cur_token=$(get_sub_token)
+    local base_url
+    base_url=$(get_access_url)
+
+    echo -e "当前默认分流订阅 Token: ${YELLOW}${cur_token}${PLAIN}"
+    echo -e "完整订阅链接: ${BOLD}${CYAN}${base_url}/sub/${cur_token}${PLAIN}\n"
+
+    echo -e "  1. 重新生成随机订阅 Token"
+    echo -e "  2. 手动指定自定义 Token"
+    echo -e "  0. 返回上级菜单"
+    echo ""
+    read -r -p "请选择操作 [0-2]: " t_choice
+    case "$t_choice" in
+        1)
+            local new_tok
+            new_tok=$(tr -dc a-f0-9 < /dev/urandom | head -c 32 || echo "sub$(date +%s)")
+            sqlite3 "${DATA_DIR}/nodes.db" "UPDATE subscriptions SET token='${new_tok}' WHERE name='default' OR id=1;" 2>/dev/null \
+              || sqlite3 "${DATA_DIR}/nodes.db" "INSERT INTO subscriptions (token, name) VALUES ('${new_tok}', 'default');"
+            echo -e "${GREEN}[OK] 已生成新订阅 Token: ${BOLD}${new_tok}${PLAIN}"
+            echo -e "新订阅地址: ${BOLD}${CYAN}${base_url}/sub/${new_tok}${PLAIN}"
+            ;;
+        2)
+            read -r -p "请输入自定义订阅 Token (字母数字组合): " custom_tok
+            custom_tok=$(echo "$custom_tok" | tr -d '[:space:]')
+            if [ -n "$custom_tok" ]; then
+                sqlite3 "${DATA_DIR}/nodes.db" "UPDATE subscriptions SET token='${custom_tok}' WHERE name='default' OR id=1;" 2>/dev/null \
+                  || sqlite3 "${DATA_DIR}/nodes.db" "INSERT INTO subscriptions (token, name) VALUES ('${custom_tok}', 'default');"
+                echo -e "${GREEN}[OK] 订阅 Token 已更新为: ${BOLD}${custom_tok}${PLAIN}"
+                echo -e "新订阅地址: ${BOLD}${CYAN}${base_url}/sub/${custom_tok}${PLAIN}"
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# 12. 重置面板管理员密码
+reset_admin_password() {
+    echo -e "\n${BOLD}${CYAN}=== 重置面板管理员账号与密码 ===${PLAIN}"
+    echo -e "${YELLOW}说明: 清除用户记录后，重新在浏览器打开管理面板，系统将自动进入『初始管理员创建向导』，即可直接设定全新的账号与密码！${PLAIN}\n"
+    read -r -p "确认重置管理员账号吗？[y/N]: " confirm_pwd
+    if [[ "$confirm_pwd" =~ ^[Yy]$ ]]; then
+        if [ -f "${DATA_DIR}/komari.db" ] && command -v sqlite3 >/dev/null 2>&1; then
+            systemctl stop komari
+            sqlite3 "${DATA_DIR}/komari.db" "DELETE FROM users; DELETE FROM sessions;"
+            systemctl start komari
+            echo -e "${GREEN}[OK] 🎉 管理员账号记录已重置！${PLAIN}"
+            echo -e "请在浏览器访问: ${BOLD}${CYAN}$(get_access_url)/admin/dashboard${PLAIN}"
+            echo -e "页面将直接引导你创建新的用户名与密码。"
+        else
+            echo -e "${RED}[ERROR] 未找到 ${DATA_DIR}/komari.db 数据库文件。${PLAIN}"
+        fi
+    else
+        echo -e "${YELLOW}[CANCEL] 取消重置。${PLAIN}"
+    fi
+}
+
+# 13. 完全卸载
+uninstall_system() {
+    echo -e "\n${BOLD}${RED}==================================================================${PLAIN}"
+    echo -e "${BOLD}${RED}                 ⚠️  危险操作：完全卸载主控端系统${PLAIN}"
+    echo -e "${BOLD}${RED}==================================================================${PLAIN}"
+    echo -e "此操作将:"
+    echo -e "  · 停止并注销 komari / komari-node-mgr 守护服务"
+    echo -e "  · 清除 Nginx 反代配置站点"
+    echo -e "  · 删除 /usr/local/bin/hhub 管理脚本"
+    echo -e ""
+    read -r -p "确认完全卸载 Komari 主控端及节点管理吗？[y/N]: " confirm_un
+    if [[ ! "$confirm_un" =~ ^[Yy]$ ]]; then
+        echo -e "${YELLOW}[CANCEL] 已取消卸载。${PLAIN}"
+        return
+    fi
+
+    echo ""
+    read -r -p "是否保留节点数据与订阅记录 (${DATA_DIR}/nodes.db)？[Y/n]: " keep_data
+    
+    echo -e "\n${CYAN}[INFO] 正在停止并禁用系统服务...${PLAIN}"
+    systemctl stop komari komari-node-mgr 2>/dev/null || true
+    systemctl disable komari komari-node-mgr 2>/dev/null || true
+    rm -f /etc/systemd/system/komari.service /etc/systemd/system/komari-node-mgr.service
+    systemctl daemon-reload
+
+    echo -e "${CYAN}[INFO] 正在清理 Nginx 站点配置...${PLAIN}"
+    rm -f /etc/nginx/sites-enabled/komari.conf /etc/nginx/sites-available/komari.conf /etc/nginx/conf.d/komari.conf 2>/dev/null || true
+    systemctl reload nginx 2>/dev/null || true
+
+    if [[ "$keep_data" =~ ^[Nn]$ ]]; then
+        echo -e "${CYAN}[INFO] 正在清除所有主控文件与数据库...${PLAIN}"
+        rm -rf "${KOMARI_DIR}"
+    else
+        echo -e "${CYAN}[INFO] 正在归档数据库至 /opt/komari-data-backup...${PLAIN}"
+        mkdir -p /opt/komari-data-backup
+        cp -r "${DATA_DIR}" /opt/komari-data-backup/ 2>/dev/null || true
+        rm -rf "${KOMARI_DIR}"
+        echo -e "${GREEN}[OK] 数据已安全备份在: /opt/komari-data-backup${PLAIN}"
+    fi
+
+    rm -f /usr/local/bin/hhub
+    echo -e "\n${GREEN}[OK] 🎉 Komari 与节点管理主控系统已成功完全卸载！${PLAIN}"
+    exit 0
+}
+
+# 脚本主循环
+main() {
+    check_root
+    while true; do
+        show_dashboard
+        read -r -p "请输入对应功能编号 [0-13]: " choice
+        case "$choice" in
+            1)  restart_all_services ;;
+            2)  stop_all_services ;;
+            3)  start_all_services ;;
+            4)  view_logs ;;
+            5)  change_domain ;;
+            6)  disable_domain_mode ;;
+            7)  change_web_port ;;
+            8)  renew_ssl ;;
+            9)  update_system ;;
+            10) backup_restore_db ;;
+            11) manage_sub_token ;;
+            12) reset_admin_password ;;
+            13) uninstall_system ;;
+            0)  echo -e "\n${GREEN}已退出 Komari 管理控制中心。随时输入 ${BOLD}${YELLOW}hhub${PLAIN}${GREEN} 再次唤起。${PLAIN}\n"; exit 0 ;;
+            *)  echo -e "${RED}[ERROR] 选项输入无效，请重新输入！${PLAIN}"; sleep 1 ;;
+        esac
+        echo -e "\n${DIM}按回车键返回主菜单...${PLAIN}"
+        read -r _
+    done
+}
+
+main "$@"

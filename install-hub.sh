@@ -183,6 +183,15 @@ else
     curl -fsSL "${REPO_BASE}/conf/nginx-komari.conf" -o /opt/komari/conf/nginx-komari.conf
 fi
 
+# 安装终端控制中心命令 (hhub)
+if [ -f "$SCRIPT_DIR/bin/hhub" ]; then
+    cp "$SCRIPT_DIR/bin/hhub" /usr/local/bin/hhub
+else
+    curl -fsSL "${REPO_BASE}/bin/hhub" -o /usr/local/bin/hhub
+fi
+chmod +x /usr/local/bin/hhub
+ok "已安装终端管理控制中心命令: hhub (随时在终端输入 hhub 即可进入管理菜单)"
+
 chmod +x /opt/komari/komari /opt/komari/agent
 chmod +x /opt/komari/node-mgr/server.py
 sed -i "s|DOMAIN = \".*\"|DOMAIN = \"${SERVER_NAME}\"|g" /opt/komari/node-mgr/server.py
@@ -308,6 +317,7 @@ echo -e "${BOLD}1. 管理后台面板:${PLAIN}    ${CYAN}${BASE_URL}/admin/dashb
 echo -e "${BOLD}2. 节点管理独立面板:${PLAIN}${CYAN}${BASE_URL}/api/admin/plugin/node-manager/panel/index.html${PLAIN}"
 echo -e "${BOLD}3. 初始账号设置:${PLAIN}    ${YELLOW}首次在浏览器打开面板时，按网页指引创建管理员账号与密码${PLAIN}"
 echo -e "${BOLD}4. 统一订阅地址:${PLAIN}    ${CYAN}${BASE_URL}/sub/${SUB_TOKEN}${PLAIN}"
+echo -e "${BOLD}5. 终端控制中心:${PLAIN}    ${GREEN}hhub${PLAIN} (在终端输入 ${BOLD}${YELLOW}hhub${PLAIN} 即可管理服务、更改域名、切纯IP、更新或卸载)"
 echo -e "${GREEN}------------------------------------------------------------------${PLAIN}"
 echo -e "${BOLD}💡 探针被控端一键接入指令 (去其他 VPS 执行即可秒级上线):${PLAIN}"
 echo -e "${PURPLE}wget -qO- ${BASE_URL}/install-node.sh | sudo bash -s -- -e ${BASE_URL} -t <AGENT_TOKEN>${PLAIN}"
