@@ -64,4 +64,4 @@ if ('caches' in window) {
   }
 })();
 
-console.log('[Komari] Node Manager active v9');
+console.log('[Komari] Node Manager active v10');
