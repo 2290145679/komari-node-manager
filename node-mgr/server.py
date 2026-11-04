@@ -14,6 +14,7 @@ import concurrent.futures
 import threading
 import socket
 import ssl
+import re
 from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -563,6 +564,7 @@ def parse_proxy_link(link):
 
 
 _stats_cache = {"ts": 0, "data": None}
+_node_latency_cache = {}
 
 def get_cached_servers_with_stats():
     global _stats_cache
@@ -670,12 +672,12 @@ def get_servers_with_stats():
         uuid_val, name, ip4, ip6, os_name, arch, token, updated_at = row
         last_seen = heartbeats.get(token, 0)
         is_online = (now - last_seen) <= 35 if last_seen > 0 else False
-        if is_online:
-            online_count += 1
 
         rec = recent_metrics.get(uuid_val)
         is_probe_online = bool(rec and len(rec) > 0)
         is_server_online = is_probe_online or is_online
+        if is_server_online:
+            online_count += 1
         if rec and "network" in rec:
             net = rec["network"]
             cur_up = int(net.get("totalUp", 0))
@@ -2344,7 +2346,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             servers_data = get_cached_servers_with_stats()
             online_server_uuids = set(
                 s["uuid"] for s in servers_data.get("servers", [])
-                if s.get("singbox_online")
+                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
             )
             nodes = [
                 n for n in all_nodes
@@ -2390,7 +2392,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             servers_data = get_cached_servers_with_stats()
             online_server_uuids = set(
                 s["uuid"] for s in servers_data.get("servers", [])
-                if s.get("singbox_online")
+                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
             )
             nodes = [
                 n for n in all_nodes
@@ -2426,6 +2428,11 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
             for n in nodes:
                 n["link"] = build_node_share_link(n)
+                if n["id"] in _node_latency_cache:
+                    cached_p = _node_latency_cache[n["id"]]
+                    if cached_p.get("latency_ms"):
+                        n["ping_ms"] = cached_p["latency_ms"]
+
                 if n.get("is_external") or n.get("server_uuid") == "external":
                     n["is_external"] = 1
                     n["server_online"] = True
@@ -2434,7 +2441,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                     n["status_text"] = "外部节点"
                 else:
                     srv = servers_map.get(n.get("server_uuid"))
-                    if not srv:
+                    if not srv or not srv.get("server_online"):
                         n["server_online"] = False
                         n["singbox_online"] = False
                         n["node_status"] = "offline"
@@ -2444,15 +2451,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                         is_srv = bool(srv.get("server_online"))
                         n["server_online"] = is_srv
                         n["singbox_online"] = is_sb
-                        if not is_srv:
-                            n["node_status"] = "offline"
-                            n["status_text"] = "服务器离线"
-                        elif not is_sb:
-                            n["node_status"] = "core_offline"
-                            n["status_text"] = "核心离线"
-                        else:
-                            n["node_status"] = "online"
-                            n["status_text"] = "正常在线"
+                        n["probe_online"] = bool(srv.get("probe_online"))
+                        n["node_status"] = "online"
+                        n["status_text"] = "正常在线"
 
             self._send_json({"ok": True, "nodes": nodes})
             return
@@ -2481,29 +2482,87 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             })
             return
 
-        # Real TCP/TLS handshake ping endpoint for single node
-        if "/ping" in path and (path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")):
-            parts = path.rstrip("/").split("/")
-            idx = parts.index("ping")
-            node_id = parts[idx - 1]
+        # Comprehensive manual health check: refresh Komari recent stats + concurrent node TCP ping
+        if path in ["/api/nodes/check-all", "/api/node-mgr/nodes/check-all"]:
+            global _stats_cache
+            _stats_cache["data"] = None
+            servers_data = get_servers_with_stats()
+            _stats_cache["ts"] = time.time()
+            _stats_cache["data"] = servers_data
+            servers_map = {s["uuid"]: s for s in servers_data.get("servers", [])}
+
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE id = ?", (node_id,))
-            row = c.fetchone()
+            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
+            rows = c.fetchall()
             conn.close()
-            if not row:
-                self._send_json({"ok": False, "error": "节点不存在"}, 404)
-                return
 
-            nid, name, server_ip, port, proto, sni = row
-            result = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
+            ping_results = {}
+            def _check_one(r):
+                nid, name, server_ip, port, proto, sni = r
+                res = ping_node_handshake(server_ip, port, protocol=proto, sni=sni, timeout=2.5)
+                p_item = {
+                    "ok": res["success"],
+                    "node_id": nid,
+                    "node_name": name,
+                    "latency_ms": res.get("latency_ms"),
+                    "handshake_type": res.get("handshake_type", "TCP"),
+                    "error": res.get("error", None)
+                }
+                _node_latency_cache[nid] = p_item
+                return nid, p_item
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(12, max(1, len(rows)))) as executor:
+                for nid, data in executor.map(_check_one, rows):
+                    ping_results[nid] = data
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT * FROM nodes ORDER BY is_external ASC, id DESC")
+            cols = [d[0] for d in c.description]
+            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+
+            online_node_count = 0
+            for n in nodes:
+                n["link"] = build_node_share_link(n)
+                p_res = ping_results.get(n["id"]) or _node_latency_cache.get(n["id"])
+                if p_res and p_res.get("latency_ms"):
+                    n["ping_ms"] = p_res["latency_ms"]
+
+                if n.get("is_external") or n.get("server_uuid") == "external":
+                    n["is_external"] = 1
+                    n["server_online"] = True
+                    n["singbox_online"] = True
+                    n["node_status"] = "online"
+                    n["status_text"] = "外部节点"
+                    online_node_count += 1
+                else:
+                    srv = servers_map.get(n.get("server_uuid"))
+                    if not srv or not srv.get("server_online"):
+                        n["server_online"] = False
+                        n["singbox_online"] = False
+                        n["node_status"] = "offline"
+                        n["status_text"] = "服务器离线"
+                    else:
+                        is_sb = bool(srv.get("singbox_online"))
+                        is_srv = bool(srv.get("server_online"))
+                        n["server_online"] = is_srv
+                        n["singbox_online"] = is_sb
+                        n["probe_online"] = bool(srv.get("probe_online"))
+                        n["node_status"] = "online"
+                        n["status_text"] = "正常在线"
+                        online_node_count += 1
+
             self._send_json({
-                "ok": result["success"],
-                "node_id": nid,
-                "node_name": name,
-                "latency_ms": result["latency_ms"],
-                "handshake_type": result.get("handshake_type", "TCP"),
-                "error": result.get("error", None)
+                "ok": True,
+                "servers": servers_data.get("servers", []),
+                "nodes": nodes,
+                "ping_results": ping_results,
+                "total_servers": len(servers_data.get("servers", [])),
+                "online_servers": servers_data.get("singbox_online_count", 0),
+                "total_nodes": len(nodes),
+                "online_nodes": online_node_count
             })
             return
 
@@ -2518,21 +2577,50 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             results = {}
             def _check(r):
                 nid, name, server_ip, port, proto, sni = r
-                res = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
-                return nid, {
+                res = ping_node_handshake(server_ip, port, protocol=proto, sni=sni, timeout=2.5)
+                p_item = {
                     "ok": res["success"],
                     "node_id": nid,
                     "node_name": name,
-                    "latency_ms": res["latency_ms"],
+                    "latency_ms": res.get("latency_ms"),
                     "handshake_type": res.get("handshake_type", "TCP"),
                     "error": res.get("error", None)
                 }
+                _node_latency_cache[nid] = p_item
+                return nid, p_item
 
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=min(12, max(1, len(rows)))) as executor:
                 for nid, data in executor.map(_check, rows):
                     results[nid] = data
 
             self._send_json({"ok": True, "results": results})
+            return
+
+        # Real TCP/TLS handshake ping endpoint for single node: /api/nodes/<id>/ping
+        m_ping = re.match(r"^/api/(?:node-mgr/)?nodes/(\d+)/ping/?$", path)
+        if m_ping:
+            node_id = m_ping.group(1)
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE id = ?", (node_id,))
+            row = c.fetchone()
+            conn.close()
+            if not row:
+                self._send_json({"ok": False, "error": "节点不存在"}, 404)
+                return
+
+            nid, name, server_ip, port, proto, sni = row
+            result = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
+            p_data = {
+                "ok": result["success"],
+                "node_id": nid,
+                "node_name": name,
+                "latency_ms": result["latency_ms"],
+                "handshake_type": result.get("handshake_type", "TCP"),
+                "error": result.get("error", None)
+            }
+            _node_latency_cache[nid] = p_data
+            self._send_json(p_data)
             return
 
         if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":

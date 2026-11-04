@@ -442,14 +442,18 @@
             <i data-lucide="smartphone" class="w-4 h-4"></i>
             <span>一键导入客户端 / 扫码</span>
           </button>
-          <div class="grid grid-cols-2 sm:flex gap-2">
+          <div class="grid grid-cols-3 sm:flex gap-2">
+            <button onclick="manualHealthCheck()" id="manualCheckBtn" class="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1.5 transition active:scale-[0.98]" title="立即刷新检测所有服务器与节点状态">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-indigo-500"></i>
+              <span>手动检测</span>
+            </button>
             <button onclick="openImportModal()" class="px-3 py-2 text-xs sm:text-sm font-medium rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 flex items-center justify-center gap-1.5 transition active:scale-[0.98]">
               <i data-lucide="download" class="w-3.5 h-3.5 text-amber-500"></i>
-              <span>导入外部节点</span>
+              <span class="hidden sm:inline">导入外部节点</span><span class="sm:hidden">导入外部</span>
             </button>
             <button onclick="openCreateModal()" class="px-3.5 py-2 text-xs sm:text-sm font-medium rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm flex items-center justify-center gap-1.5 transition active:scale-[0.98]">
               <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>创建自建节点</span>
+              <span class="hidden sm:inline">创建自建节点</span><span class="sm:hidden">创建自建</span>
             </button>
           </div>
         </div>
@@ -3075,22 +3079,75 @@
       }
     }
 
-    // Silent background realtime traffic polling (only fetches servers API)
+    // Background realtime polling (updates servers & node statuses when active)
     let isPollingBusy = false;
     async function pollTraffic() {
       if (isPollingBusy) return;
       isPollingBusy = true;
       try {
-        const resServers = await fetch('/api/node-mgr/servers').then(r => r.json());
-        if (resServers && resServers.servers) {
-          applyServersPayload(resServers);
-          try {
-            localStorage.setItem('km_cache_servers', JSON.stringify(resServers));
-          } catch (e) {}
+        if (currentTab === 'nodes') {
+          const [resServers, resNodes] = await Promise.all([
+            fetch('/api/node-mgr/servers?_t=' + Date.now()).then(r => r.json()),
+            fetch('/api/node-mgr/nodes?_t=' + Date.now()).then(r => r.json())
+          ]);
+          if (resServers && resServers.servers) {
+            applyServersPayload(resServers);
+            try { localStorage.setItem('km_cache_servers', JSON.stringify(resServers)); } catch (e) {}
+          }
+          if (resNodes && resNodes.nodes) {
+            currentNodes = resNodes.nodes;
+            renderNodeTable();
+            try { localStorage.setItem('km_cache_nodes', JSON.stringify(resNodes)); } catch (e) {}
+          }
+        } else {
+          const resServers = await fetch('/api/node-mgr/servers?_t=' + Date.now()).then(r => r.json());
+          if (resServers && resServers.servers) {
+            applyServersPayload(resServers);
+            try { localStorage.setItem('km_cache_servers', JSON.stringify(resServers)); } catch (e) {}
+          }
         }
       } catch (e) {
       } finally {
         isPollingBusy = false;
+      }
+    }
+
+    let isCheckingHealth = false;
+    async function manualHealthCheck() {
+      if (isCheckingHealth) return;
+      isCheckingHealth = true;
+      const btn = document.getElementById('manualCheckBtn');
+      const origContent = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-indigo-500 animate-spin"></i><span>检测中...</span>`;
+        if (window.lucide) { try { lucide.createIcons({ root: btn }); } catch(e){} }
+      }
+      try {
+        const res = await fetch(`/api/node-mgr/nodes/check-all?_t=${Date.now()}`).then(r => r.json());
+        if (res.ok) {
+          if (res.servers) {
+            applyServersPayload({ ok: true, servers: res.servers, singbox_online_count: res.online_servers, total_servers: res.total_servers });
+            try { localStorage.setItem('km_cache_servers', JSON.stringify({ ok: true, servers: res.servers })); } catch (e) {}
+          }
+          if (res.nodes) {
+            currentNodes = res.nodes;
+            renderNodeTable();
+            try { localStorage.setItem('km_cache_nodes', JSON.stringify({ ok: true, nodes: res.nodes })); } catch (e) {}
+          }
+          const onlineN = res.online_nodes || 0;
+          const totalN = res.total_nodes || currentNodes.length;
+          showToast(`检测完成：${onlineN}/${totalN} 个节点正常在线，状态已刷新`, 'success');
+        } else {
+          showToast(`检测失败: ${res.error || '未知错误'}`, 'error');
+        }
+      } catch (err) {
+        showToast(`检测请求失败: ${err.message}`, 'error');
+      } finally {
+        isCheckingHealth = false;
+        if (btn) {
+          btn.innerHTML = origContent;
+          if (window.lucide) { try { lucide.createIcons({ root: btn }); } catch(e){} }
+        }
       }
     }
 
@@ -3114,9 +3171,10 @@
       currentNodes.forEach(node => {
         const isExt = node.is_external || node.server_uuid === 'external';
         const srv = currentServers.find(s => s.uuid === node.server_uuid);
-        const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.singbox_online && !srv.server_online) || (!srv && !isExt));
-        const isCoreOffline = !isExt && !isOffline && (node.node_status === 'core_offline' || (srv && srv.server_online && !srv.singbox_online));
-        if (isOffline || isCoreOffline) abnormalCount++;
+        const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.server_online && !srv.probe_online) || (!srv && !isExt));
+        const isBlocked = !isOffline && node.node_status === 'blocked';
+        const isCoreOffline = !isExt && !isOffline && !isBlocked && node.node_status === 'core_offline';
+        if (isOffline || isBlocked || isCoreOffline) abnormalCount++;
       });
 
       let mobileInsetGroup = null;
@@ -3143,9 +3201,10 @@
         try {
           const isExt = node.is_external || node.server_uuid === 'external';
           const srv = currentServers.find(s => s.uuid === node.server_uuid);
-          const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.singbox_online && !srv.server_online) || (!srv && !isExt));
-          const isCoreOffline = !isExt && !isOffline && (node.node_status === 'core_offline' || (srv && srv.server_online && !srv.singbox_online));
-          const isAbnormal = isOffline || isCoreOffline;
+          const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.server_online && !srv.probe_online) || (!srv && !isExt));
+          const isBlocked = !isOffline && node.node_status === 'blocked';
+          const isCoreOffline = !isExt && !isOffline && !isBlocked && node.node_status === 'core_offline';
+          const isAbnormal = isOffline || isBlocked || isCoreOffline;
 
           let serverBadge = '';
           if (isExt) {
@@ -3391,9 +3450,10 @@
         }
       }
 
-      const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.singbox_online && !srv.server_online) || (!srv && !isExt));
-      const isCoreOffline = !isExt && !isOffline && (node.node_status === 'core_offline' || (srv && srv.server_online && !srv.singbox_online));
-      const isAbnormal = isOffline || isCoreOffline;
+      const isOffline = !isExt && (node.node_status === 'offline' || (srv && !srv.server_online && !srv.probe_online) || (!srv && !isExt));
+      const isBlocked = !isOffline && node.node_status === 'blocked';
+      const isCoreOffline = !isExt && !isOffline && !isBlocked && node.node_status === 'core_offline';
+      const isAbnormal = isOffline || isBlocked || isCoreOffline;
 
       const noticeEl = document.getElementById('sheetOfflineNotice');
       if (noticeEl) {
@@ -3537,7 +3597,15 @@
             const agoText = server.last_seen_ago !== null ? `${server.last_seen_ago}s前` : '在线';
             statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                              <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span>
-                             在线 (${agoText})
+                             核心在线 (${agoText})
+                           </span>`;
+            statusBadgeShort = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span> 在线
+                                </span>`;
+          } else if (server.server_online || server.probe_online) {
+            statusBadge = `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-slow"></span>
+                             探针在线
                            </span>`;
             statusBadgeShort = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                                   <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse-slow"></span> 在线
