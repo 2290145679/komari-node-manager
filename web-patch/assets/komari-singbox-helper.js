@@ -18,10 +18,10 @@ if ('caches' in window) {
     style.id = 'km-style-override';
     style.textContent = `
       .km-server-card {
-        border-radius: 18px !important;
-        border: 1px solid rgba(226, 232, 240, 0.85) !important;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04) !important;
-        margin-bottom: 12px !important;
+        border-radius: 20px !important;
+        border: 1px solid rgba(226, 232, 240, 0.9) !important;
+        box-shadow: 0 2px 14px rgba(0, 0, 0, 0.04) !important;
+        margin-bottom: 14px !important;
         transition: all 0.2s ease !important;
         overflow: hidden !important;
       }
@@ -32,12 +32,12 @@ if ('caches' in window) {
       .km-card-actions {
         display: flex !important;
         align-items: center !important;
-        gap: 3px !important;
+        gap: 4px !important;
       }
       .km-card-actions button {
-        padding: 3px !important;
-        width: 28px !important;
-        height: 28px !important;
+        padding: 4px !important;
+        width: 30px !important;
+        height: 30px !important;
       }
       @media (max-width: 640px) {
         .rt-BaseDialogScrollPadding {
@@ -64,4 +64,4 @@ if ('caches' in window) {
   }
 })();
 
-console.log('[Komari] Node Manager active');
+console.log('[Komari] Node Manager active v9');
