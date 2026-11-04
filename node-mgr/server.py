@@ -674,6 +674,8 @@ def get_servers_with_stats():
             online_count += 1
 
         rec = recent_metrics.get(uuid_val)
+        is_probe_online = bool(rec and len(rec) > 0)
+        is_server_online = is_probe_online or is_online
         if rec and "network" in rec:
             net = rec["network"]
             cur_up = int(net.get("totalUp", 0))
@@ -713,7 +715,9 @@ def get_servers_with_stats():
             "arch": arch or "",
             "token": token or "",
             "updated_at": str(rec_updated) if rec_updated else "",
+            "probe_online": is_probe_online,
             "singbox_online": is_online,
+            "server_online": is_server_online,
             "singbox_installed": last_seen > 0,
             "last_seen": last_seen,
             "last_seen_ago": (now - last_seen) if last_seen > 0 else None,
@@ -2333,8 +2337,19 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             
             c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
-            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            all_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
+            # Dynamic health filter: omit self-hosted nodes whose server / Sing-box core is offline
+            servers_data = get_cached_servers_with_stats()
+            online_server_uuids = set(
+                s["uuid"] for s in servers_data.get("servers", [])
+                if s.get("singbox_online")
+            )
+            nodes = [
+                n for n in all_nodes
+                if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids
+            ]
 
             rules_cfg = get_subscription_rules()
             ua = self.headers.get("User-Agent", "").lower()
@@ -2369,11 +2384,28 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             c = conn.cursor()
             c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
-            nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            all_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
+            servers_data = get_cached_servers_with_stats()
+            online_server_uuids = set(
+                s["uuid"] for s in servers_data.get("servers", [])
+                if s.get("singbox_online")
+            )
+            nodes = [
+                n for n in all_nodes
+                if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids
+            ]
+
             rules_cfg = get_subscription_rules()
             yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
-            self._send_json({"ok": True, "yaml": yaml_data})
+            self._send_json({
+                "ok": True,
+                "yaml": yaml_data,
+                "total_nodes": len(all_nodes),
+                "active_nodes": len(nodes),
+                "offline_nodes": len(all_nodes) - len(nodes)
+            })
             return
 
         if path == "/api/servers" or path == "/api/node-mgr/servers":
@@ -2382,14 +2414,46 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
+            servers_data = get_cached_servers_with_stats()
+            servers_map = {s["uuid"]: s for s in servers_data.get("servers", [])}
+
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             c.execute("SELECT * FROM nodes ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
             nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
             for n in nodes:
                 n["link"] = build_node_share_link(n)
+                if n.get("is_external") or n.get("server_uuid") == "external":
+                    n["is_external"] = 1
+                    n["server_online"] = True
+                    n["singbox_online"] = True
+                    n["node_status"] = "online"
+                    n["status_text"] = "外部节点"
+                else:
+                    srv = servers_map.get(n.get("server_uuid"))
+                    if not srv:
+                        n["server_online"] = False
+                        n["singbox_online"] = False
+                        n["node_status"] = "offline"
+                        n["status_text"] = "服务器离线"
+                    else:
+                        is_sb = bool(srv.get("singbox_online"))
+                        is_srv = bool(srv.get("server_online"))
+                        n["server_online"] = is_srv
+                        n["singbox_online"] = is_sb
+                        if not is_srv:
+                            n["node_status"] = "offline"
+                            n["status_text"] = "服务器离线"
+                        elif not is_sb:
+                            n["node_status"] = "core_offline"
+                            n["status_text"] = "核心离线"
+                        else:
+                            n["node_status"] = "online"
+                            n["status_text"] = "正常在线"
+
             self._send_json({"ok": True, "nodes": nodes})
             return
 
