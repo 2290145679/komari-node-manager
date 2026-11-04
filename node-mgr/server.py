@@ -1656,7 +1656,8 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now sing-box.service || true
+  systemctl enable sing-box.service >/dev/null 2>&1 || true
+  systemctl restart sing-box.service || true
 fi
 
 fi
@@ -1677,6 +1678,13 @@ fi
 # 4. Install Node-Sync Agent Daemon
 if [ "$INSTALL_SINGBOX" -eq 1 ]; then
   echo "[4/4] Installing Node Configuration Sync Daemon..."
+  if [ "$INIT_SYSTEM" = "openrc" ]; then
+    rc-service komari-node-sync stop >/dev/null 2>&1 || true
+  else
+    systemctl stop komari-node-sync.service >/dev/null 2>&1 || true
+  fi
+  pkill -f komari-node-sync.sh >/dev/null 2>&1 || true
+
 cat << 'EOF' > /usr/local/bin/komari-node-sync.sh
 #!/bin/bash
 MASTER_URL="__MASTER_URL__"
@@ -1804,7 +1812,8 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable --now komari-node-sync.service
+  systemctl enable komari-node-sync.service >/dev/null 2>&1 || true
+  systemctl restart komari-node-sync.service
 fi
 fi
 
