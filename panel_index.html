@@ -5243,7 +5243,7 @@
       }
     }
 
-    function createUserSubscription() {
+    async function createUserSubscription() {
       const input = document.getElementById('newUserNameInput');
       const name = (input.value || '').trim();
       if (!name) {
