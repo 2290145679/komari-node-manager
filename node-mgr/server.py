@@ -16,8 +16,16 @@ import socket
 import ssl
 import re
 from datetime import datetime
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+
+# Inject default timeout to prevent SQLite database locked errors under concurrency
+_orig_sqlite_connect = sqlite3.connect
+def _sqlite_connect_with_timeout(*args, **kwargs):
+    if "timeout" not in kwargs:
+        kwargs["timeout"] = 30.0
+    return _orig_sqlite_connect(*args, **kwargs)
+sqlite3.connect = _sqlite_connect_with_timeout
 
 KOMARI_DB = "/opt/komari/data/komari.db"
 NODES_DB = "/opt/komari/data/nodes.db"
@@ -29,9 +37,36 @@ DOMAIN = "jgw2.yohoo.xyz"
 os.makedirs(CERT_DIR, exist_ok=True)
 os.makedirs("/opt/komari/data", exist_ok=True)
 
+_cached_active_uuids = None
+_cached_active_uuids_time = 0
+
+def get_active_user_uuids(force_refresh=False):
+    global _cached_active_uuids, _cached_active_uuids_time
+    now = time.time()
+    if not force_refresh and _cached_active_uuids is not None and (now - _cached_active_uuids_time < 10):
+        return _cached_active_uuids
+    uuids = []
+    try:
+        conn = sqlite3.connect(NODES_DB)
+        c = conn.cursor()
+        c.execute("SELECT user_uuid FROM subscriptions WHERE enabled = 1")
+        for row in c.fetchall():
+            if row[0] and str(row[0]).strip() and str(row[0]).strip() not in uuids:
+                uuids.append(str(row[0]).strip())
+        conn.close()
+        _cached_active_uuids = uuids
+        _cached_active_uuids_time = now
+    except Exception:
+        if _cached_active_uuids is not None:
+            return _cached_active_uuids
+    return uuids
+
 def init_db():
     conn = sqlite3.connect(NODES_DB)
     c = conn.cursor()
+    c.execute("PRAGMA journal_mode=WAL;")
+    c.execute("PRAGMA synchronous=NORMAL;")
+    c.execute("PRAGMA busy_timeout=30000;")
     c.execute('''
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1418,17 +1453,7 @@ def build_sing_box_config(nodes_for_server):
     key_path = "/etc/sing-box/cert.key"
 
     # Gather all active user_uuid from subscriptions to allow multi-user authorization
-    active_user_uuids = []
-    try:
-        conn_sub = sqlite3.connect(NODES_DB)
-        c_sub = conn_sub.cursor()
-        c_sub.execute("SELECT user_uuid FROM subscriptions WHERE enabled = 1")
-        for row in c_sub.fetchall():
-            if row[0] and str(row[0]).strip() and str(row[0]).strip() not in active_user_uuids:
-                active_user_uuids.append(str(row[0]).strip())
-        conn_sub.close()
-    except Exception:
-        pass
+    active_user_uuids = get_active_user_uuids()
     
     for n in nodes_for_server:
         if not n.get("enabled"):
@@ -1750,24 +1775,28 @@ while true; do
         mv /tmp/new_config.json "$CONFIG_FILE"
         echo "$NEW_MD5" > "$MD5_FILE"
 
-        # Auto open firewall ports for all inbounds
+        # Auto open firewall ports for all inbounds only when port list changes
         PORTS=$(grep -oE '"listen_port"[[:space:]]*:[[:space:]]*[0-9]+' "$CONFIG_FILE" | grep -oE '[0-9]+' | sort -u)
-        for p in $PORTS; do
+        OLD_PORTS=$(cat /etc/sing-box/ports.txt 2>/dev/null || true)
+        if [ "$PORTS" != "$OLD_PORTS" ]; then
+          echo "$PORTS" > /etc/sing-box/ports.txt
+          for p in $PORTS; do
+            if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+              firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
+              firewall-cmd --add-port=${p}/udp --permanent >/dev/null 2>&1 || true
+            fi
+            if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+              ufw allow ${p}/tcp >/dev/null 2>&1 || true
+              ufw allow ${p}/udp >/dev/null 2>&1 || true
+            fi
+            iptables -C INPUT -p tcp --dport ${p} -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+            iptables -C INPUT -p udp --dport ${p} -j ACCEPT 2>/dev/null || iptables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+            ip6tables -C INPUT -p tcp --dport ${p} -j ACCEPT 2>/dev/null || ip6tables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+            ip6tables -C INPUT -p udp --dport ${p} -j ACCEPT 2>/dev/null || ip6tables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
+          done
           if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
-            firewall-cmd --add-port=${p}/tcp --permanent >/dev/null 2>&1 || true
-            firewall-cmd --add-port=${p}/udp --permanent >/dev/null 2>&1 || true
+            firewall-cmd --reload >/dev/null 2>&1 || true
           fi
-          if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
-            ufw allow ${p}/tcp >/dev/null 2>&1 || true
-            ufw allow ${p}/udp >/dev/null 2>&1 || true
-          fi
-          iptables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          iptables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          ip6tables -I INPUT 1 -p tcp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-          ip6tables -I INPUT 1 -p udp --dport ${p} -j ACCEPT >/dev/null 2>&1 || true
-        done
-        if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
-          firewall-cmd --reload >/dev/null 2>&1 || true
         fi
 
         restart_sing_box
@@ -3095,6 +3124,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             c.execute("UPDATE nodes SET uuid_or_passwd = ? WHERE is_external = 0", (new_uuid,))
             conn.commit()
             conn.close()
+            get_active_user_uuids(force_refresh=True)
             new_sub_url = f"https://{DOMAIN}/sub/{new_token}"
             self._send_json({"ok": True, "token": new_token, "user_uuid": new_uuid, "sub_url": new_sub_url})
             return
@@ -3114,8 +3144,8 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             new_id = c.lastrowid
             conn.commit()
             conn.close()
+            get_active_user_uuids(force_refresh=True)
             self._send_json({
-                "ok": True,
                 "user": {
                     "id": new_id,
                     "name": name,
@@ -3124,7 +3154,8 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                     "remark": remark,
                     "user_uuid": new_uuid,
                     "sub_url": f"https://{DOMAIN}/sub/{new_tok}"
-                }
+                },
+                "ok": True
             })
             return
 
@@ -3143,6 +3174,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 c.execute("UPDATE subscriptions SET token = ?, user_uuid = ? WHERE id = (SELECT id FROM subscriptions ORDER BY id ASC LIMIT 1)", (new_tok, new_uuid))
             conn.commit()
             conn.close()
+            get_active_user_uuids(force_refresh=True)
             self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"https://{DOMAIN}/sub/{new_tok}"})
             return
 
@@ -3154,6 +3186,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             c.execute("UPDATE subscriptions SET enabled = ? WHERE id = ?", (enabled, uid))
             conn.commit()
             conn.close()
+            get_active_user_uuids(force_refresh=True)
             self._send_json({"ok": True})
             return
 
@@ -3164,6 +3197,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             c.execute("DELETE FROM subscriptions WHERE id = ?", (uid,))
             conn.commit()
             conn.close()
+            get_active_user_uuids(force_refresh=True)
             self._send_json({"ok": True})
             return
 
@@ -3415,6 +3449,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     threading.Thread(target=run_notification_engine, daemon=True).start()
-    print(f"Starting Node Manager server on 127.0.0.1:{PORT}...")
-    server = HTTPServer(("127.0.0.1", PORT), NodeMgrHandler)
+    print(f"Starting Node Manager server on 127.0.0.1:{PORT} (ThreadingHTTPServer)...")
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), NodeMgrHandler)
+    server.daemon_threads = True
     server.serve_forever()
