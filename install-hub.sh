@@ -126,7 +126,45 @@ elif [ "$OS_TYPE" = "alpine" ]; then
 fi
 ok "系统依赖安装完成 (Python3 / SQLite3 / Nginx / Gzip)"
 
-# 7. 检测当前运行环境 (本地仓库执行 or 远程 curl 管道安装)
+# 7. 开启 TCP BBR 网络拥塞控制算法
+info "正在检查并开启 TCP BBR 网络加速算法..."
+enable_bbr() {
+    local current_cc
+    current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+    if [ "$current_cc" = "bbr" ]; then
+        ok "TCP BBR 已处于启用状态，跳过配置"
+        return 0
+    fi
+
+    modprobe tcp_bbr >/dev/null 2>&1 || true
+    if [ -d /etc/modules-load.d ]; then
+        echo "tcp_bbr" > /etc/modules-load.d/bbr.conf 2>/dev/null || true
+    fi
+
+    sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf 2>/dev/null || true
+    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+
+    if [ -d /etc/sysctl.d ]; then
+        echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+    fi
+
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+    sysctl -e -p /etc/sysctl.conf >/dev/null 2>&1 || sysctl --system >/dev/null 2>&1 || true
+
+    current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+    if [ "$current_cc" = "bbr" ]; then
+        ok "TCP BBR 网络加速算法已成功开启并持久化！"
+    else
+        warn "尝试开启 BBR 失败 (当前拥塞控制: ${current_cc:-unknown})，可能是虚拟化环境(如 OpenVZ/LXC)限制内核参数修改"
+    fi
+}
+enable_bbr
+
+# 8. 检测当前运行环境 (本地仓库执行 or 远程 curl 管道安装)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_BASE="https://raw.githubusercontent.com/2290145679/komari-node-manager/main"
 WORK_DIR="/tmp/komari-hub-setup"

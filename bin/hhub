@@ -192,6 +192,14 @@ show_dashboard() {
         ssl_badge="${YELLOW}[HTTP / 未开证书]${PLAIN}"
     fi
 
+    local cc_val bbr_badge
+    cc_val=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+    if [ "$cc_val" = "bbr" ]; then
+        bbr_badge="${GREEN}● BBR 已开启 (高效拥塞控制)${PLAIN}"
+    else
+        bbr_badge="${YELLOW}○ ${cc_val} (未开启 BBR)${PLAIN}"
+    fi
+
     echo -e "${PURPLE}==================================================================${PLAIN}"
     echo -e "${BOLD}${CYAN}        🌸 Komari Monitor & Node Manager 控制中心 (hhub)${PLAIN}"
     echo -e "${PURPLE}==================================================================${PLAIN}"
@@ -203,6 +211,7 @@ show_dashboard() {
     echo -e "  ${BOLD}网络与访问模式:${PLAIN}"
     echo -e "  · 当前绑定地址:       ${BOLD}${CYAN}${cur_domain}${PLAIN} ${ssl_badge}"
     echo -e "  · 服务器公网 IP:      ${pub_ip}"
+    echo -e "  · TCP 拥塞控制算法:   ${bbr_badge}"
     echo -e "  · 管理面板地址:       ${BOLD}${GREEN}${base_url}/admin/dashboard${PLAIN}"
     echo -e "  · 节点列表与分流面板: ${BOLD}${GREEN}${base_url}/api/admin/plugin/node-manager/panel/index.html${PLAIN}"
     echo -e "  · 统一分流订阅链接:   ${CYAN}${base_url}/sub/${sub_token}${PLAIN}"
@@ -214,7 +223,7 @@ show_dashboard() {
     echo -e "  ${BOLD}[4]${PLAIN} 查看实时运行日志     ${BOLD}[5]${PLAIN} 更改绑定域名         ${BOLD}[6]${PLAIN} 不使用域名(纯IP访问)"
     echo -e "  ${BOLD}[7]${PLAIN} 更改 Web 访问端口    ${BOLD}[8]${PLAIN} 重新申请/续签 SSL     ${BOLD}[9]${PLAIN} 一键平滑热更新系统"
     echo -e "  ${BOLD}[10]${PLAIN} 全量数据备份与还原   ${BOLD}[11]${PLAIN} 👥 多用户订阅管理     ${BOLD}[12]${PLAIN} 重置管理员密码"
-    echo -e "  ${BOLD}[13]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
+    echo -e "  ${BOLD}[13]${PLAIN} 🚀 开启/管理 TCP BBR ${BOLD}[14]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
     echo -e "${PURPLE}==================================================================${PLAIN}"
 }
 
@@ -768,7 +777,52 @@ reset_admin_password() {
     fi
 }
 
-# 13. 完全卸载
+# 13. TCP BBR 管理
+manage_bbr() {
+    echo -e "\n${BOLD}${CYAN}=== TCP BBR 网络加速算法管理 ===${PLAIN}"
+    local current_cc
+    current_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || echo "unknown")
+    echo -e "当前内核拥塞控制算法: ${BOLD}${CYAN}${current_cc}${PLAIN}"
+    echo -e "当前队列调度算法:     ${BOLD}${CYAN}$(sysctl -n net.core.default_qdisc 2>/dev/null || echo "unknown")${PLAIN}\n"
+
+    if [ "$current_cc" = "bbr" ]; then
+        echo -e "${GREEN}[OK] 🎉 TCP BBR 已处于启用并持久化生效状态！${PLAIN}"
+        read -r -p "是否需要重新刷新应用 BBR 优化配置？[y/N]: " re_apply
+        if [[ ! "$re_apply" =~ ^[Yy]$ ]]; then
+            return
+        fi
+    fi
+
+    echo -e "${CYAN}[INFO] 正在配置并启用 TCP BBR 加速...${PLAIN}"
+    modprobe tcp_bbr >/dev/null 2>&1 || true
+    if [ -d /etc/modules-load.d ]; then
+        echo "tcp_bbr" > /etc/modules-load.d/bbr.conf 2>/dev/null || true
+    fi
+
+    sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf 2>/dev/null || true
+    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+
+    if [ -d /etc/sysctl.d ]; then
+        echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+        echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+    fi
+
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+    sysctl -e -p /etc/sysctl.conf >/dev/null 2>&1 || sysctl --system >/dev/null 2>&1 || true
+
+    local new_cc
+    new_cc=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+    if [ "$new_cc" = "bbr" ]; then
+        echo -e "${GREEN}[OK] 🎉 TCP BBR 网络加速算法已成功开启并持久化！${PLAIN}"
+    else
+        echo -e "${RED}[WARN] 开启 BBR 失败 (当前拥塞控制: ${new_cc:-unknown})，可能是虚拟化环境(如 OpenVZ/LXC)限制内核参数修改。${PLAIN}"
+    fi
+}
+
+# 14. 完全卸载
 uninstall_system() {
     echo -e "\n${BOLD}${RED}==================================================================${PLAIN}"
     echo -e "${BOLD}${RED}                 ⚠️  危险操作：完全卸载主控端系统${PLAIN}"
@@ -818,7 +872,7 @@ main() {
     check_root
     while true; do
         show_dashboard
-        read -r -p "请输入对应功能编号 [0-13]: " choice
+        read -r -p "请输入对应功能编号 [0-14]: " choice
         case "$choice" in
             1)  restart_all_services ;;
             2)  stop_all_services ;;
@@ -832,7 +886,8 @@ main() {
             10) backup_restore_db ;;
             11) manage_sub_token ;;
             12) reset_admin_password ;;
-            13) uninstall_system ;;
+            13) manage_bbr ;;
+            14) uninstall_system ;;
             0)  echo -e "\n${GREEN}已退出 Komari 管理控制中心。随时输入 ${BOLD}${YELLOW}hhub${PLAIN}${GREEN} 再次唤起。${PLAIN}\n"; exit 0 ;;
             *)  echo -e "${RED}[ERROR] 选项输入无效，请重新输入！${PLAIN}"; sleep 1 ;;
         esac

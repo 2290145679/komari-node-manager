@@ -1565,6 +1565,7 @@ TOKEN=""
 MASTER_URL="https://{DOMAIN}"
 INSTALL_PROBE=1
 INSTALL_SINGBOX=1
+ENABLE_BBR=1
 
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -1583,6 +1584,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-singbox)
       INSTALL_SINGBOX=0
+      shift
+      ;;
+    --skip-bbr)
+      ENABLE_BBR=0
       shift
       ;;
     *)
@@ -1610,7 +1615,7 @@ fi
 echo "[Info] Detected init system: $INIT_SYSTEM"
 
 # 1. Install prerequisites
-echo "[1/4] Installing system dependencies..."
+echo "[1/5] Installing system dependencies..."
 if [ -x "$(command -v apt-get)" ]; then
   apt-get update -qq && apt-get install -y -qq curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
 elif [ -x "$(command -v yum)" ]; then
@@ -1622,9 +1627,44 @@ elif [ -x "$(command -v apk)" ]; then
   apk add --no-cache curl wget tar openssl jq bash ca-certificates gcompat >/dev/null 2>&1 || true
 fi
 
-# 2. Install Sing-box core
+# 2. Enable TCP BBR Congestion Control
+if [ "$ENABLE_BBR" -eq 1 ]; then
+  echo "[2/5] Optimizing TCP congestion control: Checking & Enabling BBR..."
+  CURRENT_CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+  if [ "$CURRENT_CC" = "bbr" ]; then
+    echo "[Info] TCP BBR is already enabled and active."
+  else
+    modprobe tcp_bbr >/dev/null 2>&1 || true
+    if [ -d /etc/modules-load.d ]; then
+      echo "tcp_bbr" > /etc/modules-load.d/bbr.conf 2>/dev/null || true
+    fi
+
+    sed -i '/net.core.default_qdisc/d' /etc/sysctl.conf 2>/dev/null || true
+    sed -i '/net.ipv4.tcp_congestion_control/d' /etc/sysctl.conf 2>/dev/null || true
+    echo "net.core.default_qdisc = fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.conf
+
+    if [ -d /etc/sysctl.d ]; then
+      echo "net.core.default_qdisc = fq" > /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+      echo "net.ipv4.tcp_congestion_control = bbr" >> /etc/sysctl.d/99-bbr.conf 2>/dev/null || true
+    fi
+
+    sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+    sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+    sysctl -e -p /etc/sysctl.conf >/dev/null 2>&1 || sysctl --system >/dev/null 2>&1 || true
+
+    NEW_CC=$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null || true)
+    if [ "$NEW_CC" = "bbr" ]; then
+      echo "[Success] TCP BBR congestion control successfully enabled and persisted!"
+    else
+      echo "[Notice] Failed to activate BBR (current: ${NEW_CC:-unknown}), kernel may lack tcp_bbr module or virtualization container (LXC/OpenVZ) is restricted."
+    fi
+  fi
+fi
+
+# 3. Install Sing-box core
 if [ "$INSTALL_SINGBOX" -eq 1 ]; then
-  echo "[2/4] Installing Sing-box high performance core..."
+  echo "[3/5] Installing Sing-box high performance core..."
 ARCH=$(uname -m)
 case $ARCH in
   x86_64) SING_ARCH="amd64" ;;
@@ -1713,9 +1753,9 @@ fi
 
 fi
 
-# 3. Install Komari Monitor Agent using official installer
+# 4. Install Komari Monitor Agent using official installer
 if [ "$INSTALL_PROBE" -eq 1 ]; then
-  echo "[3/4] Installing Komari Monitor Agent..."
+  echo "[4/5] Installing Komari Monitor Agent..."
 DOWNLOADER=""
 if command -v curl >/dev/null 2>&1; then
   DOWNLOADER="curl -fsSL"
@@ -1726,9 +1766,9 @@ $DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/h
 
 fi
 
-# 4. Install Node-Sync Agent Daemon
+# 5. Install Node-Sync Agent Daemon
 if [ "$INSTALL_SINGBOX" -eq 1 ]; then
-  echo "[4/4] Installing Node Configuration Sync Daemon..."
+  echo "[5/5] Installing Node Configuration Sync Daemon..."
   if [ "$INIT_SYSTEM" = "openrc" ]; then
     rc-service komari-node-sync stop >/dev/null 2>&1 || true
   else
