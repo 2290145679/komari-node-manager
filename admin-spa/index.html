@@ -1,0 +1,2162 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Komari Admin - 全能管理中心</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            macaron: {
+              purple: '#EDE9FE',
+              'purple-dark': '#7C3AED',
+              mint: '#D1FAE5',
+              'mint-dark': '#059669',
+              peach: '#FEF3C7',
+              'peach-dark': '#D97706',
+              blue: '#DBEAFE',
+              'blue-dark': '#2563EB',
+              pink: '#FCE7F3',
+              'pink-dark': '#DB2777',
+              rose: '#FFE4E6',
+              'rose-dark': '#E11D48',
+              lavender: '#F5F3FF',
+              slate: '#F8FAFC'
+            }
+          },
+          fontFamily: {
+            sans: ['-apple-system', 'BlinkMacSystemFont', '"PingFang SC"', '"Hiragino Sans GB"', '"Microsoft YaHei"', 'Roboto', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace']
+          },
+          boxShadow: {
+            'bento': '0 2px 14px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02)',
+            'bento-hover': '0 12px 28px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04)',
+            'dock': '0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.04)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons & Chart.js & QRCode -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.35); border-radius: 9999px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.6); }
+
+    /* Bento Card Ambient Styles */
+    .bento-card {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(226, 232, 240, 0.9);
+      border-radius: 1.25rem;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .dark .bento-card {
+      background: rgba(24, 24, 27, 0.9);
+      border-color: rgba(63, 63, 70, 0.8);
+    }
+    .bento-card:hover {
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.02);
+      transform: translateY(-2px);
+    }
+
+    /* Bottom Sheet Animation */
+    .sheet-backdrop {
+      transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .sheet-panel {
+      transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Mobile active touch tap feedback */
+    .btn-tap {
+      transition: transform 0.12s ease, opacity 0.12s ease;
+      touch-action: manipulation;
+    }
+    .btn-tap:active {
+      transform: scale(0.96);
+      opacity: 0.88;
+    }
+
+    /* Pulse Indicator */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.15); }
+    }
+    .status-pulse {
+      animation: pulseGlow 2.5s infinite;
+    }
+  </style>
+</head>
+<body class="bg-[#F8FAFC] dark:bg-[#0B0F19] text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-purple-500 selection:text-white pb-28 md:pb-8">
+
+  <!-- ============================================================== -->
+  <!-- 1. LOGIN OVERLAY (Rendered if 401 Unauthorized)                 -->
+  <!-- ============================================================== -->
+  <div id="loginOverlay" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md hidden">
+    <div class="bento-card w-full max-w-sm p-6 sm:p-8 bg-white dark:bg-zinc-900 shadow-2xl rounded-3xl border border-slate-200 dark:border-zinc-800">
+      <div class="text-center mb-6">
+        <div class="w-16 h-16 mx-auto mb-3 rounded-2xl bg-gradient-to-tr from-purple-500 via-pink-400 to-indigo-500 flex items-center justify-center shadow-lg shadow-purple-500/25">
+          <span class="text-3xl">🌸</span>
+        </div>
+        <h2 class="text-xl sm:text-2xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text text-transparent">Komari Admin</h2>
+        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">请输入管理员账号与密码登录控制台</p>
+      </div>
+
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">管理员用户名</label>
+          <input type="text" id="loginUsername" required placeholder="admin" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-300 mb-1.5">登录密码</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500/30">
+        </div>
+        <button type="submit" id="loginSubmitBtn" class="w-full py-3.5 rounded-xl font-bold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-lg shadow-purple-500/25 btn-tap flex items-center justify-center gap-2">
+          <span>进入管理控制台</span>
+          <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- 2. DESKTOP SIDEBAR (≥ 768px)                                   -->
+  <!-- ============================================================== -->
+  <aside class="hidden md:flex fixed top-0 left-0 bottom-0 w-64 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border-r border-slate-200/80 dark:border-zinc-800 flex-col z-30 select-none">
+    <!-- Brand -->
+    <div class="h-20 flex items-center justify-between px-6 border-b border-slate-100 dark:border-zinc-800/80">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-500 via-pink-400 to-indigo-500 flex items-center justify-center text-xl shadow-md shadow-purple-500/20">
+          🌸
+        </div>
+        <div>
+          <div class="font-black text-base tracking-tight bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text text-transparent">Komari Pro</div>
+          <div class="text-[10px] text-slate-400 font-medium">节点与监控管理中心</div>
+        </div>
+      </div>
+      <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300">v4.5</span>
+    </div>
+
+    <!-- Navigation Items -->
+    <nav class="flex-1 overflow-y-auto px-3.5 py-4 space-y-1.5" id="desktopNav">
+      <button onclick="switchTab('probe')" data-tab="probe" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">探针总览</span>
+        <span id="badgeServerCount" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/10 text-blue-600">0</span>
+      </button>
+
+      <button onclick="switchTab('nodes')" data-tab="nodes" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="layers" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">节点管理</span>
+        <span id="badgeNodeCount" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600">0</span>
+      </button>
+
+      <button onclick="switchTab('users')" data-tab="users" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-pink-100 dark:bg-pink-900/30 text-pink-600 dark:text-pink-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="users" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">用户订阅</span>
+        <span id="badgeUserCount" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/10 text-pink-600">0</span>
+      </button>
+
+      <button onclick="switchTab('rules')" data-tab="rules" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="git-fork" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">分流配置</span>
+      </button>
+
+      <button onclick="switchTab('traffic')" data-tab="traffic" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">流量统计</span>
+      </button>
+
+      <button onclick="switchTab('alerts')" data-tab="alerts" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="bell" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">告警规则</span>
+      </button>
+
+      <button onclick="switchTab('settings')" data-tab="settings" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-slate-200 dark:bg-zinc-700 text-slate-600 dark:text-slate-300 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">系统设置</span>
+      </button>
+    </nav>
+
+    <!-- Sidebar Bottom Actions -->
+    <div class="p-4 border-t border-slate-100 dark:border-zinc-800 space-y-2">
+      <a href="/" target="_blank" class="w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-500 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition btn-tap">
+        <span class="flex items-center gap-2"><i data-lucide="external-link" class="w-3.5 h-3.5"></i> 前台探针大屏</span>
+        <span class="text-[10px] text-slate-400">公开页</span>
+      </a>
+
+      <div class="flex items-center justify-between pt-1">
+        <button onclick="toggleDarkMode()" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap" title="切换深色/浅色模式">
+          <i data-lucide="sun" class="w-4 h-4 dark:hidden"></i>
+          <i data-lucide="moon" class="w-4 h-4 hidden dark:block"></i>
+        </button>
+        <button onclick="handleLogout()" class="px-3 py-1.5 rounded-xl text-xs font-medium text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition btn-tap flex items-center gap-1.5">
+          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+          <span>登出</span>
+        </button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============================================================== -->
+  <!-- 3. MOBILE HEADER (< 768px)                                     -->
+  <!-- ============================================================== -->
+  <header class="md:hidden fixed top-0 inset-x-0 h-14 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-xl border-b border-slate-200/80 dark:border-zinc-800 z-30 flex items-center justify-between px-4">
+    <div class="flex items-center gap-2.5">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-sm shadow-md">🌸</div>
+      <div class="flex flex-col">
+        <span id="mobileTitle" class="font-black text-sm text-slate-800 dark:text-slate-100">探针总览</span>
+        <span class="text-[9px] text-slate-400">Komari Pro 管理中心</span>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-1.5">
+      <a href="/" target="_blank" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap" title="打开前台展示页">
+        <i data-lucide="external-link" class="w-4 h-4"></i>
+      </a>
+      <button onclick="toggleDarkMode()" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap">
+        <i data-lucide="sun" class="w-4 h-4 dark:hidden"></i>
+        <i data-lucide="moon" class="w-4 h-4 hidden dark:block"></i>
+      </button>
+      <button onclick="openMoreSheet()" class="p-2 rounded-xl text-purple-600 bg-purple-50 dark:bg-purple-950/40 transition btn-tap">
+        <i data-lucide="menu" class="w-4 h-4"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============================================================== -->
+  <!-- 4. MAIN CONTENT CONTAINER                                      -->
+  <!-- ============================================================== -->
+  <main class="md:ml-64 pt-16 md:pt-6 px-3.5 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+
+    <!-- TAB 1: 🖥️ 探针总览 (PROBE OVERVIEW) -->
+    <section id="tab-probe" class="tab-panel space-y-4 sm:space-y-6">
+      <!-- Top Action Banner -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-lavender/40 to-macaron-blue/30 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 status-pulse"></span>
+            <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">服务器与探针实时监控</h1>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">毫秒级 WebSocket 实时全网上下行吞吐监测 · 核心硬件负载概览</p>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <button onclick="openAddServerModal()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 btn-tap">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>添加服务器 (带BBR)</span>
+          </button>
+          <button onclick="refreshData()" class="p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap" title="刷新数据">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Top Bento Overview Stats -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <!-- Stat 1: 在线服务器 -->
+        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] sm:text-xs font-medium text-emerald-800 dark:text-emerald-300">在线服务器</div>
+            <div class="text-lg sm:text-2xl font-black mt-0.5 text-emerald-950 dark:text-emerald-100" id="statOnlineServers">0 / 0</div>
+          </div>
+        </div>
+
+        <!-- Stat 2: 全网实时下行速度 -->
+        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <i data-lucide="arrow-down-circle" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] sm:text-xs font-medium text-blue-800 dark:text-blue-300">全网实时下行</div>
+            <div class="text-lg sm:text-2xl font-black mt-0.5 text-blue-950 dark:text-blue-100" id="statRealtimeDown">0 KB/s</div>
+          </div>
+        </div>
+
+        <!-- Stat 3: 全网实时上行速度 -->
+        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-purple-50/50 dark:bg-purple-950/10 border-purple-100 dark:border-purple-900/30">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <i data-lucide="arrow-up-circle" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] sm:text-xs font-medium text-purple-800 dark:text-purple-300">全网实时上行</div>
+            <div class="text-lg sm:text-2xl font-black mt-0.5 text-purple-950 dark:text-purple-100" id="statRealtimeUp">0 KB/s</div>
+          </div>
+        </div>
+
+        <!-- Stat 4: 全网累计流量 -->
+        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-pink-50/50 dark:bg-pink-950/10 border-pink-100 dark:border-pink-900/30">
+          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-pink-500/15 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0">
+            <i data-lucide="hard-drive" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="text-[11px] sm:text-xs font-medium text-pink-800 dark:text-pink-300">累计流转流量</div>
+            <div class="text-lg sm:text-2xl font-black mt-0.5 text-pink-950 dark:text-pink-100" id="statTotalTraffic">0 GB</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Servers Grid (Bento Boxes) -->
+      <div id="serversGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- TAB 2: 🌐 节点管理 (NODE & PROXY MANAGEMENT) -->
+    <section id="tab-nodes" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- Action Banner -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-purple/30 to-macaron-pink/20 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">节点列表与统一管理</h1>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自建 Sing-box 节点与外部节点统一聚合 · 毫秒级延迟实测与全能订阅导出</p>
+        </div>
+        <div class="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <button onclick="openClientImportModal()" class="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-md shadow-purple-500/25 flex items-center justify-center gap-2 btn-tap">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>
+            <span>一键导入客户端 / 扫码</span>
+          </button>
+          <div class="flex gap-2">
+            <button onclick="manualPingAllNodes()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-blue-500"></i>
+              <span>测速</span>
+            </button>
+            <button onclick="openImportNodeModal()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
+              <i data-lucide="download" class="w-3.5 h-3.5 text-amber-500"></i>
+              <span>导入</span>
+            </button>
+            <button onclick="openCreateNodeModal()" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-purple-600 hover:bg-purple-700 shadow-sm flex items-center justify-center gap-1.5 btn-tap">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>自建</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node Stats Bento Cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div class="bento-card p-3.5 sm:p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
+            <i data-lucide="layers" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500">托管节点总数</div>
+            <div class="text-base sm:text-xl font-black text-slate-800 dark:text-slate-100" id="statNodeTotal">0</div>
+          </div>
+        </div>
+        <div class="bento-card p-3.5 sm:p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+            <i data-lucide="server" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500">自建 Sing-box</div>
+            <div class="text-base sm:text-xl font-black text-indigo-600 dark:text-indigo-400" id="statNodeNative">0</div>
+          </div>
+        </div>
+        <div class="bento-card p-3.5 sm:p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold">
+            <i data-lucide="download-cloud" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500">外部导入节点</div>
+            <div class="text-base sm:text-xl font-black text-amber-600 dark:text-amber-400" id="statNodeExternal">0</div>
+          </div>
+        </div>
+        <div class="bento-card p-3.5 sm:p-4 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <div class="text-[11px] sm:text-xs text-slate-500">Sing-box 在线核心</div>
+            <div class="text-base sm:text-xl font-black text-emerald-600 dark:text-emerald-400" id="statSingboxOnline">0 / 0台</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node List Table / Cards -->
+      <div class="bento-card p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <span>节点明细列表</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500" id="nodesCountBadge">0 个</span>
+          </h2>
+          <div class="flex items-center gap-2">
+            <input type="text" id="nodeSearchInput" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          </div>
+        </div>
+        <div id="nodesListContainer" class="space-y-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: 👥 用户订阅 (USER SUBSCRIPTIONS) -->
+    <section id="tab-users" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- Action Banner -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-pink/30 to-macaron-purple/20 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">多用户专属订阅管理</h1>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">为朋友与团队分配独立订阅地址 · 支持一键轮换重置并彻底作废旧 UUID 凭据</p>
+        </div>
+        <button onclick="openCreateUserModal()" class="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-700 hover:to-indigo-700 shadow-md shadow-pink-500/20 flex items-center justify-center gap-2 btn-tap">
+          <i data-lucide="user-plus" class="w-4 h-4"></i>
+          <span>新建用户订阅</span>
+        </button>
+      </div>
+
+      <!-- Users Grid -->
+      <div id="usersListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-5">
+        <!-- Rendered by JS -->
+      </div>
+    </section>
+
+    <!-- TAB 4: 🔀 分流配置 (SMART ROUTING RULES) -->
+    <section id="tab-rules" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- Action Banner -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-blue/30 to-macaron-purple/20 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">智能分流决策与路由规则</h1>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自动为 AI 大模型、Telegram、海外流媒体、开发者服务匹配指定最优出口节点</p>
+        </div>
+        <button onclick="saveRoutingRules()" id="saveRulesBtn" class="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 btn-tap">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>保存生效分流配置</span>
+        </button>
+      </div>
+
+      <!-- Preset Routing Bento Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4" id="presetRulesContainer">
+        <!-- AI Service Card -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col justify-between border-purple-100 dark:border-purple-900/30">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-lg">🤖</div>
+            <div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-100">AI 大模型服务</div>
+              <div class="text-[11px] text-slate-500">ChatGPT, Claude, Gemini, OpenAI</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <select id="target_ai" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          </div>
+        </div>
+
+        <!-- Telegram Card -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col justify-between border-blue-100 dark:border-blue-900/30">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-lg">✈️</div>
+            <div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-100">Telegram 社交专线</div>
+              <div class="text-[11px] text-slate-500">Telegram 消息、频道与媒体加速</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <select id="target_tg" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          </div>
+        </div>
+
+        <!-- Media Card -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col justify-between border-rose-100 dark:border-rose-900/30">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-rose-100 text-rose-600 flex items-center justify-center text-lg">🎬</div>
+            <div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-100">海外流媒体专区</div>
+              <div class="text-[11px] text-slate-500">YouTube, Netflix, Disney+, Spotify</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <select id="target_media" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          </div>
+        </div>
+
+        <!-- Dev Card -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col justify-between border-emerald-100 dark:border-emerald-900/30">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg">💻</div>
+            <div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-100">开发者技术服务</div>
+              <div class="text-[11px] text-slate-500">GitHub, Docker Hub, StackOverflow</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <select id="target_dev" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          </div>
+        </div>
+
+        <!-- Games Card -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col justify-between border-amber-100 dark:border-amber-900/30">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-lg">🎮</div>
+            <div>
+              <div class="text-sm font-bold text-slate-800 dark:text-slate-100">主流游戏平台</div>
+              <div class="text-[11px] text-slate-500">Steam, Epic, PlayStation, Xbox</div>
+            </div>
+          </div>
+          <div class="mt-4">
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <select id="target_games" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Global Routing Toggles -->
+      <div class="bento-card p-4 sm:p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">全局分流规则开关</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <span class="text-xs font-semibold">BT / P2P 下载强制直连</span>
+            <input type="checkbox" id="direct_bt" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <span class="text-xs font-semibold">国内 IP 与域名直连</span>
+            <input type="checkbox" id="direct_cn" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <span class="text-xs font-semibold">局域网与私有地址直连</span>
+            <input type="checkbox" id="direct_lan" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <span class="text-xs font-semibold">广告与恶意追踪拦截</span>
+            <input type="checkbox" id="block_ads" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <span class="text-xs font-semibold">自动生成节点策略群组</span>
+            <input type="checkbox" id="enable_auto_group" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40">
+            <span class="text-xs font-semibold">最终漏斗规则 (Final)</span>
+            <select id="final_match" class="px-2 py-1 text-xs rounded border border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-800">
+              <option value="PROXY">PROXY (代理)</option>
+              <option value="DIRECT">DIRECT (直连)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">自定义附加规则 (Clash / Sing-box 格式兼容)</label>
+          <textarea id="custom_rules" rows="3" placeholder="例如: DOMAIN-SUFFIX,google.com,PROXY" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 font-mono text-xs focus:outline-none"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 5: 📈 流量统计 (TRAFFIC ANALYTICS) -->
+    <section id="tab-traffic" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- Traffic Overview Bento -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bento-card p-5 bg-gradient-to-br from-white to-blue-50/50 dark:from-zinc-900 dark:to-blue-950/20">
+          <div class="text-xs text-slate-500 font-medium">全网当月总流量</div>
+          <div class="text-2xl sm:text-3xl font-black text-blue-600 dark:text-blue-400 mt-1" id="trafficTotalMonth">0 GB</div>
+          <div class="text-[11px] text-slate-400 mt-2">每月 1 号重置周期统计</div>
+        </div>
+        <div class="bento-card p-5 bg-gradient-to-br from-white to-purple-50/50 dark:from-zinc-900 dark:to-purple-950/20">
+          <div class="text-xs text-slate-500 font-medium">全网总下行消耗</div>
+          <div class="text-2xl sm:text-3xl font-black text-purple-600 dark:text-purple-400 mt-1" id="trafficTotalDown">0 GB</div>
+          <div class="text-[11px] text-slate-400 mt-2">客户端接收数据流</div>
+        </div>
+        <div class="bento-card p-5 bg-gradient-to-br from-white to-pink-50/50 dark:from-zinc-900 dark:to-pink-950/20">
+          <div class="text-xs text-slate-500 font-medium">全网总上行消耗</div>
+          <div class="text-2xl sm:text-3xl font-black text-pink-600 dark:text-pink-400 mt-1" id="trafficTotalUp">0 GB</div>
+          <div class="text-[11px] text-slate-400 mt-2">客户端发送数据流</div>
+        </div>
+      </div>
+
+      <!-- Server Ranking List -->
+      <div class="bento-card p-4 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">各服务器流量消耗占比排行</h2>
+          <button onclick="resetTrafficBaseline()" class="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-xl hover:bg-rose-100 transition btn-tap">
+            清零重置流量基线
+          </button>
+        </div>
+        <div id="trafficRankList" class="space-y-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 6: 🔔 告警规则 (ALERTS & NOTIFICATIONS) -->
+    <section id="tab-alerts" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- Telegram Channel Setup -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white to-blue-50/30 dark:from-zinc-900 dark:to-zinc-800">
+        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-xl">✈️</div>
+            <div>
+              <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">Telegram 告警机器人通道</h2>
+              <p class="text-xs text-slate-500">当服务器宕机、Sing-box 离线、TCP 阻断时即时向你的 Telegram 推送通知</p>
+            </div>
+          </div>
+          <button onclick="testTelegramNotify()" class="px-4 py-2 text-xs font-bold rounded-xl text-blue-600 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap">
+            发送测试推送
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Bot Token</label>
+            <input type="password" id="tgBotToken" placeholder="123456789:ABCdefGHIjkl..." class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">Chat ID</label>
+            <input type="text" id="tgChatId" placeholder="例如: 987654321" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          </div>
+        </div>
+        <div class="mt-3 text-right">
+          <button onclick="saveTelegramConfig()" class="px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition btn-tap">
+            保存 Telegram 通道配置
+          </button>
+        </div>
+      </div>
+
+      <!-- Alert Rules List -->
+      <div class="bento-card p-4 sm:p-6 space-y-4">
+        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">自动巡检告警规则</h2>
+        <div id="alertRulesList" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Notification Logs History -->
+      <div class="bento-card p-4 sm:p-6 space-y-3">
+        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">实时告警推送历史</h2>
+        <div id="alertLogsContainer" class="space-y-2 max-h-60 overflow-y-auto">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 7: ⚙️ 系统设置 (SYSTEM SETTINGS) -->
+    <section id="tab-settings" class="tab-panel space-y-4 sm:space-y-6 hidden">
+      <!-- System Info Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Card 1: BBR & Network -->
+        <div class="bento-card p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center">🚀</div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">TCP BBR 拥塞控制</h3>
+                <p class="text-xs text-slate-400">大幅降低跨国传输丢包率并提升带宽利用率</p>
+              </div>
+            </div>
+            <span id="bbrBadge" class="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">检测中...</span>
+          </div>
+          <div class="pt-2 flex items-center justify-between">
+            <span class="text-xs text-slate-500">队列算法: <span id="bbrQdisc" class="font-mono text-slate-700 dark:text-slate-300">fq</span></span>
+            <button onclick="enableBBR()" id="enableBbrBtn" class="px-3.5 py-1.5 text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 rounded-xl transition btn-tap">
+              一键开启 / 刷新 BBR
+            </button>
+          </div>
+        </div>
+
+        <!-- Card 2: Admin Password -->
+        <div class="bento-card p-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">🔑</div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">修改管理员密码</h3>
+              <p class="text-xs text-slate-400">重设当前登录管理员账号的后台凭据</p>
+            </div>
+          </div>
+          <div class="pt-2 flex gap-2">
+            <input type="password" id="newAdminPassword" placeholder="输入新密码 (至少6位)" class="flex-1 px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <button onclick="changeAdminPassword()" class="px-4 py-1.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 rounded-xl transition btn-tap">
+              保存密码
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Backup & Restore -->
+      <div class="bento-card p-5 space-y-4">
+        <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">数据全量备份与还原</h2>
+        <p class="text-xs text-slate-500">将所有服务器列表、自建与外部节点、分流规则、多用户订阅打包导出为 JSON 备份文件，支持随时还原。</p>
+        <div class="flex flex-wrap gap-3">
+          <button onclick="exportFullDataBackup()" class="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-emerald-600 hover:bg-emerald-700 shadow-md shadow-emerald-500/20 flex items-center gap-2 btn-tap">
+            <i data-lucide="download" class="w-4 h-4"></i>
+            <span>导出全量数据备份 (.json)</span>
+          </button>
+          <label class="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center gap-2 cursor-pointer btn-tap">
+            <i data-lucide="upload" class="w-4 h-4"></i>
+            <span>导入备份文件还原</span>
+            <input type="file" id="importBackupInput" accept=".json" onchange="handleImportBackupFile(event)" class="hidden">
+          </label>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============================================================== -->
+  <!-- 5. MOBILE FLOATING BOTTOM DOCK (< 768px)                       -->
+  <!-- ============================================================== -->
+  <nav class="md:hidden fixed bottom-3 inset-x-3 max-w-md mx-auto h-16 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-dock border border-slate-200/90 dark:border-zinc-800 flex items-center justify-around px-2 z-40 select-none">
+    <button onclick="switchTab('probe')" data-mobile-tab="probe" class="mobile-dock-btn flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-purple-600 transition btn-tap">
+      <i data-lucide="activity" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">探针</span>
+    </button>
+    <button onclick="switchTab('nodes')" data-mobile-tab="nodes" class="mobile-dock-btn flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-purple-600 transition btn-tap">
+      <i data-lucide="layers" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">节点</span>
+    </button>
+    <button onclick="switchTab('users')" data-mobile-tab="users" class="mobile-dock-btn flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-purple-600 transition btn-tap">
+      <i data-lucide="users" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">订阅</span>
+    </button>
+    <button onclick="switchTab('rules')" data-mobile-tab="rules" class="mobile-dock-btn flex-1 flex flex-col items-center justify-center py-1 text-slate-400 hover:text-purple-600 transition btn-tap">
+      <i data-lucide="git-fork" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">分流</span>
+    </button>
+    <button onclick="openMoreSheet()" class="flex-1 flex flex-col items-center justify-center py-1 text-purple-600 transition btn-tap">
+      <i data-lucide="grid" class="w-5 h-5"></i>
+      <span class="text-[10px] font-semibold mt-1">更多</span>
+    </button>
+  </nav>
+
+  <!-- ============================================================== -->
+  <!-- 6. UNIVERSAL BOTTOM SHEET / MODALS                             -->
+  <!-- ============================================================== -->
+
+  <!-- Modal A: 添加服务器一键命令 -->
+  <div id="modalAddServer" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <span>🖥️ 添加受控服务器节点</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">自带 BBR</span>
+        </h3>
+        <button onclick="closeModal('modalAddServer')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">服务器标识名称</label>
+          <input type="text" id="addServerName" placeholder="例如: 香港 BGP / 日本 4837" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+        </div>
+
+        <button onclick="generateServerInstallCommand()" class="w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/20 btn-tap">
+          生成一键安装命令
+        </button>
+
+        <div id="installCmdBox" class="space-y-2 hidden">
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400">在目标 VPS 终端执行以下一键命令 (自带 BBR + Sing-box + 探针):</label>
+          <div class="p-3.5 rounded-xl bg-slate-900 text-slate-200 font-mono text-xs break-all relative">
+            <span id="installCmdText"></span>
+            <button onclick="copyInstallCommand()" class="mt-2 w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 font-sans font-bold text-white text-xs btn-tap flex items-center justify-center gap-1.5">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span>一键复制安装命令</span>
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400">⚡ 安装过程会自动优化并持久化开启 TCP BBR 拥塞控制算法。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal B: 一键导入客户端 / 扫码 -->
+  <div id="modalClientImport" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">📱 导入代理客户端 / 扫码</h3>
+        <button onclick="closeModal('modalClientImport')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1">
+        <!-- Universal Sub URL Copy -->
+        <div class="p-3.5 rounded-2xl bg-purple-50 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/40 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-purple-900 dark:text-purple-300">通用聚合订阅链接</span>
+            <button onclick="copyUniversalSub()" class="text-xs font-bold text-purple-600 hover:underline">点击复制</button>
+          </div>
+          <input type="text" id="universalSubInput" readonly class="w-full px-3 py-2 rounded-xl text-xs font-mono bg-white dark:bg-zinc-800 border border-purple-200 dark:border-purple-800 text-slate-700 dark:text-slate-200 focus:outline-none select-all">
+        </div>
+
+        <!-- One-Click Schemes Grid -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <button onclick="openClientScheme('clash')" class="p-3 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-left transition btn-tap">
+            <div class="font-bold text-xs text-blue-600">Clash / Verge</div>
+            <div class="text-[10px] text-slate-400">一键导入配置</div>
+          </button>
+          <button onclick="openClientScheme('surge')" class="p-3 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-left transition btn-tap">
+            <div class="font-bold text-xs text-indigo-600">Surge</div>
+            <div class="text-[10px] text-slate-400">一键唤起添加</div>
+          </button>
+          <button onclick="openClientScheme('shadowrocket')" class="p-3 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-left transition btn-tap">
+            <div class="font-bold text-xs text-pink-600">Shadowrocket</div>
+            <div class="text-[10px] text-slate-400">小火箭一键导入</div>
+          </button>
+          <button onclick="openClientScheme('stash')" class="p-3 rounded-xl border border-slate-200 dark:border-zinc-700 hover:bg-slate-50 dark:hover:bg-zinc-800 text-left transition btn-tap">
+            <div class="font-bold text-xs text-emerald-600">Stash</div>
+            <div class="text-[10px] text-slate-400">iOS / macOS 唤起</div>
+          </button>
+        </div>
+
+        <!-- QR Code Container -->
+        <div class="text-center pt-2">
+          <div id="subQrcodeCanvas" class="inline-block p-3 rounded-2xl bg-white shadow-md border border-slate-100"></div>
+          <p class="text-[11px] text-slate-400 mt-2">手机扫码即可直接导入至 NekoBox / Shadowrocket</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal C: 新建用户专属订阅 -->
+  <div id="modalCreateUser" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">👥 新建用户专属订阅</h3>
+        <button onclick="closeModal('modalCreateUser')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-3.5">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">用户名 / 标识</label>
+          <input type="text" id="newUserName" placeholder="例如: 朋友B / 团队办公" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">备注说明 (可选)</label>
+          <input type="text" id="newUserRemark" placeholder="例如: 手机与平板自用" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+        </div>
+        <button onclick="submitCreateUser()" class="w-full py-3 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-700 hover:to-purple-700 shadow-md shadow-pink-500/20 btn-tap">
+          立即创建并分配专属凭据
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal D: 创建自建节点 -->
+  <div id="modalCreateNode" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[88vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">🌐 创建自建 Sing-box 节点</h3>
+        <button onclick="closeModal('modalCreateNode')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器</label>
+          <select id="createNodeServerSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">协议类型</label>
+          <select id="createNodeProtocol" onchange="toggleProtocolFields()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <option value="vless_reality">VLESS + Reality (极力推荐)</option>
+            <option value="hysteria2">Hysteria 2 (UDP 高速抗阻断)</option>
+            <option value="tuic">TUIC v5 (QUIC 高性能协议)</option>
+            <option value="trojan">Trojan (标准 TLS 伪装)</option>
+            <option value="vmess_ws">VMess + WebSocket</option>
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">节点名称</label>
+            <input type="text" id="createNodeName" placeholder="例如: 日本软银 - 01" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">监听端口</label>
+            <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">伪装域名 (SNI)</label>
+          <input type="text" id="createNodeSni" placeholder="addons.mozilla.org" value="addons.mozilla.org" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+        </div>
+
+        <button onclick="submitCreateNativeNode()" class="w-full py-3 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap">
+          一键生成并部署自建节点
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal E: 导入外部节点 -->
+  <div id="modalImportNode" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">📥 批量导入外部节点链接</h3>
+        <button onclick="closeModal('modalImportNode')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
+        <label class="block font-semibold text-slate-600 dark:text-slate-400">粘贴外部节点链接 (一行一条，支持 vless://, hy2://, tuic://, trojan://, vmess://, ss://):</label>
+        <textarea id="importNodeLinks" rows="6" placeholder="vless://...&#10;hysteria2://..." class="w-full p-3 font-mono text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></textarea>
+        <button onclick="submitImportExternalNodes()" class="w-full py-3 rounded-xl font-bold text-white bg-amber-600 hover:bg-amber-700 shadow-md shadow-amber-500/20 btn-tap">
+          解析并加入节点管理
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal F: 移动端“更多”菜单抽屉 -->
+  <div id="sheetMore" class="fixed inset-0 z-50 flex items-end justify-center p-0 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full bg-white dark:bg-zinc-900 rounded-t-3xl p-5 shadow-2xl border-t border-slate-200 dark:border-zinc-800 pb-10">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-4"></div>
+      <h3 class="text-sm font-bold text-slate-400 mb-3 px-2">更多管理模块</h3>
+      <div class="grid grid-cols-3 gap-3">
+        <button onclick="switchTab('traffic'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 flex flex-col items-center gap-2 btn-tap">
+          <i data-lucide="bar-chart-3" class="w-6 h-6"></i>
+          <span class="text-xs font-bold">流量统计</span>
+        </button>
+        <button onclick="switchTab('alerts'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/20 text-amber-600 flex flex-col items-center gap-2 btn-tap">
+          <i data-lucide="bell" class="w-6 h-6"></i>
+          <span class="text-xs font-bold">告警规则</span>
+        </button>
+        <button onclick="switchTab('settings'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 flex flex-col items-center gap-2 btn-tap">
+          <i data-lucide="settings" class="w-6 h-6"></i>
+          <span class="text-xs font-bold">系统设置</span>
+        </button>
+      </div>
+
+      <div class="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between px-2">
+        <a href="/" target="_blank" class="text-xs font-semibold text-purple-600 flex items-center gap-1.5">
+          <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+          <span>打开前台展示大屏</span>
+        </a>
+        <button onclick="handleLogout()" class="text-xs font-semibold text-rose-500 flex items-center gap-1">
+          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+          <span>退出登录</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+  <!-- ============================================================== -->
+  <!-- 7. APP LOGIC & DATA BINDING SCRIPT                             -->
+  <!-- ============================================================== -->
+  <script>
+    // Global State
+    let state = {
+      servers: [],
+      nodes: [],
+      users: [],
+      rules: {},
+      presets: {},
+      traffic: {},
+      system: {},
+      activeTab: 'probe',
+      ws: null,
+      pollTimer: null
+    };
+
+    // Initialize App
+    document.addEventListener('DOMContentLoaded', async () => {
+      initTheme();
+      initLucide();
+      const hash = window.location.hash.replace('#', '');
+      if (['probe', 'nodes', 'users', 'rules', 'traffic', 'alerts', 'settings'].includes(hash)) {
+        switchTab(hash);
+      }
+      await checkAuthAndLoad();
+      startRealtimePolling();
+    });
+
+    function initLucide() {
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('km_theme');
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+
+    function toggleDarkMode() {
+      const isDark = document.documentElement.classList.toggle('dark');
+      localStorage.setItem('km_theme', isDark ? 'dark' : 'light');
+      initLucide();
+    }
+
+    // Tab Switching
+    function switchTab(tabId) {
+      state.activeTab = tabId;
+      window.location.hash = tabId;
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+      const activePanel = document.getElementById(`tab-${tabId}`);
+      if (activePanel) activePanel.classList.remove('hidden');
+
+      // Update Desktop Nav styles
+      document.querySelectorAll('#desktopNav .nav-item').forEach(btn => {
+        const isCur = btn.getAttribute('data-tab') === tabId;
+        btn.classList.toggle('bg-purple-50', isCur);
+        btn.classList.toggle('dark:bg-purple-950/30', isCur);
+        btn.classList.toggle('text-purple-600', isCur);
+        btn.classList.toggle('dark:text-purple-300', isCur);
+      });
+
+      // Update Mobile Dock styles
+      document.querySelectorAll('.mobile-dock-btn').forEach(btn => {
+        const isCur = btn.getAttribute('data-mobile-tab') === tabId;
+        btn.classList.toggle('text-purple-600', isCur);
+        btn.classList.toggle('text-slate-400', !isCur);
+      });
+
+      // Update mobile header title
+      const titleMap = {
+        probe: '探针总览',
+        nodes: '节点管理',
+        users: '用户订阅',
+        rules: '分流配置',
+        traffic: '流量统计',
+        alerts: '告警规则',
+        settings: '系统设置'
+      };
+      const titleEl = document.getElementById('mobileTitle');
+      if (titleEl) titleEl.textContent = titleMap[tabId] || '管理中心';
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      initLucide();
+    }
+
+    // Toast Engine
+    function showToast(msg, type = 'info') {
+      const c = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colors = {
+        success: 'bg-emerald-500 text-white shadow-emerald-500/20',
+        error: 'bg-rose-500 text-white shadow-rose-500/20',
+        info: 'bg-purple-600 text-white shadow-purple-500/20',
+        warn: 'bg-amber-500 text-white shadow-amber-500/20'
+      };
+      toast.className = `px-4 py-3 rounded-2xl shadow-lg text-xs sm:text-sm font-semibold flex items-center gap-2 transform transition-all duration-300 pointer-events-auto ${colors[type] || colors.info}`;
+      toast.innerHTML = `<span>${msg}</span>`;
+      c.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-10px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // Modal Control
+    function openModal(id) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove('hidden');
+        initLucide();
+      }
+    }
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+    function openMoreSheet() { openModal('sheetMore'); }
+    function openAddServerModal() { openModal('modalAddServer'); }
+    function openClientImportModal() { openModal('modalClientImport'); generateUniversalQr(); }
+    function openCreateUserModal() { openModal('modalCreateUser'); }
+    function openCreateNodeModal() { populateServerSelectForNode(); openModal('modalCreateNode'); }
+    function openImportNodeModal() { openModal('modalImportNode'); }
+
+    // ==============================================================
+    // DATA FETCHING & SYNC ENGINE
+    // ==============================================================
+    async function checkAuthAndLoad() {
+      try {
+        const res = await fetch('/api/admin/client/list');
+        if (res.status === 401) {
+          document.getElementById('loginOverlay').classList.remove('hidden');
+          return;
+        }
+        document.getElementById('loginOverlay').classList.add('hidden');
+      } catch (e) {
+        console.error('Auth verification error:', e);
+      }
+      await refreshData();
+    }
+
+    async function handleLoginSubmit(e) {
+      e.preventDefault();
+      const u = document.getElementById('loginUsername').value.trim();
+      const p = document.getElementById('loginPassword').value.trim();
+      const btn = document.getElementById('loginSubmitBtn');
+      btn.disabled = true;
+      btn.innerText = '正在验证登录...';
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: u, password: p })
+        });
+        const data = await res.json();
+        if (res.ok && data.status !== 'error') {
+          showToast('🎉 登录成功，欢迎进入管理控制台！', 'success');
+          document.getElementById('loginOverlay').classList.add('hidden');
+          await refreshData();
+        } else {
+          showToast(data.message || '用户名或密码错误', 'error');
+        }
+      } catch (err) {
+        showToast('登录请求失败: ' + err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>进入管理控制台</span><i data-lucide="arrow-right" class="w-4 h-4"></i>';
+        initLucide();
+      }
+    }
+
+    async function handleLogout() {
+      if (!confirm('确认退出当前管理员账号吗？')) return;
+      try {
+        await fetch('/api/logout');
+      } catch(e) {}
+      location.reload();
+    }
+
+    async function refreshData() {
+      await Promise.allSettled([
+        loadServers(),
+        loadNodes(),
+        loadUsers(),
+        loadRules(),
+        loadAlerts(),
+        loadSystem()
+      ]);
+      initLucide();
+    }
+
+    function startRealtimePolling() {
+      if (state.pollTimer) clearInterval(state.pollTimer);
+      state.pollTimer = setInterval(() => {
+        loadServers(true);
+      }, 3000);
+    }
+
+    // 1. SERVERS / PROBE DATA
+    async function loadServers(quiet = false) {
+      try {
+        const res = await fetch('/api/node-mgr/servers?_t=' + Date.now()).then(r => r.json());
+        if (res.ok && res.servers) {
+          state.servers = res.servers;
+          updateProbeStats(res);
+          renderServersGrid();
+          document.getElementById('badgeServerCount').textContent = res.servers.length;
+        }
+      } catch (e) {
+        if (!quiet) console.error('Load servers error:', e);
+      }
+    }
+
+    function updateProbeStats(data) {
+      const servers = data.servers || [];
+      const onlineCount = servers.filter(s => s.server_online || s.probe_online).length;
+      document.getElementById('statOnlineServers').textContent = `${onlineCount} / ${servers.length}`;
+
+      let totalIn = 0, totalOut = 0, totalTrafficBytes = 0;
+      servers.forEach(s => {
+        totalIn += (s.in_rate || 0);
+        totalOut += (s.out_rate || 0);
+        totalTrafficBytes += (s.traffic_total || 0);
+      });
+
+      document.getElementById('statRealtimeDown').textContent = formatSpeed(totalIn);
+      document.getElementById('statRealtimeUp').textContent = formatSpeed(totalOut);
+      document.getElementById('statTotalTraffic').textContent = formatBytes(totalTrafficBytes);
+
+      // Traffic tab stats
+      document.getElementById('trafficTotalMonth').textContent = formatBytes(totalTrafficBytes);
+      let totalDownBytes = servers.reduce((acc, s) => acc + (s.traffic_down || 0), 0);
+      let totalUpBytes = servers.reduce((acc, s) => acc + (s.traffic_up || 0), 0);
+      document.getElementById('trafficTotalDown').textContent = formatBytes(totalDownBytes);
+      document.getElementById('trafficTotalUp').textContent = formatBytes(totalUpBytes);
+
+      renderTrafficRanks(servers, totalTrafficBytes);
+    }
+
+    function renderServersGrid() {
+      const container = document.getElementById('serversGrid');
+      if (!container) return;
+
+      container.innerHTML = state.servers.map(s => {
+        const isOnline = s.server_online || s.probe_online;
+        const statusBadge = isOnline 
+          ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
+               <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span> 在线
+             </span>`
+          : `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300">
+               <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> 离线
+             </span>`;
+
+        const coreBadge = s.singbox_online
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300">Sing-box 在线</span>`
+          : (s.singbox_installed 
+              ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">Sing-box 离线</span>` 
+              : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-400">未装核心</span>`);
+
+        const cpu = (s.cpu_usage || 0).toFixed(1);
+        const ram = (s.ram_pct || 0).toFixed(1);
+        const disk = (s.disk_pct || 0).toFixed(1);
+
+        return `
+          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3.5">
+            <div class="flex items-start justify-between gap-2">
+              <div class="min-w-0">
+                <div class="flex items-center gap-2">
+                  <h3 class="font-black text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">${escapeHtml(s.name || 'Server')}</h3>
+                </div>
+                <div class="text-[11px] font-mono text-slate-400 mt-0.5 truncate">${s.ipv4 || s.ipv6 || '无IP'} · ${s.os || 'Linux'}</div>
+              </div>
+              <div class="flex flex-col items-end gap-1 shrink-0">
+                ${statusBadge}
+                ${coreBadge}
+              </div>
+            </div>
+
+            <!-- Resource Progress Bars -->
+            <div class="space-y-2 pt-1 text-xs">
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+                  <span>CPU 负载</span>
+                  <span class="font-mono font-semibold">${cpu}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 ${cpu > 80 ? 'bg-rose-500' : 'bg-blue-500'}" style="width: ${Math.min(cpu, 100)}%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+                  <span>内存占用</span>
+                  <span class="font-mono font-semibold">${ram}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 ${ram > 85 ? 'bg-rose-500' : 'bg-purple-500'}" style="width: ${Math.min(ram, 100)}%"></div>
+                </div>
+              </div>
+
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-500 mb-1">
+                  <span>磁盘使用</span>
+                  <span class="font-mono font-semibold">${disk}%</span>
+                </div>
+                <div class="w-full h-1.5 bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                  <div class="h-full rounded-full transition-all duration-500 bg-pink-500" style="width: ${Math.min(disk, 100)}%"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Realtime Speed & Actions -->
+            <div class="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between">
+              <div class="text-[11px] font-mono text-slate-500">
+                <span class="text-blue-500">↓ ${formatSpeed(s.in_rate || 0)}</span> · 
+                <span class="text-purple-500">↑ ${formatSpeed(s.out_rate || 0)}</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <button onclick="editServerName('${s.uuid}', '${escapeHtml(s.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap" title="重命名">
+                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                </button>
+                <button onclick="deleteServer('${s.uuid}', '${escapeHtml(s.name)}')" class="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition btn-tap" title="删除服务器">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      initLucide();
+    }
+
+    // 2. NODES DATA
+    async function loadNodes() {
+      try {
+        const res = await fetch('/api/node-mgr/nodes').then(r => r.json());
+        if (res.ok && res.nodes) {
+          state.nodes = res.nodes;
+          updateNodeStats(res.nodes);
+          renderNodesList();
+          document.getElementById('badgeNodeCount').textContent = res.nodes.length;
+        }
+      } catch (e) {
+        console.error('Load nodes error:', e);
+      }
+    }
+
+    function updateNodeStats(nodes) {
+      document.getElementById('statNodeTotal').textContent = nodes.length;
+      const native = nodes.filter(n => !n.is_external && n.server_uuid !== 'external').length;
+      const external = nodes.filter(n => n.is_external || n.server_uuid === 'external').length;
+      document.getElementById('statNodeNative').textContent = native;
+      document.getElementById('statNodeExternal').textContent = external;
+
+      const onlineCount = state.servers.filter(s => s.singbox_online).length;
+      document.getElementById('statSingboxOnline').textContent = `${onlineCount} / ${state.servers.length}台`;
+    }
+
+    function renderNodesList() {
+      const container = document.getElementById('nodesListContainer');
+      if (!container) return;
+      const q = (document.getElementById('nodeSearchInput')?.value || '').trim().toLowerCase();
+
+      const filtered = state.nodes.filter(n => {
+        if (!q) return true;
+        return (n.name && n.name.toLowerCase().includes(q)) ||
+               (n.server_ip && n.server_ip.toLowerCase().includes(q)) ||
+               (n.protocol && n.protocol.toLowerCase().includes(q));
+      });
+
+      document.getElementById('nodesCountBadge').textContent = `${filtered.length} 个`;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">暂无匹配的托管节点</div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(n => {
+        const protoBadges = {
+          vless_reality: 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300',
+          hysteria2: 'bg-pink-100 text-pink-700 dark:bg-pink-950/40 dark:text-pink-300',
+          tuic: 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
+          trojan: 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+          vmess_ws: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
+        };
+        const badgeColor = protoBadges[n.protocol] || 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300';
+
+        return `
+          <div class="p-3.5 sm:p-4 rounded-2xl border border-slate-100 dark:border-zinc-800/80 bg-slate-50/50 dark:bg-zinc-800/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${badgeColor}">
+                ${n.protocol.replace('_', ' ')}
+              </span>
+              <div class="min-w-0">
+                <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 truncate">${escapeHtml(n.name)}</div>
+                <div class="text-[11px] font-mono text-slate-400 truncate">${n.server_ip || '127.0.0.1'}:${n.port || '-'} · ${n.server_name || '自建'}</div>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2 self-end sm:self-center">
+              <!-- Enabled Toggle -->
+              <button onclick="toggleNodeEnabled(${n.id}, ${n.enabled ? 'false' : 'true'})" class="px-2.5 py-1 rounded-xl text-xs font-semibold ${n.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'} btn-tap">
+                ${n.enabled ? '已启用' : '已停用'}
+              </button>
+
+              <!-- Copy Link -->
+              <button onclick="copyNodeLink(${n.id})" class="p-2 rounded-xl text-slate-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-950/30 transition btn-tap" title="复制节点链接">
+                <i data-lucide="copy" class="w-4 h-4"></i>
+              </button>
+
+              <!-- Clone IPv6 (if available) -->
+              ${(!n.is_external && !n.name.includes('[IPv6]')) ? `
+                <button onclick="cloneIpv6Node(${n.id})" class="p-2 rounded-xl text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30 transition btn-tap" title="克隆生成 IPv6 节点">
+                  <i data-lucide="globe" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
+
+              <!-- Delete -->
+              <button onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')" class="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition btn-tap" title="删除节点">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+      initLucide();
+    }
+
+    // 3. USERS SUBSCRIPTIONS DATA
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/node-mgr/sub/users').then(r => r.json());
+        if (res.ok && res.users) {
+          state.users = res.users;
+          renderUsersList();
+          document.getElementById('badgeUserCount').textContent = res.users.length;
+        }
+      } catch (e) {
+        console.error('Load users error:', e);
+      }
+    }
+
+    function renderUsersList() {
+      const container = document.getElementById('usersListContainer');
+      if (!container) return;
+
+      container.innerHTML = state.users.map(u => {
+        const isDefault = u.name === 'default';
+        return `
+          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3.5 border-pink-100 dark:border-pink-900/30">
+            <div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="w-8 h-8 rounded-xl bg-pink-100 text-pink-600 flex items-center justify-center font-bold text-sm">👤</span>
+                  <div>
+                    <h3 class="font-black text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                      <span>${escapeHtml(u.name)}</span>
+                      ${isDefault ? '<span class="text-[9px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700">主订阅</span>' : ''}
+                    </h3>
+                    <div class="text-[10px] text-slate-400">${u.remark || '无备注'}</div>
+                  </div>
+                </div>
+                <button onclick="toggleUserEnabled(${u.id}, ${u.enabled ? 'false' : 'true'})" class="px-2.5 py-1 rounded-full text-xs font-semibold ${u.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'} btn-tap">
+                  ${u.enabled ? '启用中' : '已封禁'}
+                </button>
+              </div>
+
+              <!-- Sub URL & UUID box -->
+              <div class="mt-3.5 p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800 space-y-1.5">
+                <div class="flex items-center justify-between text-[11px]">
+                  <span class="text-slate-400">专属订阅地址:</span>
+                  <button onclick="copyText('${u.sub_url}', '专属订阅链接已复制！')" class="text-pink-600 font-bold hover:underline">点击复制</button>
+                </div>
+                <div class="font-mono text-[11px] text-slate-600 dark:text-slate-300 truncate select-all">${u.sub_url}</div>
+              </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2">
+              <button onclick="resetUserSubscription(${u.id})" class="flex-1 py-1.5 rounded-xl text-xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 transition btn-tap flex items-center justify-center gap-1" title="轮换重置并彻底作废旧 UUID">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>重置作废旧凭据</span>
+              </button>
+
+              ${!isDefault ? `
+                <button onclick="deleteUserSubscription(${u.id}, '${escapeHtml(u.name)}')" class="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition btn-tap" title="删除该用户">
+                  <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join('');
+      initLucide();
+    }
+
+    // 4. RULES DATA
+    async function loadRules() {
+      try {
+        const [rulesRes, presetsRes] = await Promise.all([
+          fetch('/api/node-mgr/sub/rules').then(r => r.json()),
+          fetch('/api/node-mgr/sub/rules/presets').then(r => r.json())
+        ]);
+        if (rulesRes) {
+          const r = rulesRes.rules || rulesRes;
+          state.rules = r;
+          applyRulesToUI(r);
+        }
+        if (presetsRes && presetsRes.nodes) {
+          state.presets = presetsRes.nodes;
+          populateRulesPresetSelectors(presetsRes.nodes);
+        }
+      } catch (e) {
+        console.error('Load rules error:', e);
+      }
+    }
+
+    function applyRulesToUI(r) {
+      document.getElementById('direct_bt').checked = !!r.direct_bt;
+      document.getElementById('direct_cn').checked = !!r.direct_cn;
+      document.getElementById('direct_lan').checked = !!r.direct_lan;
+      document.getElementById('block_ads').checked = !!r.block_ads;
+      document.getElementById('enable_auto_group').checked = !!r.enable_auto_group;
+      if (r.final_match) document.getElementById('final_match').value = r.final_match;
+      if (r.custom_rules !== undefined) document.getElementById('custom_rules').value = r.custom_rules;
+    }
+
+    function populateRulesPresetSelectors(nodes) {
+      const keys = ['target_ai', 'target_tg', 'target_media', 'target_dev', 'target_games'];
+      keys.forEach(k => {
+        const select = document.getElementById(k);
+        if (!select) return;
+        const cur = state.rules[k] || (k === 'target_games' ? 'DIRECT' : 'PROXY');
+
+        let html = `
+          <option value="PROXY" ${cur === 'PROXY' ? 'selected' : ''}>PROXY (智能代理节点池)</option>
+          <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
+        `;
+        nodes.forEach(n => {
+          html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})</option>`;
+        });
+        select.innerHTML = html;
+      });
+    }
+
+    async function saveRoutingRules() {
+      const btn = document.getElementById('saveRulesBtn');
+      btn.disabled = true;
+      btn.innerText = '正在保存并构建分流...';
+
+      const payload = {
+        direct_bt: document.getElementById('direct_bt').checked,
+        direct_cn: document.getElementById('direct_cn').checked,
+        direct_lan: document.getElementById('direct_lan').checked,
+        block_ads: document.getElementById('block_ads').checked,
+        enable_auto_group: document.getElementById('enable_auto_group').checked,
+        final_match: document.getElementById('final_match').value,
+        custom_rules: document.getElementById('custom_rules').value,
+        target_ai: document.getElementById('target_ai').value,
+        target_tg: document.getElementById('target_tg').value,
+        target_media: document.getElementById('target_media').value,
+        target_dev: document.getElementById('target_dev').value,
+        target_games: document.getElementById('target_games').value,
+        proxy_ai: document.getElementById('target_ai').value !== 'DIRECT',
+        proxy_tg: document.getElementById('target_tg').value !== 'DIRECT',
+        proxy_media: document.getElementById('target_media').value !== 'DIRECT',
+        proxy_dev: document.getElementById('target_dev').value !== 'DIRECT',
+        direct_games: document.getElementById('target_games').value === 'DIRECT'
+      };
+
+      try {
+        const res = await fetch('/api/node-mgr/sub/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 分流决策规则已保存并实时编译生效！', 'success');
+        } else {
+          showToast(res.error || '保存失败', 'error');
+        }
+      } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>保存生效分流配置</span>';
+        initLucide();
+      }
+    }
+
+    // 5. TRAFFIC RANKS
+    function renderTrafficRanks(servers, totalBytes) {
+      const container = document.getElementById('trafficRankList');
+      if (!container) return;
+
+      const sorted = [...servers].sort((a, b) => (b.traffic_total || 0) - (a.traffic_total || 0));
+      container.innerHTML = sorted.map(s => {
+        const pct = totalBytes > 0 ? ((s.traffic_total || 0) / totalBytes * 100).toFixed(1) : 0;
+        return `
+          <div class="p-3 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850">
+            <div class="flex items-center justify-between text-xs mb-1.5 font-semibold">
+              <span>${escapeHtml(s.name)}</span>
+              <span class="font-mono text-blue-600">${formatBytes(s.traffic_total || 0)} (${pct}%)</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // 6. ALERTS & NOTIFICATIONS DATA
+    async function loadAlerts() {
+      try {
+        const [cfgRes, logsRes] = await Promise.all([
+          fetch('/api/node-mgr/notifications/config').then(r => r.json()),
+          fetch('/api/node-mgr/notifications/logs').then(r => r.json())
+        ]);
+
+        if (cfgRes && cfgRes.channels) {
+          const tg = cfgRes.channels.find(c => c.type === 'telegram');
+          if (tg && tg.config) {
+            document.getElementById('tgBotToken').value = tg.config.bot_token || '';
+            document.getElementById('tgChatId').value = tg.config.chat_id || '';
+          }
+        }
+        if (cfgRes && cfgRes.rules) {
+          renderAlertRules(cfgRes.rules);
+        }
+        if (logsRes && logsRes.logs) {
+          renderAlertLogs(logsRes.logs);
+        }
+      } catch (e) {
+        console.error('Load alerts error:', e);
+      }
+    }
+
+    function renderAlertRules(rules) {
+      const container = document.getElementById('alertRulesList');
+      if (!container) return;
+
+      container.innerHTML = rules.map(r => `
+        <label class="flex items-center justify-between p-3.5 rounded-2xl border border-slate-100 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-800/40 cursor-pointer">
+          <div class="min-w-0 pr-3">
+            <div class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(r.name)}</div>
+            <div class="text-[10px] text-slate-400 mt-0.5 truncate">${escapeHtml(r.description || '')}</div>
+          </div>
+          <input type="checkbox" onchange="toggleAlertRule('${r.rule_key}', this.checked)" ${r.enabled ? 'checked' : ''} class="w-4 h-4 text-purple-600 rounded shrink-0">
+        </label>
+      `).join('');
+    }
+
+    function renderAlertLogs(logs) {
+      const container = document.getElementById('alertLogsContainer');
+      if (!container) return;
+      if (logs.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-xs text-slate-400">暂无告警记录</div>`;
+        return;
+      }
+      container.innerHTML = logs.map(l => `
+        <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800 text-xs flex items-center justify-between">
+          <div>
+            <span class="font-bold text-slate-700 dark:text-slate-200">${escapeHtml(l.title)}</span>: 
+            <span class="text-slate-500">${escapeHtml(l.message)}</span>
+          </div>
+          <span class="text-[10px] text-slate-400 shrink-0 ml-2">${l.created_at || ''}</span>
+        </div>
+      `).join('');
+    }
+
+    async function toggleAlertRule(key, enabled) {
+      try {
+        await fetch('/api/node-mgr/notifications/rules', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rule_key: key, enabled })
+        });
+        showToast('告警规则已更新', 'success');
+      } catch(e) {
+        showToast('更新失败', 'error');
+      }
+    }
+
+    async function saveTelegramConfig() {
+      const token = document.getElementById('tgBotToken').value.trim();
+      const chat = document.getElementById('tgChatId').value.trim();
+      try {
+        await fetch('/api/node-mgr/notifications/channels', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'telegram',
+            name: 'Telegram 机器人',
+            enabled: true,
+            config: { bot_token: token, chat_id: chat }
+          })
+        });
+        showToast('Telegram 通道配置已成功保存！', 'success');
+      } catch(e) {
+        showToast('保存失败: ' + e.message, 'error');
+      }
+    }
+
+    async function testTelegramNotify() {
+      try {
+        const res = await fetch('/api/node-mgr/notifications/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel_type: 'telegram',
+            config: {
+              bot_token: document.getElementById('tgBotToken').value.trim(),
+              chat_id: document.getElementById('tgChatId').value.trim()
+            }
+          })
+        }).then(r => r.json());
+        if (res.ok) showToast('🎉 测试消息已成功送达 Telegram！', 'success');
+        else showToast(res.error || '推送失败', 'error');
+      } catch(e) {
+        showToast('推送失败: ' + e.message, 'error');
+      }
+    }
+
+    // 7. SYSTEM & BBR DATA
+    async function loadSystem() {
+      try {
+        const bbrRes = await fetch('/api/node-mgr/bbr/status').then(r => r.json());
+        if (bbrRes.ok) {
+          const elBadge = document.getElementById('bbrBadge');
+          const elQdisc = document.getElementById('bbrQdisc');
+          if (bbrRes.enabled) {
+            elBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300';
+            elBadge.textContent = '● BBR 已开启生效';
+          } else {
+            elBadge.className = 'px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300';
+            elBadge.textContent = `○ ${bbrRes.congestion_control || '未开启'}`;
+          }
+          if (elQdisc) elQdisc.textContent = bbrRes.qdisc || 'fq';
+        }
+      } catch(e) {}
+    }
+
+    async function enableBBR() {
+      const btn = document.getElementById('enableBbrBtn');
+      btn.disabled = true;
+      btn.innerText = '正在开启 BBR...';
+      try {
+        const res = await fetch('/api/node-mgr/bbr/enable', { method: 'POST' }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 TCP BBR 拥塞控制算法已成功开启并持久化！', 'success');
+          loadSystem();
+        } else {
+          showToast(res.error || '开启失败', 'error');
+        }
+      } catch(e) {
+        showToast('开启失败: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '一键开启 / 刷新 BBR';
+      }
+    }
+
+    async function changeAdminPassword() {
+      const pwd = document.getElementById('newAdminPassword').value.trim();
+      if (!pwd || pwd.length < 6) {
+        showToast('密码长度必须至少为 6 位！', 'warn');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/admin/password/change', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 管理员密码修改成功！请牢记新密码。', 'success');
+          document.getElementById('newAdminPassword').value = '';
+        } else {
+          showToast(res.error || '修改失败', 'error');
+        }
+      } catch(e) {
+        showToast('修改失败: ' + e.message, 'error');
+      }
+    }
+
+    // ==============================================================
+    // OPERATIONS (ACTIONS)
+    // ==============================================================
+    async function generateServerInstallCommand() {
+      const name = document.getElementById('addServerName').value.trim() || 'New Server';
+      try {
+        const res = await fetch('/api/node-mgr/servers/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        }).then(r => r.json());
+        if (res.ok) {
+          document.getElementById('installCmdText').textContent = res.install_cmd;
+          document.getElementById('installCmdBox').classList.remove('hidden');
+          loadServers();
+        }
+      } catch(e) {
+        showToast('生成命令失败: ' + e.message, 'error');
+      }
+    }
+
+    function copyInstallCommand() {
+      const text = document.getElementById('installCmdText').textContent;
+      copyText(text, '一键安装命令已复制到剪贴板！');
+    }
+
+    async function editServerName(uuid, oldName) {
+      const newName = prompt('请输入该服务器的新名称:', oldName);
+      if (!newName || newName.trim() === oldName) return;
+      try {
+        await fetch('/api/node-mgr/servers/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid, name: newName.trim() })
+        });
+        showToast('服务器重命名成功', 'success');
+        loadServers();
+      } catch(e) {
+        showToast('重命名失败', 'error');
+      }
+    }
+
+    async function deleteServer(uuid, name) {
+      if (!confirm(`确定要彻底删除服务器【${name}】吗？绑定的节点也将一并移除！`)) return;
+      try {
+        await fetch(`/api/node-mgr/servers/${uuid}`, { method: 'DELETE' });
+        showToast('服务器已删除', 'success');
+        refreshData();
+      } catch(e) {
+        showToast('删除失败: ' + e.message, 'error');
+      }
+    }
+
+    async function toggleNodeEnabled(id, enabled) {
+      try {
+        await fetch('/api/node-mgr/nodes/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, enabled: enabled ? 1 : 0 })
+        });
+        showToast(enabled ? '节点已启用' : '节点已停用', 'success');
+        loadNodes();
+      } catch(e) {
+        showToast('切换失败', 'error');
+      }
+    }
+
+    async function cloneIpv6Node(id) {
+      try {
+        const res = await fetch('/api/node-mgr/nodes/ipv6', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 已成功基于该机器 IPv6 地址克隆新节点！', 'success');
+          loadNodes();
+        } else {
+          showToast(res.error || '克隆失败', 'error');
+        }
+      } catch(e) {
+        showToast('克隆失败: ' + e.message, 'error');
+      }
+    }
+
+    async function deleteNode(id, name) {
+      if (!confirm(`确认删除节点【${name}】吗？`)) return;
+      try {
+        await fetch(`/api/node-mgr/nodes/${id}`, { method: 'DELETE' });
+        showToast('节点已删除', 'success');
+        loadNodes();
+      } catch(e) {
+        showToast('删除失败', 'error');
+      }
+    }
+
+    async function copyNodeLink(id) {
+      const node = state.nodes.find(n => n.id === id);
+      if (!node) return;
+      let link = node.raw_link || '';
+      if (!link) {
+        // Build link via backend or prompt
+        link = `vless://${node.uuid_or_passwd}@${node.server_ip}:${node.port}?encryption=none&security=reality&sni=${node.sni || 'bing.com'}&pbk=${node.public_key || ''}&sid=${node.short_id || ''}&type=tcp#${encodeURIComponent(node.name)}`;
+      }
+      copyText(link, '节点链接已成功复制到剪贴板！');
+    }
+
+    async function manualPingAllNodes() {
+      showToast('正在实测全网节点延迟...', 'info');
+      try {
+        await fetch('/api/node-mgr/nodes/ping');
+        showToast('延迟测速完成！', 'success');
+        loadNodes();
+      } catch(e) {
+        showToast('测速失败', 'error');
+      }
+    }
+
+    function populateServerSelectForNode() {
+      const s = document.getElementById('createNodeServerSelect');
+      if (!s) return;
+      s.innerHTML = state.servers.map(srv => `
+        <option value="${srv.uuid}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '无IP'})</option>
+      `).join('');
+    }
+
+    function toggleProtocolFields() {
+      // Automatic defaults
+      const p = document.getElementById('createNodeProtocol').value;
+      const portInput = document.getElementById('createNodePort');
+      if (p === 'vless_reality') portInput.value = '20082';
+      else if (p === 'hysteria2') portInput.value = '20443';
+      else if (p === 'tuic') portInput.value = '20444';
+      else if (p === 'trojan') portInput.value = '20445';
+      else if (p === 'vmess_ws') portInput.value = '20080';
+    }
+
+    async function submitCreateNativeNode() {
+      const payload = {
+        server_uuid: document.getElementById('createNodeServerSelect').value,
+        protocol: document.getElementById('createNodeProtocol').value,
+        name: document.getElementById('createNodeName').value.trim() || '自建节点',
+        port: parseInt(document.getElementById('createNodePort').value) || 20082,
+        sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
+        enabled: 1
+      };
+
+      try {
+        const res = await fetch('/api/node-mgr/nodes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 自建节点创建成功！核心配置已自动下发。', 'success');
+          closeModal('modalCreateNode');
+          loadNodes();
+        } else {
+          showToast(res.error || '创建失败', 'error');
+        }
+      } catch(e) {
+        showToast('创建失败: ' + e.message, 'error');
+      }
+    }
+
+    async function submitImportExternalNodes() {
+      const text = document.getElementById('importNodeLinks').value.trim();
+      if (!text) {
+        showToast('请粘贴节点链接', 'warn');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/nodes/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ links: text })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`🎉 成功导入 ${res.count || 0} 个外部节点！`, 'success');
+          closeModal('modalImportNode');
+          document.getElementById('importNodeLinks').value = '';
+          loadNodes();
+        } else {
+          showToast(res.error || '导入失败', 'error');
+        }
+      } catch(e) {
+        showToast('导入失败: ' + e.message, 'error');
+      }
+    }
+
+    // USER ACTIONS
+    async function submitCreateUser() {
+      const name = document.getElementById('newUserName').value.trim();
+      const remark = document.getElementById('newUserRemark').value.trim();
+      if (!name) {
+        showToast('用户名不能为空', 'warn');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/sub/users/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, remark })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`🎉 成功创建用户【${name}】！专属订阅已就绪。`, 'success');
+          closeModal('modalCreateUser');
+          document.getElementById('newUserName').value = '';
+          document.getElementById('newUserRemark').value = '';
+          loadUsers();
+        } else {
+          showToast(res.error || '创建失败', 'error');
+        }
+      } catch(e) {
+        showToast('创建失败: ' + e.message, 'error');
+      }
+    }
+
+    async function resetUserSubscription(id) {
+      if (!confirm('⚠️ 确定要重置该用户的专属订阅吗？\n\n重置后将自动生成新订阅并彻底作废该用户的旧 UUID 凭据，旧客户端连接将立即断开！')) return;
+      try {
+        const res = await fetch('/api/node-mgr/sub/users/reset', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('✅ 专属订阅链接已成功重置！旧 UUID 已轮换作废。', 'success');
+          loadUsers();
+        } else {
+          showToast(res.error || '重置失败', 'error');
+        }
+      } catch(e) {
+        showToast('重置失败: ' + e.message, 'error');
+      }
+    }
+
+    async function toggleUserEnabled(id, enabled) {
+      try {
+        await fetch('/api/node-mgr/sub/users/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, enabled })
+        });
+        showToast(enabled ? '用户已启用' : '用户已被拦截封禁', 'success');
+        loadUsers();
+      } catch(e) {
+        showToast('操作失败', 'error');
+      }
+    }
+
+    async function deleteUserSubscription(id, name) {
+      if (!confirm(`确定要彻底删除用户【${name}】吗？`)) return;
+      try {
+        await fetch('/api/node-mgr/sub/users/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        showToast('用户订阅已删除', 'success');
+        loadUsers();
+      } catch(e) {
+        showToast('删除失败: ' + e.message, 'error');
+      }
+    }
+
+    // QR & Import helpers
+    function generateUniversalQr() {
+      const defaultUser = state.users.find(u => u.name === 'default') || state.users[0];
+      const url = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      document.getElementById('universalSubInput').value = url;
+      const canvasBox = document.getElementById('subQrcodeCanvas');
+      canvasBox.innerHTML = '';
+      if (window.QRCode) {
+        QRCode.toCanvas(url, { width: 180, margin: 1 }, (err, canvas) => {
+          if (!err) canvasBox.appendChild(canvas);
+        });
+      }
+    }
+
+    function copyUniversalSub() {
+      const url = document.getElementById('universalSubInput').value;
+      copyText(url, '通用聚合订阅链接已复制！');
+    }
+
+    function openClientScheme(type) {
+      const defaultUser = state.users.find(u => u.name === 'default') || state.users[0];
+      const subUrl = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      const title = encodeURIComponent('Komari Nodes');
+      const encoded = encodeURIComponent(subUrl);
+
+      let scheme = '';
+      if (type === 'clash') scheme = `clash://install-config?url=${encoded}&name=${title}`;
+      else if (type === 'surge') scheme = `surge:///install-config?url=${encoded}`;
+      else if (type === 'shadowrocket') scheme = `shadowrocket://add/sub://${btoa(subUrl)}?title=${title}`;
+      else if (type === 'stash') scheme = `stash://install-config?url=${encoded}&name=${title}`;
+
+      if (scheme) {
+        window.location.href = scheme;
+        showToast('正在唤起客户端导入...', 'info');
+      }
+    }
+
+    // Backup & Restore
+    async function exportFullDataBackup() {
+      try {
+        const data = await fetch('/api/node-mgr/data/export').then(r => r.json());
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `komari-backup-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('🎉 数据全量备份已导出下载！', 'success');
+      } catch(e) {
+        showToast('备份导出失败: ' + e.message, 'error');
+      }
+    }
+
+    async function handleImportBackupFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      if (!confirm('确认从该文件导入还原数据吗？这将合并并更新节点与订阅记录。')) return;
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const json = JSON.parse(e.target.result);
+          const res = await fetch('/api/node-mgr/data/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(json)
+          }).then(r => r.json());
+          if (res.ok) {
+            showToast('🎉 数据导入还原成功！', 'success');
+            refreshData();
+          } else {
+            showToast(res.error || '导入还原失败', 'error');
+          }
+        } catch(err) {
+          showToast('解析备份文件失败: ' + err.message, 'error');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    async function resetTrafficBaseline() {
+      if (!confirm('确定要将所有服务器的流量基线统计清零吗？')) return;
+      try {
+        await fetch('/api/node-mgr/traffic/reset', { method: 'POST' });
+        showToast('流量基线已清零重置！', 'success');
+        refreshData();
+      } catch(e) {
+        showToast('清零失败', 'error');
+      }
+    }
+
+    // Utilities
+    function copyText(txt, successMsg = '已复制到剪贴板！') {
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(txt).then(() => showToast(successMsg, 'success'));
+      } else {
+        const inp = document.createElement('textarea');
+        inp.value = txt;
+        document.body.appendChild(inp);
+        inp.select();
+        document.execCommand('copy');
+        inp.remove();
+        showToast(successMsg, 'success');
+      }
+    }
+
+    function formatSpeed(bytesPerSec) {
+      if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s';
+      const k = 1024;
+      if (bytesPerSec < k * k) return (bytesPerSec / k).toFixed(1) + ' KB/s';
+      return (bytesPerSec / (k * k)).toFixed(2) + ' MB/s';
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes || bytes <= 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+  </script>
+</body>
+</html>

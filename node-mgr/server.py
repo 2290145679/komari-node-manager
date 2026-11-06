@@ -2554,6 +2554,15 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "rules": rules})
             return
 
+        if path in ["/api/sub/rules/presets", "/api/node-mgr/sub/rules/presets"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, protocol FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            nodes = [{"id": r[0], "name": r[1], "protocol": r[2]} for r in c.fetchall()]
+            conn.close()
+            self._send_json({"ok": True, "nodes": nodes})
+            return
+
         if path in ["/api/sub/rules/preview", "/api/node-mgr/sub/rules/preview"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
@@ -2586,6 +2595,28 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         if path == "/api/servers" or path == "/api/node-mgr/servers":
             servers_data = get_cached_servers_with_stats()
             self._send_json(servers_data)
+            return
+
+        if path in ["/api/bbr/status", "/api/node-mgr/bbr/status"]:
+            try:
+                res = subprocess.run(["sysctl", "-n", "net.ipv4.tcp_congestion_control"], capture_output=True, text=True, timeout=2)
+                cc = res.stdout.strip()
+                q_res = subprocess.run(["sysctl", "-n", "net.core.default_qdisc"], capture_output=True, text=True, timeout=2)
+                qdisc = q_res.stdout.strip()
+                self._send_json({"ok": True, "enabled": cc == "bbr", "congestion_control": cc, "qdisc": qdisc})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)})
+            return
+
+        if path in ["/api/system/status", "/api/node-mgr/system/status"]:
+            has_ssl = os.path.exists(f"/etc/letsencrypt/live/{DOMAIN}/fullchain.pem") or os.path.exists(f"{CERT_DIR}/cert.pem")
+            self._send_json({
+                "ok": True,
+                "domain": DOMAIN,
+                "port": PORT,
+                "ssl": has_ssl,
+                "master_url": f"https://{DOMAIN}" if has_ssl else f"http://{DOMAIN}"
+            })
             return
 
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
@@ -3241,6 +3272,72 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
             return
 
+        if path in ["/api/servers/add", "/api/node-mgr/servers/add"]:
+            name = str(body.get("name") or "New Server").strip()
+            new_uuid = str(uuid.uuid4())
+            new_token = secrets.token_hex(16)
+            now_iso = datetime.now().isoformat()
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("INSERT INTO clients (uuid, token, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+                            (new_uuid, new_token, name, now_iso, now_iso))
+                conn_k.commit()
+                conn_k.close()
+            install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}"
+            self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "install_cmd": install_cmd})
+            return
+
+        if path in ["/api/servers/edit", "/api/node-mgr/servers/edit"]:
+            suuid = body.get("uuid")
+            name = body.get("name")
+            if suuid and name and os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("UPDATE clients SET name = ?, updated_at = ? WHERE uuid = ?",
+                            (name, datetime.now().isoformat(), suuid))
+                conn_k.commit()
+                conn_k.close()
+                self._send_json({"ok": True})
+                return
+            self._send_json({"ok": False, "error": "invalid params"}, 400)
+            return
+
+        if path in ["/api/bbr/enable", "/api/node-mgr/bbr/enable"]:
+            try:
+                subprocess.run(["modprobe", "tcp_bbr"], check=False, timeout=5)
+                if os.path.exists("/etc/sysctl.d"):
+                    with open("/etc/sysctl.d/99-bbr.conf", "w") as f:
+                        f.write("net.core.default_qdisc = fq\nnet.ipv4.tcp_congestion_control = bbr\n")
+                subprocess.run(["sysctl", "-w", "net.core.default_qdisc=fq"], check=False, timeout=5)
+                subprocess.run(["sysctl", "-w", "net.ipv4.tcp_congestion_control=bbr"], check=False, timeout=5)
+                if os.path.exists("/etc/sysctl.d/99-bbr.conf"):
+                    subprocess.run(["sysctl", "-p", "/etc/sysctl.d/99-bbr.conf"], check=False, timeout=5)
+                self._send_json({"ok": True})
+            except Exception as e:
+                self._send_json({"ok": False, "error": str(e)}, 500)
+            return
+
+        if path in ["/api/admin/password/change", "/api/node-mgr/admin/password/change"]:
+            new_pwd = str(body.get("password") or "").strip()
+            if not new_pwd:
+                self._send_json({"ok": False, "error": "密码不能为空"}, 400)
+                return
+            import hashlib, base64
+            # SHA256 base64 hash
+            hashed = base64.b64encode(hashlib.sha256(new_pwd.encode('utf-8')).digest()).decode('utf-8')
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("UPDATE users SET passwd = ?, updated_at = ? WHERE username = 'admin' OR rowid = 1",
+                            (hashed, datetime.now().isoformat()))
+                conn_k.commit()
+                conn_k.close()
+                self._send_json({"ok": True})
+                return
+            self._send_json({"ok": False, "error": "database not found"}, 500)
+            return
+
         # Full Data Import endpoint
         if path in ["/api/data/import", "/api/node-mgr/data/import"]:
             def _import_val(v):
@@ -3383,20 +3480,31 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "id": node_id})
             return
 
-        if path.startswith("/api/nodes/") and path.endswith("/toggle") or path.startswith("/api/node-mgr/nodes/") and path.endswith("/toggle"):
-            parts = path.split("/")
-            node_id = parts[-2]
+        if path in ["/api/nodes/toggle", "/api/node-mgr/nodes/toggle"] or ((path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")) and path.endswith("/toggle")):
+            if path.endswith("/toggle") and "/" in path.strip("/")[10:]:
+                parts = path.strip("/").split("/")
+                node_id = parts[-2]
+                val = None
+            else:
+                node_id = body.get("id")
+                val = body.get("enabled")
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("UPDATE nodes SET enabled = (1 - enabled) WHERE id = ?", (node_id,))
+            if val is not None:
+                c.execute("UPDATE nodes SET enabled = ? WHERE id = ?", (1 if val else 0, node_id))
+            else:
+                c.execute("UPDATE nodes SET enabled = (1 - enabled) WHERE id = ?", (node_id,))
             conn.commit()
             conn.close()
             self._send_json({"ok": True})
             return
 
-        if (path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")) and path.endswith("/clone-ipv6"):
-            parts = path.split("/")
-            node_id = parts[-2]
+        if path in ["/api/nodes/ipv6", "/api/node-mgr/nodes/ipv6"] or ((path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")) and path.endswith("/clone-ipv6")):
+            if "clone-ipv6" in path:
+                parts = path.strip("/").split("/")
+                node_id = parts[-2]
+            else:
+                node_id = body.get("id")
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             c.execute("SELECT * FROM nodes WHERE id = ?", (node_id,))
