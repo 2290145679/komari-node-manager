@@ -168,57 +168,76 @@ enable_bbr
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_BASE="https://raw.githubusercontent.com/2290145679/komari-node-manager/main"
 WORK_DIR="/tmp/komari-hub-setup"
+INSTALL_DIR="${KOMARI_DIR:-/opt/komari-pro}"
 
 mkdir -p "$WORK_DIR"
-mkdir -p /opt/komari/bin
-mkdir -p /opt/komari/node-mgr
-mkdir -p /opt/komari/web-patch/assets
-mkdir -p /opt/komari/data/plugin/node-manager/panel
+mkdir -p "${INSTALL_DIR}/bin"
+mkdir -p "${INSTALL_DIR}/node-mgr"
+mkdir -p "${INSTALL_DIR}/web-patch/assets"
+mkdir -p "${INSTALL_DIR}/data/plugin/node-manager/panel"
+mkdir -p "${INSTALL_DIR}/admin-spa"
+mkdir -p "${INSTALL_DIR}/user-portal/assets"
+
+# 如果系统中未曾部署过 /opt/komari，则建立软链接以保证旧脚本完全兼容
+if [ ! -e /opt/komari ]; then
+    ln -s "${INSTALL_DIR}" /opt/komari
+fi
 
 info "正在停止可能存在的旧版本服务..."
-systemctl stop komari komari-node-mgr 2>/dev/null || true
+systemctl stop komari-pro komari-pro-node-mgr komari komari-node-mgr 2>/dev/null || true
 
 # 获取二进制与资源文件
 info "正在部署核心服务端程序与前端资源..."
 if [ -f "$SCRIPT_DIR/bin/komari-linux-${ARCH}.gz" ]; then
     ok "检测到本地文件仓库，正在直接释放..."
-    gzip -d -c "$SCRIPT_DIR/bin/komari-linux-${ARCH}.gz" > /opt/komari/komari
-    gzip -d -c "$SCRIPT_DIR/bin/agent-linux-${ARCH}.gz" > /opt/komari/agent
-    cp -r "$SCRIPT_DIR"/web-patch/* /opt/komari/web-patch/
-    cp -r "$SCRIPT_DIR"/plugin/node-manager/* /opt/komari/data/plugin/node-manager/
-    cp -r "$SCRIPT_DIR"/node-mgr/* /opt/komari/node-mgr/
-    cp -r "$SCRIPT_DIR"/conf /opt/komari/
+    gzip -d -c "$SCRIPT_DIR/bin/komari-linux-${ARCH}.gz" > "${INSTALL_DIR}/komari"
+    gzip -d -c "$SCRIPT_DIR/bin/agent-linux-${ARCH}.gz" > "${INSTALL_DIR}/agent"
+    cp -r "$SCRIPT_DIR"/web-patch/* "${INSTALL_DIR}/web-patch/"
+    cp -r "$SCRIPT_DIR"/plugin/node-manager/* "${INSTALL_DIR}/data/plugin/node-manager/"
+    cp -r "$SCRIPT_DIR"/node-mgr/* "${INSTALL_DIR}/node-mgr/"
+    cp -r "$SCRIPT_DIR"/admin-spa/* "${INSTALL_DIR}/admin-spa/" 2>/dev/null || true
+    cp -r "$SCRIPT_DIR"/user-portal/* "${INSTALL_DIR}/user-portal/" 2>/dev/null || true
+    cp -r "$SCRIPT_DIR"/conf "${INSTALL_DIR}/"
 else
     ok "正在从 GitHub 官方仓库下载固化核心组件..."
-    curl -fsSL "${REPO_BASE}/bin/komari-linux-${ARCH}.gz" | gzip -d > /opt/komari/komari
-    curl -fsSL "${REPO_BASE}/bin/agent-linux-${ARCH}.gz" | gzip -d > /opt/komari/agent
+    curl -fsSL "${REPO_BASE}/bin/komari-linux-${ARCH}.gz" | gzip -d > "${INSTALL_DIR}/komari"
+    curl -fsSL "${REPO_BASE}/bin/agent-linux-${ARCH}.gz" | gzip -d > "${INSTALL_DIR}/agent"
 
     # 下载 Web 补丁
-    curl -fsSL "${REPO_BASE}/web-patch/registerSW.js" -o /opt/komari/web-patch/registerSW.js
-    curl -fsSL "${REPO_BASE}/web-patch/sw.js" -o /opt/komari/web-patch/sw.js
-    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-index-BfURcdSr.js" -o /opt/komari/web-patch/assets/chunk-index-BfURcdSr.js
-    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-_layout-KM9Ke-Y5.js" -o /opt/komari/web-patch/assets/chunk-_layout-KM9Ke-Y5.js
-    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js" -o /opt/komari/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js
-    curl -fsSL "${REPO_BASE}/web-patch/assets/komari-singbox-helper.js" -o /opt/komari/web-patch/assets/komari-singbox-helper.js
+    curl -fsSL "${REPO_BASE}/web-patch/registerSW.js" -o "${INSTALL_DIR}/web-patch/registerSW.js"
+    curl -fsSL "${REPO_BASE}/web-patch/sw.js" -o "${INSTALL_DIR}/web-patch/sw.js"
+    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-index-BfURcdSr.js" -o "${INSTALL_DIR}/web-patch/assets/chunk-index-BfURcdSr.js"
+    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-_layout-KM9Ke-Y5.js" -o "${INSTALL_DIR}/web-patch/assets/chunk-_layout-KM9Ke-Y5.js"
+    curl -fsSL "${REPO_BASE}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js" -o "${INSTALL_DIR}/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js"
+    curl -fsSL "${REPO_BASE}/web-patch/assets/komari-singbox-helper.js" -o "${INSTALL_DIR}/web-patch/assets/komari-singbox-helper.js"
 
     # 下载插件前端与静态资源 (包含 Tailwind, Lucide, QRCode)
-    mkdir -p /opt/komari/data/plugin/node-manager/panel/assets
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/komari-plugin.json" -o /opt/komari/data/plugin/node-manager/komari-plugin.json
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/script.js" -o /opt/komari/data/plugin/node-manager/script.js
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/index.html" -o /opt/komari/data/plugin/node-manager/panel/index.html
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/tailwind.js" -o /opt/komari/data/plugin/node-manager/panel/assets/tailwind.js
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/lucide.min.js" -o /opt/komari/data/plugin/node-manager/panel/assets/lucide.min.js
-    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/qrcode.min.js" -o /opt/komari/data/plugin/node-manager/panel/assets/qrcode.min.js
+    mkdir -p "${INSTALL_DIR}/data/plugin/node-manager/panel/assets"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/komari-plugin.json" -o "${INSTALL_DIR}/data/plugin/node-manager/komari-plugin.json"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/script.js" -o "${INSTALL_DIR}/data/plugin/node-manager/script.js"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/index.html" -o "${INSTALL_DIR}/data/plugin/node-manager/panel/index.html"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/tailwind.js" -o "${INSTALL_DIR}/data/plugin/node-manager/panel/assets/tailwind.js"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/lucide.min.js" -o "${INSTALL_DIR}/data/plugin/node-manager/panel/assets/lucide.min.js"
+    curl -fsSL "${REPO_BASE}/plugin/node-manager/panel/assets/qrcode.min.js" -o "${INSTALL_DIR}/data/plugin/node-manager/panel/assets/qrcode.min.js"
+
+    # 下载独立 Admin SPA 与用户服务中心
+    mkdir -p "${INSTALL_DIR}/admin-spa"
+    curl -fsSL "${REPO_BASE}/admin-spa/index.html" -o "${INSTALL_DIR}/admin-spa/index.html"
+    mkdir -p "${INSTALL_DIR}/user-portal/assets"
+    curl -fsSL "${REPO_BASE}/user-portal/index.html" -o "${INSTALL_DIR}/user-portal/index.html"
+    curl -fsSL "${REPO_BASE}/user-portal/assets/tailwind.js" -o "${INSTALL_DIR}/user-portal/assets/tailwind.js"
+    curl -fsSL "${REPO_BASE}/user-portal/assets/lucide.min.js" -o "${INSTALL_DIR}/user-portal/assets/lucide.min.js"
+    curl -fsSL "${REPO_BASE}/user-portal/assets/qrcode.min.js" -o "${INSTALL_DIR}/user-portal/assets/qrcode.min.js"
 
     # 下载后端服务与数据库模板
-    curl -fsSL "${REPO_BASE}/node-mgr/server.py" -o /opt/komari/node-mgr/server.py
-    curl -fsSL "${REPO_BASE}/node-mgr/schema.sql" -o /opt/komari/node-mgr/schema.sql
+    curl -fsSL "${REPO_BASE}/node-mgr/server.py" -o "${INSTALL_DIR}/node-mgr/server.py"
+    curl -fsSL "${REPO_BASE}/node-mgr/schema.sql" -o "${INSTALL_DIR}/node-mgr/schema.sql"
 
     # 下载配置模板
-    mkdir -p /opt/komari/conf
-    curl -fsSL "${REPO_BASE}/conf/komari.service" -o /opt/komari/conf/komari.service
-    curl -fsSL "${REPO_BASE}/conf/komari-node-mgr.service" -o /opt/komari/conf/komari-node-mgr.service
-    curl -fsSL "${REPO_BASE}/conf/nginx-komari.conf" -o /opt/komari/conf/nginx-komari.conf
+    mkdir -p "${INSTALL_DIR}/conf"
+    curl -fsSL "${REPO_BASE}/conf/komari.service" -o "${INSTALL_DIR}/conf/komari.service"
+    curl -fsSL "${REPO_BASE}/conf/komari-node-mgr.service" -o "${INSTALL_DIR}/conf/komari-node-mgr.service"
+    curl -fsSL "${REPO_BASE}/conf/nginx-komari.conf" -o "${INSTALL_DIR}/conf/nginx-komari.conf"
 fi
 
 # 安装终端控制中心命令 (hhub)
@@ -230,34 +249,44 @@ fi
 chmod +x /usr/local/bin/hhub
 ok "已安装终端管理控制中心命令: hhub (随时在终端输入 hhub 即可进入管理菜单)"
 
-chmod +x /opt/komari/komari /opt/komari/agent
-chmod +x /opt/komari/node-mgr/server.py
-sed -i "s|DOMAIN = \".*\"|DOMAIN = \"${SERVER_NAME}\"|g" /opt/komari/node-mgr/server.py
+chmod +x "${INSTALL_DIR}/komari" "${INSTALL_DIR}/agent"
+chmod +x "${INSTALL_DIR}/node-mgr/server.py"
+sed -i "s|DOMAIN = \".*\"|DOMAIN = \"${SERVER_NAME}\"|g" "${INSTALL_DIR}/node-mgr/server.py"
 ok "服务端主控核心与前端资源释放完毕 (已绑定主控: ${SERVER_NAME})"
 
 # 8. 初始化数据库
 info "正在初始化数据库结构..."
-mkdir -p /opt/komari/data
-if [ ! -f /opt/komari/data/nodes.db ]; then
-    sqlite3 /opt/komari/data/nodes.db < /opt/komari/node-mgr/schema.sql
+mkdir -p "${INSTALL_DIR}/data"
+if [ ! -f "${INSTALL_DIR}/data/nodes.db" ]; then
+    sqlite3 "${INSTALL_DIR}/data/nodes.db" < "${INSTALL_DIR}/node-mgr/schema.sql"
     # 生成随机订阅 token
     SUB_TOKEN=$(tr -dc a-f0-9 2>/dev/null < /dev/urandom | head -c 32 || echo "11c471015f8d55a9b8979fc745778a2e")
-    sqlite3 /opt/komari/data/nodes.db "INSERT OR IGNORE INTO subscriptions (token, name) VALUES ('${SUB_TOKEN}', 'default');"
+    sqlite3 "${INSTALL_DIR}/data/nodes.db" "INSERT OR IGNORE INTO subscriptions (token, name) VALUES ('${SUB_TOKEN}', 'default');"
     ok "已创建全新节点管理数据库与默认订阅 Token: ${SUB_TOKEN}"
 else
     # 存在旧库则确保补全分流规则表
-    sqlite3 /opt/komari/data/nodes.db < /opt/komari/node-mgr/schema.sql 2>/dev/null || true
-    SUB_TOKEN=$(sqlite3 /opt/komari/data/nodes.db "SELECT token FROM subscriptions LIMIT 1;" 2>/dev/null || echo "default")
+    sqlite3 "${INSTALL_DIR}/data/nodes.db" < "${INSTALL_DIR}/node-mgr/schema.sql" 2>/dev/null || true
+    SUB_TOKEN=$(sqlite3 "${INSTALL_DIR}/data/nodes.db" "SELECT token FROM subscriptions LIMIT 1;" 2>/dev/null || echo "default")
     ok "保留现有节点数据库，当前订阅 Token: ${SUB_TOKEN}"
 fi
 
 # 9. 安装 Systemd 服务
 info "正在配置系统自启守护进程 (Systemd)..."
-cp /opt/komari/conf/komari.service /etc/systemd/system/komari.service
-cp /opt/komari/conf/komari-node-mgr.service /etc/systemd/system/komari-node-mgr.service
+# 生成 komari-pro 服务文件
+sed "s|/opt/komari|${INSTALL_DIR}|g" "${INSTALL_DIR}/conf/komari.service" > /etc/systemd/system/komari-pro.service
+sed "s|/opt/komari|${INSTALL_DIR}|g" "${INSTALL_DIR}/conf/komari-node-mgr.service" > /etc/systemd/system/komari-pro-node-mgr.service
+
+# 若原有的 komari.service 不冲突，同步软链接或复制
+if [ ! -f /etc/systemd/system/komari.service ] || grep -q "komari-pro" /etc/systemd/system/komari.service 2>/dev/null; then
+    cp /etc/systemd/system/komari-pro.service /etc/systemd/system/komari.service
+fi
+if [ ! -f /etc/systemd/system/komari-node-mgr.service ] || grep -q "komari-pro" /etc/systemd/system/komari-node-mgr.service 2>/dev/null; then
+    cp /etc/systemd/system/komari-pro-node-mgr.service /etc/systemd/system/komari-node-mgr.service
+fi
+
 systemctl daemon-reload
-systemctl enable komari komari-node-mgr >/dev/null 2>&1
-ok "守护服务注册完毕"
+systemctl enable komari-pro komari-pro-node-mgr komari komari-node-mgr >/dev/null 2>&1 || true
+ok "守护服务注册完毕 (已支持独立运行，避免冲突)"
 
 # 10. 配置 Nginx 反向代理
 info "正在配置 Nginx 反向代理网关..."
@@ -268,7 +297,7 @@ fi
 
 NGINX_CONF_DEST="/etc/nginx/sites-available/komari.conf"
 if [ -d /etc/nginx/sites-available ]; then
-    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" /opt/komari/conf/nginx-komari.conf > "$NGINX_CONF_DEST"
+    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" "${INSTALL_DIR}/conf/nginx-komari.conf" > "$NGINX_CONF_DEST"
     mkdir -p /etc/nginx/sites-enabled
     ln -sf "$NGINX_CONF_DEST" /etc/nginx/sites-enabled/komari.conf
     # 如果有冲突的 default 站点监听同一端口，则暂时停用
@@ -276,7 +305,7 @@ if [ -d /etc/nginx/sites-available ]; then
         rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     fi
 elif [ -d /etc/nginx/conf.d ]; then
-    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" /opt/komari/conf/nginx-komari.conf > /etc/nginx/conf.d/komari.conf
+    sed -e "s|__PORT__|${WEB_PORT}|g" -e "s|__SERVER_NAME__|${NGINX_HOSTS}|g" "${INSTALL_DIR}/conf/nginx-komari.conf" > /etc/nginx/conf.d/komari.conf
 fi
 
 nginx -t >/dev/null 2>&1 || warn "Nginx 语法测试有告警，请在安装后检查配置"
@@ -298,9 +327,9 @@ ok "Nginx 网关配置完成 (端口 ${WEB_PORT} 防火墙已放行)"
 
 # 11. 启动主控端服务
 info "正在启动主控端服务..."
-systemctl restart komari
+systemctl restart komari-pro 2>/dev/null || systemctl restart komari
 sleep 2
-systemctl restart komari-node-mgr
+systemctl restart komari-pro-node-mgr 2>/dev/null || systemctl restart komari-node-mgr
 sleep 2
 
 # 检查运行状态
@@ -351,14 +380,14 @@ echo ""
 echo -e "${GREEN}==================================================================${PLAIN}"
 echo -e "${BOLD}${GREEN}               🎉 Komari 主控端部署成功！${PLAIN}"
 echo -e "${GREEN}==================================================================${PLAIN}"
-echo -e "${BOLD}1. 管理后台面板:${PLAIN}    ${CYAN}${BASE_URL}/admin/dashboard${PLAIN}"
-echo -e "${BOLD}2. 节点管理独立面板:${PLAIN}${CYAN}${BASE_URL}/api/admin/plugin/node-manager/panel/index.html${PLAIN}"
-echo -e "${BOLD}3. 初始账号设置:${PLAIN}    ${YELLOW}首次在浏览器打开面板时，按网页指引创建管理员账号与密码${PLAIN}"
-echo -e "${BOLD}4. 统一订阅地址:${PLAIN}    ${CYAN}${BASE_URL}/sub/${SUB_TOKEN}${PLAIN}"
-echo -e "${BOLD}5. 终端控制中心:${PLAIN}    ${GREEN}hhub${PLAIN} (在终端输入 ${BOLD}${YELLOW}hhub${PLAIN} 即可管理服务、更改域名、切纯IP、更新或卸载)"
+echo -e "${BOLD}1. Komari Pro 聚合管理后台:${PLAIN} ${CYAN}${BASE_URL}/admin/${PLAIN} 或 ${CYAN}${BASE_URL}/pro/${PLAIN}"
+echo -e "${BOLD}2. 用户自助服务中心:${PLAIN}         ${CYAN}${BASE_URL}/user${PLAIN}"
+echo -e "${BOLD}3. 初始账号设置:${PLAIN}             ${YELLOW}首次在浏览器打开管理后台时按指引创建账号密码${PLAIN}"
+echo -e "${BOLD}4. 统一订阅地址:${PLAIN}             ${CYAN}${BASE_URL}/sub/${SUB_TOKEN}${PLAIN}"
+echo -e "${BOLD}5. 终端控制中心:${PLAIN}             ${GREEN}hhub${PLAIN} (在终端输入 ${BOLD}${YELLOW}hhub${PLAIN} 即可管理服务、更新或卸载)"
 echo -e "${GREEN}------------------------------------------------------------------${PLAIN}"
 echo -e "${BOLD}💡 探针被控端一键接入指令 (去其他 VPS 执行即可秒级上线):${PLAIN}"
 echo -e "${PURPLE}wget -qO- ${BASE_URL}/install-node.sh | sudo bash -s -- -e ${BASE_URL} -t <AGENT_TOKEN>${PLAIN}"
-echo -e "${D}  注: 在 Komari 管理后台【实例列表】点击添加服务器即可获得专属 AGENT_TOKEN${PLAIN}"
+echo -e "${YELLOW}  注: 在 Komari 管理后台【实例列表】点击添加服务器即可获得专属 AGENT_TOKEN${PLAIN}"
 echo -e "${GREEN}==================================================================${PLAIN}"
 echo ""

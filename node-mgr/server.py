@@ -31,17 +31,19 @@ def _sqlite_connect_with_timeout(*args, **kwargs):
     return _orig_sqlite_connect(*args, **kwargs)
 sqlite3.connect = _sqlite_connect_with_timeout
 
-KOMARI_DB = "/opt/komari/data/komari.db"
-NODES_DB = "/opt/komari/data/nodes.db"
-METRICS_DB = "/opt/komari/data/metrics.db"
-CERT_DIR = "/opt/komari/data/certs"
+BASE_DIR = "/opt/komari-pro" if os.path.exists("/opt/komari-pro") else "/opt/komari"
+DATA_DIR = os.path.join(BASE_DIR, "data")
+NODES_DB = os.path.join(DATA_DIR, "nodes.db")
+KOMARI_DB = os.path.join(DATA_DIR, "komari.db") if os.path.exists(os.path.join(DATA_DIR, "komari.db")) else "/opt/komari/data/komari.db"
+METRICS_DB = os.path.join(DATA_DIR, "metrics.db") if os.path.exists(os.path.join(DATA_DIR, "metrics.db")) else "/opt/komari/data/metrics.db"
+CERT_DIR = os.path.join(DATA_DIR, "certs")
 PORT = 25775
 DOMAIN = "jgw2.yohoo.xyz"
 
 os.makedirs(CERT_DIR, exist_ok=True)
-os.makedirs("/opt/komari/data", exist_ok=True)
+os.makedirs(DATA_DIR, exist_ok=True)
 
-THEME_DIR = "/opt/komari/data/theme"
+THEME_DIR = os.path.join(DATA_DIR, "theme")
 if not os.path.exists(THEME_DIR) and os.path.exists("./data/theme"):
     THEME_DIR = "./data/theme"
 os.makedirs(THEME_DIR, exist_ok=True)
@@ -260,16 +262,32 @@ _cached_active_uuids_time = 0
 def get_active_user_uuids(force_refresh=False):
     global _cached_active_uuids, _cached_active_uuids_time
     now = time.time()
-    if not force_refresh and _cached_active_uuids is not None and (now - _cached_active_uuids_time < 10):
+    if not force_refresh and _cached_active_uuids is not None and (now - _cached_active_uuids_time < 5):
         return _cached_active_uuids
     uuids = []
     try:
         conn = sqlite3.connect(NODES_DB)
         c = conn.cursor()
-        c.execute("SELECT user_uuid FROM subscriptions WHERE enabled = 1")
+        c.execute("SELECT user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE enabled = 1")
+        today_str = datetime.now().strftime("%Y-%m-%d")
         for row in c.fetchall():
-            if row[0] and str(row[0]).strip() and str(row[0]).strip() not in uuids:
-                uuids.append(str(row[0]).strip())
+            u_uuid = row[0]
+            limit_b = int(row[1] or 0) if len(row) > 1 and row[1] is not None else 0
+            used_b = int(row[2] or 0) if len(row) > 2 and row[2] is not None else 0
+            exp = str(row[3] or "").strip() if len(row) > 3 and row[3] is not None else ""
+
+            # Hard traffic quota cutoff
+            if limit_b > 0 and used_b >= limit_b:
+                continue
+
+            # Hard expiration cutoff
+            if exp:
+                exp_date = exp.split("T")[0]
+                if today_str > exp_date:
+                    continue
+
+            if u_uuid and str(u_uuid).strip() and str(u_uuid).strip() not in uuids:
+                uuids.append(str(u_uuid).strip())
         conn.close()
         _cached_active_uuids = uuids
         _cached_active_uuids_time = now
@@ -345,6 +363,21 @@ def init_db():
     if 'remark' not in sub_cols:
         try:
             c.execute("ALTER TABLE subscriptions ADD COLUMN remark TEXT DEFAULT ''")
+        except Exception:
+            pass
+    if 'traffic_limit_bytes' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN traffic_limit_bytes INTEGER DEFAULT 0")
+        except Exception:
+            pass
+    if 'traffic_used_bytes' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN traffic_used_bytes INTEGER DEFAULT 0")
+        except Exception:
+            pass
+    if 'expire_time' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN expire_time TEXT DEFAULT ''")
         except Exception:
             pass
     c.execute('''
@@ -2024,13 +2057,16 @@ fi
 if [ "$INSTALL_SINGBOX" -eq 1 ]; then
   echo "[5/5] Installing Node Configuration Sync Daemon..."
   if [ "$INIT_SYSTEM" = "openrc" ]; then
-    rc-service komari-node-sync stop >/dev/null 2>&1 || true
+    rc-service komari-pro-node-sync stop >/dev/null 2>&1 || true
+    rc-service komari-pro-node-sync stop >/dev/null 2>&1 || true
   else
-    systemctl stop komari-node-sync.service >/dev/null 2>&1 || true
+    systemctl stop komari-pro-node-sync.service >/dev/null 2>&1 || true
+    systemctl stop komari-pro-node-sync.service >/dev/null 2>&1 || true
   fi
+  pkill -f komari-pro-node-sync.sh >/dev/null 2>&1 || true
   pkill -f komari-node-sync.sh >/dev/null 2>&1 || true
 
-cat << 'EOF' > /usr/local/bin/komari-node-sync.sh
+cat << 'EOF' > /usr/local/bin/komari-pro-node-sync.sh
 #!/bin/bash
 MASTER_URL="__MASTER_URL__"
 TOKEN="__TOKEN__"
@@ -2104,9 +2140,9 @@ while true; do
 done
 EOF
 
-sed -i "s|__MASTER_URL__|$MASTER_URL|g" /usr/local/bin/komari-node-sync.sh
-sed -i "s|__TOKEN__|$TOKEN|g" /usr/local/bin/komari-node-sync.sh
-chmod +x /usr/local/bin/komari-node-sync.sh
+sed -i "s|__MASTER_URL__|$MASTER_URL|g" /usr/local/bin/komari-pro-node-sync.sh
+sed -i "s|__TOKEN__|$TOKEN|g" /usr/local/bin/komari-pro-node-sync.sh
+chmod +x /usr/local/bin/komari-pro-node-sync.sh
 
 # Fetch and apply initial config immediately
 echo "Fetching initial proxy configuration..."
@@ -2128,12 +2164,12 @@ if [ -n "$INIT_CFG" ] && echo "$INIT_CFG" | grep -q '"inbounds"'; then
 fi
 
 if [ "$INIT_SYSTEM" = "openrc" ]; then
-  cat << 'EOF' > /etc/init.d/komari-node-sync
+  cat << 'EOF' > /etc/init.d/komari-pro-node-sync
 #!/sbin/openrc-run
 name="Komari Node Sync Service"
 description="Komari Node Sync Service"
 command="/bin/bash"
-command_args="/usr/local/bin/komari-node-sync.sh"
+command_args="/usr/local/bin/komari-pro-node-sync.sh"
 pidfile="/run/komari-node-sync.pid"
 supervisor=supervise-daemon
 
@@ -2142,18 +2178,18 @@ depend() {
     after network sing-box
 }
 EOF
-  chmod +x /etc/init.d/komari-node-sync
-  rc-update add komari-node-sync default >/dev/null 2>&1 || true
-  rc-service komari-node-sync restart >/dev/null 2>&1 || rc-service komari-node-sync start >/dev/null 2>&1 || true
+  chmod +x /etc/init.d/komari-pro-node-sync
+  rc-update add komari-pro-node-sync default >/dev/null 2>&1 || true
+  rc-service komari-pro-node-sync restart >/dev/null 2>&1 || rc-service komari-pro-node-sync start >/dev/null 2>&1 || true
 else
-  cat << EOF > /etc/systemd/system/komari-node-sync.service
+  cat << EOF > /etc/systemd/system/komari-pro-node-sync.service
 [Unit]
 Description=Komari Node Configuration Sync Service
 After=network.target sing-box.service
 
 [Service]
 Type=simple
-ExecStart=/bin/bash /usr/local/bin/komari-node-sync.sh
+ExecStart=/bin/bash /usr/local/bin/komari-pro-node-sync.sh
 Restart=always
 RestartSec=5
 
@@ -2161,8 +2197,8 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
-  systemctl enable komari-node-sync.service >/dev/null 2>&1 || true
-  systemctl restart komari-node-sync.service
+  systemctl enable komari-pro-node-sync.service >/dev/null 2>&1 || true
+  systemctl restart komari-pro-node-sync.service
 fi
 fi
 
@@ -2640,19 +2676,25 @@ def run_notification_engine():
         time.sleep(30)
 
 class NodeMgrHandler(BaseHTTPRequestHandler):
-    def _send_json(self, data, status=200):
+    def _send_json(self, data, status=200, extra_headers=None):
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, str(v))
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
-    def _send_text(self, text, status=200, content_type="text/plain; charset=utf-8"):
+    def _send_text(self, text, status=200, content_type="text/plain; charset=utf-8", extra_headers=None):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Access-Control-Allow-Origin", "*")
+        if extra_headers:
+            for k, v in extra_headers.items():
+                self.send_header(k, str(v))
         self.end_headers()
         self.wfile.write(text.encode("utf-8"))
 
@@ -2729,28 +2771,136 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "logs": logs})
             return
 
-        if path == "/install-node.sh":
+        # User Portal SPA and Assets Route
+        if path in ["/user", "/user/", "/portal", "/portal/", "/pro/user", "/pro/user/"]:
+            portal_path = os.path.join(BASE_DIR, "user-portal", "index.html")
+            if not os.path.exists(portal_path):
+                portal_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "user-portal", "index.html")
+            if os.path.exists(portal_path):
+                with open(portal_path, "r", encoding="utf-8") as f:
+                    self._send_text(f.read(), 200, "text/html; charset=utf-8")
+                return
+
+        if path.startswith("/user/assets/"):
+            fname = os.path.basename(path)
+            fpath = os.path.join(BASE_DIR, "user-portal", "assets", fname)
+            if not os.path.exists(fpath):
+                fpath = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "user-portal", "assets", fname)
+            if not os.path.exists(fpath):
+                fpath = os.path.join(BASE_DIR, "data", "plugin", "node-manager", "panel", "assets", fname)
+            if os.path.exists(fpath):
+                ctype = "application/javascript" if fname.endswith(".js") else "text/css"
+                with open(fpath, "rb") as f:
+                    content_bytes = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(content_bytes)
+                return
+
+        if path in ["/install-node.sh", "/install-node-pro.sh"]:
             req_host = self.headers.get("Host", DOMAIN).split(":")[0]
             script = INSTALL_SCRIPT_TEMPLATE.replace("{DOMAIN}", req_host)
             self._send_text(script, 200, "text/x-shellscript")
             return
 
         if path.startswith("/sub/"):
-            token = path.split("/sub/")[1].strip("/")
+            sub_raw = path.split("/sub/")[1].strip("/")
+            parts = sub_raw.split("/")
+            token = parts[0]
+            sub_format = parts[1].lower() if len(parts) > 1 else ""
+
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, enabled, name, user_uuid FROM subscriptions WHERE token = ?", (token,))
+            c.execute("SELECT id, enabled, name, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE token = ?", (token,))
             sub = c.fetchone()
             if not sub:
                 conn.close()
                 self._send_text("Invalid Subscription Token", 404)
                 return
-            if len(sub) > 1 and sub[1] == 0:
-                conn.close()
-                self._send_text("Subscription has been disabled or expired", 403)
-                return
-            
+
+            uid = sub[0]
+            enabled = bool(sub[1])
+            sub_name = sub[2] or "用户"
             sub_uuid = sub[3] if len(sub) > 3 and sub[3] else None
+            traffic_limit = int(sub[4] or 0) if len(sub) > 4 and sub[4] is not None else 0
+            traffic_used = int(sub[5] or 0) if len(sub) > 5 and sub[5] is not None else 0
+            expire_time = str(sub[6] or "").strip() if len(sub) > 6 and sub[6] is not None else ""
+
+            # Quota and Expiration Hard Enforcement
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            is_exhausted = (traffic_limit > 0 and traffic_used >= traffic_limit)
+            is_expired = bool(expire_time and today_str > expire_time.split("T")[0])
+            is_disabled = (not enabled)
+
+            # Expiration timestamp for client apps (Clash, Shadowrocket)
+            exp_ts = 0
+            if expire_time:
+                try:
+                    exp_ts = int(datetime.strptime(expire_time.split("T")[0], "%Y-%m-%d").timestamp())
+                except Exception:
+                    exp_ts = 0
+
+            extra_hdrs = {
+                "Subscription-Userinfo": f"upload=0; download={traffic_used}; total={traffic_limit}; expire={exp_ts}",
+                "Profile-Update-Interval": "60" if (is_exhausted or is_expired or is_disabled) else "7200"
+            }
+
+            ua = self.headers.get("User-Agent", "").lower()
+            fmt = query.get("format", [""])[0].lower() or sub_format
+            clash_flag = query.get("clash", [""])[0]
+            singbox_flag = query.get("singbox", [""])[0]
+            sb_flag = query.get("sb", [""])[0]
+
+            is_singbox_req = (fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or sb_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]))
+            is_clash_req = (fmt in ["clash", "meta"] or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]))
+
+            # Block if exhausted, expired, or disabled
+            if is_exhausted or is_expired or is_disabled:
+                conn.close()
+                if is_disabled:
+                    alert_tag = "🚫 订阅已暂停 - 请联系管理员启用"
+                elif is_exhausted:
+                    alert_tag = f"⛔ 流量已用尽 ({format_bytes(traffic_used)} / {format_bytes(traffic_limit)}) - 请联系管理员续费"
+                else:
+                    alert_tag = f"⏰ 订阅已到期 ({expire_time}) - 请联系管理员续期"
+
+                if is_singbox_req:
+                    blocked_profile = {
+                        "outbounds": [
+                            {"type": "block", "tag": alert_tag}
+                        ]
+                    }
+                    self._send_text(json.dumps(blocked_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8", extra_headers=extra_hdrs)
+                elif is_clash_req:
+                    yaml_mock = f"""port: 7890
+socks-port: 7891
+allow-lan: false
+mode: rule
+log-level: info
+proxies:
+  - name: "{alert_tag}"
+    type: socks5
+    server: 127.0.0.1
+    port: 0
+proxy-groups:
+  - name: "PROXIES"
+    type: select
+    proxies:
+      - "{alert_tag}"
+rules:
+  - MATCH,PROXIES
+"""
+                    self._send_text(yaml_mock, 200, "text/yaml; charset=utf-8", extra_headers=extra_hdrs)
+                elif fmt == "raw":
+                    dummy_link = f"vless://00000000-0000-0000-0000-000000000000@127.0.0.1:0?security=none#{urllib.parse.quote(alert_tag)}"
+                    self._send_text(dummy_link, 200, "text/plain; charset=utf-8", extra_headers=extra_hdrs)
+                else:
+                    dummy_link = f"vless://00000000-0000-0000-0000-000000000000@127.0.0.1:0?security=none#{urllib.parse.quote(alert_tag)}"
+                    b64 = base64.b64encode(dummy_link.encode()).decode()
+                    self._send_text(b64, 200, "text/plain; charset=utf-8", extra_headers=extra_hdrs)
+                return
 
             c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
@@ -2781,25 +2931,20 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             ]
 
             rules_cfg = get_subscription_rules()
-            ua = self.headers.get("User-Agent", "").lower()
-            fmt = query.get("format", [""])[0].lower()
-            clash_flag = query.get("clash", [""])[0]
-            singbox_flag = query.get("singbox", [""])[0]
-            sb_flag = query.get("sb", [""])[0]
 
-            if fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or sb_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]):
+            if is_singbox_req:
                 sb_profile = build_sing_box_client_profile(nodes, rules_cfg)
-                self._send_text(json.dumps(sb_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8")
-            elif fmt == "clash" or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]):
+                self._send_text(json.dumps(sb_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8", extra_headers=extra_hdrs)
+            elif is_clash_req:
                 yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
-                self._send_text(yaml_data, 200, "text/yaml; charset=utf-8")
+                self._send_text(yaml_data, 200, "text/yaml; charset=utf-8", extra_headers=extra_hdrs)
             elif fmt == "raw":
                 links = [build_node_share_link(n) for n in nodes if build_node_share_link(n)]
-                self._send_text("\n".join(links), 200, "text/plain; charset=utf-8")
+                self._send_text("\n".join(links), 200, "text/plain; charset=utf-8", extra_headers=extra_hdrs)
             else:
                 links = [build_node_share_link(n) for n in nodes if build_node_share_link(n)]
                 b64 = base64.b64encode("\n".join(links).encode()).decode()
-                self._send_text(b64, 200, "text/plain; charset=utf-8")
+                self._send_text(b64, 200, "text/plain; charset=utf-8", extra_headers=extra_hdrs)
             return
 
         # API routes:
@@ -3321,22 +3466,180 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}"})
             return
 
-        # User subscriptions list endpoint
+        # Public User Portal Info Endpoint
+        if path in ["/api/user/info", "/api/node-mgr/user/info"]:
+            token = query.get("token", [""])[0].strip()
+            if not token:
+                self._send_json({"ok": False, "error": "缺少订阅 Token 参数"}, 400)
+                return
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE token = ?", (token,))
+            sub_row = c.fetchone()
+            if not sub_row:
+                conn.close()
+                self._send_json({"ok": False, "error": "无效的订阅 Token (用户不存在)"}, 404)
+                return
+
+            uid, uname, tok, en, rmk, cat, u_uuid = (
+                sub_row[0], sub_row[1] or "专属用户", sub_row[2], bool(sub_row[3]), sub_row[4] or "",
+                str(sub_row[5]), sub_row[6] or ""
+            )
+            limit_b = int(sub_row[7] or 0) if len(sub_row) > 7 and sub_row[7] is not None else 0
+            used_b = int(sub_row[8] or 0) if len(sub_row) > 8 and sub_row[8] is not None else 0
+            exp = str(sub_row[9] or "").strip() if len(sub_row) > 9 and sub_row[9] is not None else ""
+
+            rem_b = max(0, limit_b - used_b) if limit_b > 0 else 0
+            pct = round((used_b / limit_b) * 100, 1) if limit_b > 0 else 0
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            is_exh = (limit_b > 0 and used_b >= limit_b)
+            is_exp = bool(exp and today_str > exp.split("T")[0])
+
+            days_left = None
+            if exp:
+                try:
+                    days_left = (datetime.strptime(exp.split("T")[0], "%Y-%m-%d").date() - datetime.now().date()).days
+                except Exception:
+                    pass
+
+            if not en:
+                st = "disabled"
+                st_text = "已暂停服务"
+            elif is_exh:
+                st = "exhausted"
+                st_text = "流量已耗尽"
+            elif is_exp:
+                st = "expired"
+                st_text = "订阅已过期"
+            else:
+                st = "normal"
+                st_text = "正常使用中"
+
+            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            cols = [d[0] for d in c.description]
+            raw_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            conn.close()
+
+            servers_data = get_cached_servers_with_stats()
+            online_server_uuids = set(
+                s["uuid"] for s in servers_data.get("servers", [])
+                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
+            )
+
+            user_nodes = []
+            for n in raw_nodes:
+                n_copy = dict(n)
+                if not n.get("is_external") and n.get("server_uuid") != "external" and u_uuid:
+                    n_copy["uuid_or_passwd"] = u_uuid
+                is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids)
+                user_nodes.append({
+                    "id": n.get("id"),
+                    "name": n.get("name"),
+                    "protocol": n.get("protocol"),
+                    "server_ip": n.get("server_ip"),
+                    "port": n.get("port"),
+                    "online": is_on,
+                    "share_link": build_node_share_link(n_copy)
+                })
+
+            user_info = {
+                "id": uid,
+                "name": uname,
+                "token": tok,
+                "enabled": en,
+                "remark": rmk,
+                "created_at": cat,
+                "user_uuid": u_uuid,
+                "traffic_limit_bytes": limit_b,
+                "traffic_limit_gb": round(limit_b / (1024**3), 2) if limit_b > 0 else 0,
+                "traffic_limit_formatted": format_bytes(limit_b) if limit_b > 0 else "无限制",
+                "traffic_used_bytes": used_b,
+                "traffic_used_gb": round(used_b / (1024**3), 2),
+                "traffic_used_formatted": format_bytes(used_b),
+                "traffic_remaining_bytes": rem_b,
+                "traffic_remaining_formatted": format_bytes(rem_b) if limit_b > 0 else "无限制",
+                "traffic_percent": min(100.0, pct),
+                "expire_time": exp,
+                "expire_remaining_days": days_left,
+                "status": st,
+                "status_text": st_text,
+                "sub_url": f"https://{DOMAIN}/sub/{tok}",
+                "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1",
+                "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1"
+            }
+
+            self._send_json({"ok": True, "user": user_info, "nodes": user_nodes})
+            return
+
+        # User subscriptions list endpoint (Admin)
         if path in ["/api/sub/users", "/api/node-mgr/sub/users"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid FROM subscriptions ORDER BY id ASC")
+            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions ORDER BY id ASC")
             users = []
+            today_str = datetime.now().strftime("%Y-%m-%d")
             for r in c.fetchall():
+                uid = r[0]
+                uname = r[1] or "默认用户"
+                tok = r[2]
+                en = bool(r[3])
+                rmk = r[4] or ""
+                cat = str(r[5])
+                u_uuid = r[6] if len(r) > 6 and r[6] else ""
+                limit_b = int(r[7] or 0) if len(r) > 7 and r[7] is not None else 0
+                used_b = int(r[8] or 0) if len(r) > 8 and r[8] is not None else 0
+                exp = str(r[9] or "").strip() if len(r) > 9 and r[9] is not None else ""
+
+                rem_b = max(0, limit_b - used_b) if limit_b > 0 else 0
+                pct = round((used_b / limit_b) * 100, 1) if limit_b > 0 else 0
+                is_exh = (limit_b > 0 and used_b >= limit_b)
+                is_exp = bool(exp and today_str > exp.split("T")[0])
+
+                days_left = None
+                if exp:
+                    try:
+                        days_left = (datetime.strptime(exp.split("T")[0], "%Y-%m-%d").date() - datetime.now().date()).days
+                    except Exception:
+                        pass
+
+                if not en:
+                    st = "disabled"
+                    st_text = "已封禁"
+                elif is_exh:
+                    st = "exhausted"
+                    st_text = "流量已耗尽"
+                elif is_exp:
+                    st = "expired"
+                    st_text = "已到期"
+                else:
+                    st = "normal"
+                    st_text = "正常使用中"
+
                 users.append({
-                    "id": r[0],
-                    "name": r[1] or "默认用户",
-                    "token": r[2],
-                    "enabled": bool(r[3]),
-                    "remark": r[4] or "",
-                    "created_at": str(r[5]),
-                    "user_uuid": r[6] if len(r) > 6 and r[6] else "",
-                    "sub_url": f"https://{DOMAIN}/sub/{r[2]}"
+                    "id": uid,
+                    "name": uname,
+                    "token": tok,
+                    "enabled": en,
+                    "remark": rmk,
+                    "created_at": cat,
+                    "user_uuid": u_uuid,
+                    "traffic_limit_bytes": limit_b,
+                    "traffic_limit_gb": round(limit_b / (1024**3), 2) if limit_b > 0 else 0,
+                    "traffic_limit_formatted": format_bytes(limit_b) if limit_b > 0 else "无限制",
+                    "traffic_used_bytes": used_b,
+                    "traffic_used_gb": round(used_b / (1024**3), 2),
+                    "traffic_used_formatted": format_bytes(used_b),
+                    "traffic_remaining_bytes": rem_b,
+                    "traffic_remaining_formatted": format_bytes(rem_b) if limit_b > 0 else "无限制",
+                    "traffic_percent": min(100.0, pct),
+                    "expire_time": exp,
+                    "expire_remaining_days": days_left,
+                    "is_exhausted": is_exh,
+                    "is_expired": is_exp,
+                    "status": st,
+                    "status_text": st_text,
+                    "sub_url": f"https://{DOMAIN}/sub/{tok}",
+                    "portal_url": f"https://{DOMAIN}/user?token={tok}"
                 })
             conn.close()
             self._send_json({"ok": True, "users": users})
@@ -3685,11 +3988,15 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             if not name:
                 self._send_json({"ok": False, "error": "用户名不能为空"}, 400)
                 return
+            traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
+            limit_bytes = int(traffic_limit_gb * (1024**3)) if traffic_limit_gb > 0 else 0
+            expire_time = str(body.get("expire_time") or "").strip()
             new_tok = secrets.token_hex(16)
             new_uuid = str(uuid.uuid4())
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("INSERT INTO subscriptions (token, name, enabled, remark, user_uuid) VALUES (?, ?, 1, ?, ?)", (new_tok, name, remark, new_uuid))
+            c.execute("INSERT INTO subscriptions (token, name, enabled, remark, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time) VALUES (?, ?, 1, ?, ?, ?, 0, ?)",
+                      (new_tok, name, remark, new_uuid, limit_bytes, expire_time))
             new_id = c.lastrowid
             conn.commit()
             conn.close()
@@ -3702,10 +4009,74 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                     "enabled": True,
                     "remark": remark,
                     "user_uuid": new_uuid,
-                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}"
+                    "traffic_limit_bytes": limit_bytes,
+                    "traffic_limit_gb": traffic_limit_gb,
+                    "traffic_used_bytes": 0,
+                    "expire_time": expire_time,
+                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}",
+                    "portal_url": f"https://{DOMAIN}/user?token={new_tok}"
                 },
                 "ok": True
             })
+            return
+
+        if path in ["/api/sub/users/edit", "/api/node-mgr/sub/users/edit"]:
+            uid = body.get("id")
+            if not uid:
+                self._send_json({"ok": False, "error": "缺少用户 ID"}, 400)
+                return
+            name = str(body.get("name") or "").strip()
+            remark = str(body.get("remark") or "").strip()
+            traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
+            limit_bytes = int(traffic_limit_gb * (1024**3)) if traffic_limit_gb > 0 else 0
+            expire_time = str(body.get("expire_time") or "").strip()
+            traffic_used_gb = body.get("traffic_used_gb")
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if traffic_used_gb is not None:
+                used_bytes = int(float(traffic_used_gb) * (1024**3))
+                c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, traffic_used_bytes=?, expire_time=? WHERE id=?",
+                          (name, remark, limit_bytes, used_bytes, expire_time, uid))
+            else:
+                c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, expire_time=? WHERE id=?",
+                          (name, remark, limit_bytes, expire_time, uid))
+            conn.commit()
+            conn.close()
+            get_active_user_uuids(force_refresh=True)
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/sub/users/reset-traffic", "/api/node-mgr/sub/users/reset-traffic"]:
+            uid = body.get("id")
+            token = body.get("token")
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if uid:
+                c.execute("UPDATE subscriptions SET traffic_used_bytes = 0 WHERE id = ?", (uid,))
+            elif token:
+                c.execute("UPDATE subscriptions SET traffic_used_bytes = 0 WHERE token = ?", (token,))
+            conn.commit()
+            conn.close()
+            get_active_user_uuids(force_refresh=True)
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/sub/users/add-traffic", "/api/node-mgr/sub/users/add-traffic"]:
+            uid = body.get("id")
+            token = body.get("token")
+            gb = float(body.get("gb") or 0)
+            bytes_to_add = int(gb * (1024**3)) if gb else int(body.get("bytes") or 0)
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            if uid:
+                c.execute("UPDATE subscriptions SET traffic_used_bytes = traffic_used_bytes + ? WHERE id = ?", (bytes_to_add, uid))
+            elif token:
+                c.execute("UPDATE subscriptions SET traffic_used_bytes = traffic_used_bytes + ? WHERE token = ?", (bytes_to_add, token))
+            conn.commit()
+            conn.close()
+            get_active_user_uuids(force_refresh=True)
+            self._send_json({"ok": True})
             return
 
         if path in ["/api/sub/users/reset", "/api/node-mgr/sub/users/reset"]:

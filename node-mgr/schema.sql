@@ -25,6 +25,10 @@ CREATE TABLE IF NOT EXISTS subscriptions (
     name TEXT DEFAULT 'default',
     enabled INTEGER DEFAULT 1,
     remark TEXT DEFAULT '',
+    user_uuid TEXT DEFAULT '',
+    traffic_limit_bytes INTEGER DEFAULT 0,
+    traffic_used_bytes INTEGER DEFAULT 0,
+    expire_time TEXT DEFAULT '',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

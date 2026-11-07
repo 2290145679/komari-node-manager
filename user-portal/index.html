@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>用户中心 · Komari Pro</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌸</text></svg>">
+  
+  <!-- Local Assets with CDN Fallbacks -->
+  <script src="/user/assets/tailwind.js" onerror="this.onerror=null;this.src='https://cdn.tailwindcss.com'"></script>
+  <script src="/user/assets/lucide.min.js" onerror="this.onerror=null;this.src='https://unpkg.com/lucide@latest/dist/umd/lucide.js'"></script>
+  <script src="/user/assets/qrcode.min.js" onerror="this.onerror=null;this.src='https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'"></script>
+
+  <script>
+    if (typeof tailwind !== 'undefined') {
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              macaron: {
+                pink: '#FFF0F5',
+                mint: '#E8F5E9',
+                lavender: '#F3E5F5',
+                peach: '#FFF3E0',
+                blue: '#E1F5FE'
+              }
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .bento-card {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      border-radius: 1.25rem;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .dark .bento-card {
+      background: rgba(24, 24, 27, 0.85);
+      border-color: rgba(39, 39, 42, 0.8);
+    }
+    .btn-tap {
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .btn-tap:active {
+      transform: scale(0.96);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 4px;
+      height: 4px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #CBD5E1;
+      border-radius: 9999px;
+    }
+    .dark .custom-scroll::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-zinc-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col antialiased selection:bg-pink-500 selection:text-white">
+
+  <!-- TOP NAVBAR -->
+  <header class="sticky top-0 z-40 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border-b border-slate-200/80 dark:border-zinc-800/80">
+    <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-500 to-purple-600 flex items-center justify-center text-white shadow-sm shadow-pink-500/20 text-sm">
+          🌸
+        </div>
+        <div>
+          <h1 class="text-sm font-black tracking-tight flex items-center gap-1.5">
+            <span>Komari Pro</span>
+            <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-950/60 text-pink-600 dark:text-pink-300">用户中心</span>
+          </h1>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Dark/Light Theme Toggle -->
+        <button onclick="toggleDarkMode()" class="p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 btn-tap">
+          <i data-lucide="sun" class="w-4 h-4 hidden dark:block"></i>
+          <i data-lucide="moon" class="w-4 h-4 block dark:hidden"></i>
+        </button>
+
+        <!-- Logout Button (Shown when logged in) -->
+        <button id="logoutBtn" onclick="logout()" class="hidden px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800 flex items-center gap-1 btn-tap">
+          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+          <span>退出</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-5">
+
+    <!-- 1. LOGIN VIEW (Shown when no token) -->
+    <div id="loginView" class="hidden py-8 sm:py-16">
+      <div class="max-w-md mx-auto bento-card p-6 sm:p-8 shadow-xl shadow-pink-500/5 text-center space-y-6">
+        <div class="w-16 h-16 mx-auto rounded-3xl bg-gradient-to-br from-pink-400 via-purple-500 to-indigo-600 flex items-center justify-center text-3xl shadow-lg shadow-pink-500/25">
+          🌸
+        </div>
+        <div>
+          <h2 class="text-xl font-black text-slate-800 dark:text-slate-100">登录用户服务中心</h2>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">输入您的专属订阅 Token 或订阅地址，即可查询流量明细并一键导入客户端</p>
+        </div>
+
+        <div class="space-y-3 text-left">
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">订阅凭据 (Token / 链接)</label>
+          <div class="relative">
+            <input type="text" id="tokenInput" placeholder="例如: 11c471015f8d55a9b8979fc745778a2e 或完整订阅链接" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/30 transition">
+          </div>
+          <button onclick="handleLoginSubmit()" class="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-700 hover:to-indigo-700 shadow-md shadow-pink-500/20 btn-tap flex items-center justify-center gap-2">
+            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            <span>登录并查看我的订阅</span>
+          </button>
+        </div>
+
+        <div class="text-[11px] text-slate-400 text-left bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-slate-100 dark:border-zinc-800">
+          💡 <b>使用小提示:</b><br>
+          • 您可以直接粘贴管理员发给您的订阅完整 URL，系统将自动识别提取专属 Token。<br>
+          • 登录后浏览器将自动记住该凭据，下次可直接免密查看。
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. DASHBOARD VIEW (Shown when token is valid) -->
+    <div id="dashboardView" class="hidden space-y-4 sm:space-y-5">
+
+      <!-- User Welcome & Status Banner -->
+      <div id="statusBanner" class="bento-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-emerald-500/10 via-transparent to-purple-500/10 border-emerald-500/20">
+        <div class="flex items-center gap-3">
+          <div id="statusAvatar" class="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center font-bold text-lg shrink-0">
+            👤
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 id="userNameDisplay" class="text-base sm:text-lg font-black text-slate-800 dark:text-slate-100">--</h2>
+              <span id="userStatusBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300">正常使用中</span>
+            </div>
+            <p id="userRemarkDisplay" class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">--</p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2 self-end sm:self-auto text-xs">
+          <button onclick="refreshData()" class="px-3 py-1.5 rounded-xl font-semibold bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 shadow-sm text-slate-700 dark:text-slate-200 hover:bg-slate-50 btn-tap flex items-center gap-1.5">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+            <span>刷新用量</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Critical Alert Box (Shown only if Exhausted or Expired) -->
+      <div id="criticalAlertBox" class="hidden p-4 rounded-2xl border flex items-start gap-3">
+        <!-- Dynamic content filled by JS -->
+      </div>
+
+      <!-- TRAFFIC & EXPIRY BENTO GRID -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- Big Card: Traffic Usage (2 columns on md) -->
+        <div class="bento-card p-5 md:col-span-2 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-pink-100 dark:bg-pink-950/60 text-pink-600 flex items-center justify-center text-sm">📊</span>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">流量使用配额</h3>
+            </div>
+            <div class="text-xs font-mono font-bold text-slate-500">
+              <span id="trafficPercentDisplay" class="text-pink-600 font-extrabold text-sm">0%</span> 已消耗
+            </div>
+          </div>
+
+          <!-- Numbers Display -->
+          <div class="flex items-baseline justify-between pt-1">
+            <div>
+              <span class="text-xs text-slate-400 font-medium">已消耗流量</span>
+              <div id="trafficUsedDisplay" class="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-0.5">0 B</div>
+            </div>
+            <div class="text-right">
+              <span class="text-xs text-slate-400 font-medium">总套餐配额</span>
+              <div id="trafficLimitDisplay" class="text-base sm:text-xl font-bold text-slate-600 dark:text-slate-300 mt-0.5">无限制</div>
+            </div>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="w-full bg-slate-100 dark:bg-zinc-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-200/60 dark:border-zinc-700/60">
+            <div id="trafficProgressBar" class="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500" style="width: 0%;"></div>
+          </div>
+
+          <!-- Stats Pill Bar -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1 text-xs">
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-800">
+              <div class="text-[10px] text-slate-400">剩余可用流量</div>
+              <div id="trafficRemainingDisplay" class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">--</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-800">
+              <div class="text-[10px] text-slate-400">可用节点总数</div>
+              <div id="nodesCountDisplay" class="font-bold text-slate-700 dark:text-slate-200 mt-0.5">0 个</div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-800 col-span-2 sm:col-span-1">
+              <div class="text-[10px] text-slate-400">网络限制状态</div>
+              <div id="trafficHardCutoffStatus" class="font-bold text-emerald-600 dark:text-emerald-400 mt-0.5">放行中</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Expiry & Account Meta Card -->
+        <div class="bento-card p-5 space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-purple-100 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center text-sm">⏳</span>
+              <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">订阅有效期</h3>
+            </div>
+            
+            <div class="pt-2">
+              <div class="text-[11px] text-slate-400">到期时间</div>
+              <div id="expiryDateDisplay" class="text-lg font-black text-slate-800 dark:text-slate-100 mt-0.5">永久有效</div>
+              <div id="expiryCountdownDisplay" class="text-xs text-purple-600 dark:text-purple-400 font-bold mt-1">长期提供服务</div>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 dark:border-zinc-800">
+            <div class="text-[10px] text-slate-400">专属 UUID 授权标识</div>
+            <div id="userUuidDisplay" class="font-mono text-[10px] text-slate-600 dark:text-slate-300 truncate mt-0.5 select-all">--</div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ONE-CLICK CLIENT IMPORT & SUB URL CARD -->
+      <div class="bento-card p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 flex items-center justify-center text-sm">🚀</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">一键导入客户端与专属订阅</h3>
+          </div>
+          <button onclick="openQrModal()" class="px-2.5 py-1 rounded-xl text-xs font-semibold bg-pink-50 text-pink-600 dark:bg-pink-950/50 dark:text-pink-300 hover:bg-pink-100 btn-tap flex items-center gap-1">
+            <i data-lucide="qr-code" class="w-3.5 h-3.5"></i>
+            <span>手机扫码</span>
+          </button>
+        </div>
+
+        <!-- Universal Subscription URL Box -->
+        <div class="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700/80 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5">
+          <div class="font-mono text-xs text-slate-600 dark:text-slate-300 truncate select-all flex-1" id="subUrlDisplay">
+            https://...
+          </div>
+          <button onclick="copySubUrl()" class="px-4 py-2 rounded-lg font-bold text-xs text-white bg-pink-600 hover:bg-pink-700 shadow-sm shadow-pink-500/20 btn-tap flex items-center justify-center gap-1.5 shrink-0">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>一键复制订阅链接</span>
+          </button>
+        </div>
+
+        <!-- Fast Client Import Buttons Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1 text-xs">
+          <!-- Clash / Mihomo / Verge -->
+          <a id="btnImportClash" href="#" class="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-zinc-800 dark:to-zinc-800 border border-blue-200/60 dark:border-zinc-700 hover:border-blue-400 flex flex-col items-center justify-center text-center gap-1 btn-tap group">
+            <span class="text-xl">🐱</span>
+            <span class="font-bold text-blue-900 dark:text-blue-300 group-hover:text-blue-600">导入 Clash / Meta</span>
+            <span class="text-[10px] text-slate-400">Verge / Mihomo</span>
+          </a>
+
+          <!-- Shadowrocket (小火箭) -->
+          <a id="btnImportShadowrocket" href="#" class="p-3 rounded-xl bg-gradient-to-br from-pink-50 to-rose-50 dark:from-zinc-800 dark:to-zinc-800 border border-pink-200/60 dark:border-zinc-700 hover:border-pink-400 flex flex-col items-center justify-center text-center gap-1 btn-tap group">
+            <span class="text-xl">🚀</span>
+            <span class="font-bold text-pink-900 dark:text-pink-300 group-hover:text-pink-600">导入 Shadowrocket</span>
+            <span class="text-[10px] text-slate-400">小火箭一键拉取</span>
+          </a>
+
+          <!-- Sing-box -->
+          <a id="btnImportSingbox" href="#" class="p-3 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-zinc-800 dark:to-zinc-800 border border-amber-200/60 dark:border-zinc-700 hover:border-amber-400 flex flex-col items-center justify-center text-center gap-1 btn-tap group">
+            <span class="text-xl">📦</span>
+            <span class="font-bold text-amber-900 dark:text-amber-300 group-hover:text-amber-600">导入 Sing-box</span>
+            <span class="text-[10px] text-slate-400">SFA / SFI 客户端</span>
+          </a>
+
+          <!-- V2Ray / Surfboard / Raw -->
+          <button onclick="copyRawBase64()" class="p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-zinc-800 dark:to-zinc-800 border border-emerald-200/60 dark:border-zinc-700 hover:border-emerald-400 flex flex-col items-center justify-center text-center gap-1 btn-tap group">
+            <span class="text-xl">📋</span>
+            <span class="font-bold text-emerald-900 dark:text-emerald-300 group-hover:text-emerald-600">复制 Base64 订阅</span>
+            <span class="text-[10px] text-slate-400">v2rayN / Surfboard</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- AVAILABLE PROXY NODES LIST -->
+      <div class="bento-card p-5 sm:p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="w-7 h-7 rounded-lg bg-teal-100 dark:bg-teal-950/60 text-teal-600 flex items-center justify-center text-sm">🌐</span>
+            <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">包含可用节点列表 (<span id="nodesBadgeCount">0</span>)</h3>
+          </div>
+          <span class="text-xs text-slate-400">点击节点可单独复制单节点链接</span>
+        </div>
+
+        <div id="nodesListContainer" class="space-y-2.5">
+          <!-- Dynamic node cards -->
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- QR CODE MODAL -->
+  <div id="qrModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm hidden">
+    <div class="bento-card max-w-xs w-full p-6 text-center space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+        <h4 class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+          <span>📱</span>
+          <span>扫码快速导入订阅</span>
+        </h4>
+        <button onclick="closeQrModal()" class="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-zinc-800">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      
+      <div id="qrCodeContainer" class="p-3 bg-white rounded-2xl inline-block shadow-inner mx-auto"></div>
+      
+      <p class="text-xs text-slate-500">使用 Shadowrocket、小火箭或微信相机扫描上方二维码即可一键添加</p>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    let currentUserData = null;
+    let qrCodeInstance = null;
+
+    // Toast Notification
+    function showToast(msg, type = 'info') {
+      const c = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const bg = type === 'success' ? 'bg-emerald-600 text-white' : type === 'error' ? 'bg-rose-600 text-white' : 'bg-slate-800 text-white';
+      toast.className = `${bg} px-4 py-2.5 rounded-xl shadow-lg text-xs font-semibold flex items-center gap-2 transform transition-all duration-300 translate-y-4 opacity-0 pointer-events-auto`;
+      toast.innerHTML = `<span>${msg}</span>`;
+      c.appendChild(toast);
+      setTimeout(() => {
+        toast.classList.remove('translate-y-4', 'opacity-0');
+      }, 10);
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+
+    function copyText(text, successMsg = '已成功复制到剪贴板！') {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast(successMsg, 'success');
+      }).catch(() => {
+        const t = document.createElement('textarea');
+        t.value = text;
+        document.body.appendChild(t);
+        t.select();
+        document.execCommand('copy');
+        document.body.removeChild(t);
+        showToast(successMsg, 'success');
+      });
+    }
+
+    function toggleDarkMode() {
+      const html = document.documentElement;
+      if (html.classList.contains('dark')) {
+        html.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      }
+      initLucide();
+    }
+
+    function initTheme() {
+      if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }
+
+    function initLucide() {
+      if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+      }
+    }
+
+    // Extract token from string or url
+    function extractToken(str) {
+      if (!str) return '';
+      str = str.trim();
+      if (str.includes('/sub/')) {
+        const parts = str.split('/sub/')[1].split(/[/?&#]/);
+        return parts[0] || '';
+      }
+      if (str.includes('token=')) {
+        const m = str.match(/token=([a-zA-Z0-9_-]+)/);
+        if (m) return m[1];
+      }
+      return str;
+    }
+
+    async function loadUserData(token) {
+      token = extractToken(token);
+      if (!token) {
+        showLoginView();
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/node-mgr/user/info?token=${encodeURIComponent(token)}`).then(r => r.json());
+        if (!res || !res.ok || !res.user) {
+          showToast(res && res.error ? res.error : '无效的订阅凭据，请重新输入', 'error');
+          showLoginView();
+          return;
+        }
+
+        currentUserData = res;
+        localStorage.setItem('komari_sub_token', token);
+        renderDashboard(res.user, res.nodes || []);
+      } catch (err) {
+        showToast('连接服务器失败，请稍后重试', 'error');
+        showLoginView();
+      }
+    }
+
+    function showLoginView() {
+      document.getElementById('loginView').classList.remove('hidden');
+      document.getElementById('dashboardView').classList.add('hidden');
+      document.getElementById('logoutBtn').classList.add('hidden');
+      initLucide();
+    }
+
+    function renderDashboard(user, nodes) {
+      document.getElementById('loginView').classList.add('hidden');
+      document.getElementById('dashboardView').classList.remove('hidden');
+      document.getElementById('logoutBtn').classList.remove('hidden');
+
+      // User Meta
+      document.getElementById('userNameDisplay').textContent = user.name || '专属用户';
+      document.getElementById('userRemarkDisplay').textContent = user.remark ? `备注: ${user.remark}` : `创建时间: ${user.created_at || '近期'}`;
+      document.getElementById('userUuidDisplay').textContent = user.user_uuid || '统一授权密码';
+
+      // Status indicator
+      const badge = document.getElementById('userStatusBadge');
+      const avatar = document.getElementById('statusAvatar');
+      const alertBox = document.getElementById('criticalAlertBox');
+      const hardStatus = document.getElementById('trafficHardCutoffStatus');
+
+      badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-full';
+      if (user.status === 'exhausted') {
+        badge.className += ' bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300';
+        badge.textContent = '⛔ 流量已用尽';
+        avatar.className = 'w-11 h-11 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-lg shrink-0';
+        avatar.textContent = '⚠️';
+        hardStatus.textContent = '已熔断拦截';
+        hardStatus.className = 'font-bold text-rose-600 mt-0.5';
+
+        alertBox.className = 'p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-start gap-3';
+        alertBox.innerHTML = `
+          <div class="text-xl">⛔</div>
+          <div>
+            <h4 class="text-xs sm:text-sm font-bold text-rose-800 dark:text-rose-200">流量套餐额度已耗尽 (100% 消耗)</h4>
+            <p class="text-xs text-rose-600 dark:text-rose-400 mt-0.5">所有代理节点连接已自动切断以防产生额外费用。请联系管理员续费或重置流量后即可自动恢复。</p>
+          </div>
+        `;
+        alertBox.classList.remove('hidden');
+      } else if (user.status === 'expired') {
+        badge.className += ' bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300';
+        badge.textContent = '⏰ 订阅已过期';
+        avatar.className = 'w-11 h-11 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center font-bold text-lg shrink-0';
+        avatar.textContent = '⏰';
+        hardStatus.textContent = '已过期';
+        hardStatus.className = 'font-bold text-amber-600 mt-0.5';
+
+        alertBox.className = 'p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 flex items-start gap-3';
+        alertBox.innerHTML = `
+          <div class="text-xl">⏰</div>
+          <div>
+            <h4 class="text-xs sm:text-sm font-bold text-amber-800 dark:text-amber-200">订阅已于 ${user.expire_time} 到期</h4>
+            <p class="text-xs text-amber-600 dark:text-amber-400 mt-0.5">您的订阅有效期已结束。请联系管理员续期以重新开启高速节点授权。</p>
+          </div>
+        `;
+        alertBox.classList.remove('hidden');
+      } else if (user.status === 'disabled') {
+        badge.className += ' bg-slate-200 text-slate-700 dark:bg-zinc-800 dark:text-zinc-300';
+        badge.textContent = '🚫 已暂停服务';
+        avatar.className = 'w-11 h-11 rounded-2xl bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-lg shrink-0';
+        avatar.textContent = '🚫';
+        hardStatus.textContent = '已禁用';
+        hardStatus.className = 'font-bold text-slate-500 mt-0.5';
+        alertBox.classList.add('hidden');
+      } else {
+        badge.className += ' bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300';
+        badge.textContent = '🟢 正常使用中';
+        avatar.className = 'w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-lg shrink-0';
+        avatar.textContent = '👤';
+        hardStatus.textContent = '高速放行中';
+        hardStatus.className = 'font-bold text-emerald-600 mt-0.5';
+        alertBox.classList.add('hidden');
+      }
+
+      // Traffic stats
+      document.getElementById('trafficUsedDisplay').textContent = user.traffic_used_formatted || '0 B';
+      document.getElementById('trafficLimitDisplay').textContent = user.traffic_limit_bytes > 0 ? user.traffic_limit_formatted : '无限制';
+      document.getElementById('trafficRemainingDisplay').textContent = user.traffic_limit_bytes > 0 ? user.traffic_remaining_formatted : '不限配额';
+      document.getElementById('trafficPercentDisplay').textContent = `${user.traffic_percent}%`;
+
+      const bar = document.getElementById('trafficProgressBar');
+      const pct = Math.min(100, Math.max(0, user.traffic_percent || 0));
+      bar.style.width = `${pct}%`;
+      if (pct > 90) {
+        bar.className = 'h-full rounded-full bg-gradient-to-r from-rose-500 to-red-600 transition-all duration-500';
+      } else if (pct > 70) {
+        bar.className = 'h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500 transition-all duration-500';
+      } else {
+        bar.className = 'h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500';
+      }
+
+      // Expiry details
+      if (user.expire_time) {
+        document.getElementById('expiryDateDisplay').textContent = user.expire_time;
+        if (user.expire_remaining_days !== null && user.expire_remaining_days >= 0) {
+          document.getElementById('expiryCountdownDisplay').textContent = `剩余 ${user.expire_remaining_days} 天`;
+          document.getElementById('expiryCountdownDisplay').className = 'text-xs text-purple-600 dark:text-purple-400 font-bold mt-1';
+        } else {
+          document.getElementById('expiryCountdownDisplay').textContent = `已过期`;
+          document.getElementById('expiryCountdownDisplay').className = 'text-xs text-rose-600 font-bold mt-1';
+        }
+      } else {
+        document.getElementById('expiryDateDisplay').textContent = '长期有效';
+        document.getElementById('expiryCountdownDisplay').textContent = '无过期时间限制';
+        document.getElementById('expiryCountdownDisplay').className = 'text-xs text-slate-400 font-medium mt-1';
+      }
+
+      // Node count
+      document.getElementById('nodesCountDisplay').textContent = `${nodes.length} 个`;
+      document.getElementById('nodesBadgeCount').textContent = `${nodes.length}`;
+
+      // Subscription URLs
+      const subUrl = user.sub_url;
+      document.getElementById('subUrlDisplay').textContent = subUrl;
+      
+      // Client import hrefs
+      document.getElementById('btnImportClash').href = `clash://install-config?url=${encodeURIComponent(subUrl)}`;
+      document.getElementById('btnImportShadowrocket').href = `sub://${btoa(subUrl)}`;
+      document.getElementById('btnImportSingbox').href = `sing-box://import-remote-profile?url=${encodeURIComponent(user.singbox_url || subUrl + '?format=sing-box')}`;
+
+      // Render nodes list
+      const nContainer = document.getElementById('nodesListContainer');
+      if (nodes.length === 0) {
+        nContainer.innerHTML = `<div class="p-4 text-center text-xs text-slate-400">暂无已分配的节点</div>`;
+      } else {
+        nContainer.innerHTML = nodes.map(n => {
+          const protoBadge = n.protocol === 'vless_reality' ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300' :
+                             n.protocol === 'hysteria2' ? 'bg-pink-100 text-pink-700 dark:bg-pink-950/60 dark:text-pink-300' :
+                             n.protocol === 'trojan' ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' :
+                             'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300';
+          return `
+            <div class="p-3 rounded-xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-800 flex items-center justify-between gap-3 hover:border-pink-300 transition">
+              <div class="flex items-center gap-2.5 min-w-0">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${protoBadge}">${(n.protocol || 'NODE').toUpperCase().replace('_', ' ')}</span>
+                <div class="min-w-0">
+                  <div class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(n.name)}</div>
+                  <div class="text-[10px] text-slate-400 font-mono truncate">${n.server_ip || '127.0.0.1'}:${n.port || 443}</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
+                <button onclick="copyText('${n.share_link || ''}', '单个节点分享链接已复制！')" class="px-2 py-1 rounded-lg text-[11px] font-semibold text-pink-600 hover:bg-pink-50 dark:hover:bg-zinc-700 btn-tap" title="复制单个节点链接">
+                  复制链接
+                </button>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      initLucide();
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function copySubUrl() {
+      if (currentUserData && currentUserData.user && currentUserData.user.sub_url) {
+        copyText(currentUserData.user.sub_url, '🎉 通用订阅链接已复制到剪贴板！');
+      }
+    }
+
+    function copyRawBase64() {
+      if (currentUserData && currentUserData.user && currentUserData.user.sub_url) {
+        copyText(currentUserData.user.sub_url + '?format=raw', '🎉 Base64 订阅链接已复制！');
+      }
+    }
+
+    function openQrModal() {
+      if (!currentUserData || !currentUserData.user || !currentUserData.user.sub_url) return;
+      const modal = document.getElementById('qrModal');
+      const box = document.getElementById('qrCodeContainer');
+      box.innerHTML = '';
+      if (typeof QRCode !== 'undefined') {
+        new QRCode(box, {
+          text: currentUserData.user.sub_url,
+          width: 180,
+          height: 180,
+          colorDark: '#0f172a',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+      modal.classList.remove('hidden');
+      initLucide();
+    }
+
+    function closeQrModal() {
+      document.getElementById('qrModal').classList.add('hidden');
+    }
+
+    function handleLoginSubmit() {
+      const val = document.getElementById('tokenInput').value.trim();
+      if (!val) {
+        showToast('请输入您的订阅 Token 或订阅链接', 'error');
+        return;
+      }
+      loadUserData(val);
+    }
+
+    function logout() {
+      localStorage.removeItem('komari_sub_token');
+      currentUserData = null;
+      document.getElementById('tokenInput').value = '';
+      showLoginView();
+      showToast('已安全退出登录');
+    }
+
+    function refreshData() {
+      const token = localStorage.getItem('komari_sub_token');
+      if (token) {
+        loadUserData(token);
+        showToast('用量数据已更新', 'success');
+      }
+    }
+
+    // Initialize on load
+    document.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      const urlParams = new URLSearchParams(window.location.search);
+      const tokenFromUrl = urlParams.get('token');
+      const storedToken = localStorage.getItem('komari_sub_token');
+
+      if (tokenFromUrl) {
+        loadUserData(tokenFromUrl);
+      } else if (storedToken) {
+        loadUserData(storedToken);
+      } else {
+        showLoginView();
+      }
+    });
+  </script>
+</body>
+</html>
