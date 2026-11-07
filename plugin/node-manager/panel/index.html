@@ -1580,7 +1580,8 @@
       <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
         <div>
           <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器</label>
-          <select id="createNodeServerSelect" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          <select id="createNodeServerSelect" onchange="updateCreateNodeIpHint()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
         </div>
         <div>
           <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">协议类型</label>
@@ -3140,13 +3141,15 @@
         showToast('任务名称与目标地址不能为空', 'warn');
         return;
       }
+      const allClients = document.getElementById('pingTaskAllClients').checked;
       const payload = {
         id: id ? parseInt(id) : undefined,
         name,
         target,
         type: document.getElementById('pingTaskType').value,
         interval: parseInt(document.getElementById('pingTaskInterval').value) || 60,
-        all_clients: document.getElementById('pingTaskAllClients').checked
+        all_clients: allClients,
+        clients: allClients ? (state.servers || []).map(s => s.uuid) : undefined
       };
 
       try {
@@ -3436,8 +3439,23 @@
       const s = document.getElementById('createNodeServerSelect');
       if (!s) return;
       s.innerHTML = state.servers.map(srv => `
-        <option value="${srv.uuid}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '无IP'})</option>
+        <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
       `).join('');
+      updateCreateNodeIpHint();
+    }
+
+    function updateCreateNodeIpHint() {
+      const s = document.getElementById('createNodeServerSelect');
+      const hint = document.getElementById('createNodeIpHint');
+      if (!s || !hint) return;
+      const opt = s.selectedOptions[0];
+      const ip = opt ? opt.getAttribute('data-ip') : '';
+      if (ip) {
+        hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-semibold"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 已自动获取服务器IP: <span class="font-mono bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded text-[11px]">${escapeHtml(ip)}</span></span>`;
+      } else {
+        hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-amber-500 font-semibold"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> 该服务器暂未探测到公网IP，将在探针上报后自动同步</span>`;
+      }
+      initLucide();
     }
 
     function toggleProtocolFields() {
@@ -3452,10 +3470,19 @@
     }
 
     async function submitCreateNativeNode() {
+      const sel = document.getElementById('createNodeServerSelect');
+      const srvUuid = sel ? sel.value : '';
+      const srv = state.servers.find(s => s.uuid === srvUuid);
+      const opt = sel ? sel.selectedOptions[0] : null;
+      const serverName = srv ? srv.name : (opt ? opt.getAttribute('data-name') : '');
+      const serverIp = srv ? (srv.ipv4 || srv.ipv6 || '') : (opt ? opt.getAttribute('data-ip') : '');
+
       const payload = {
-        server_uuid: document.getElementById('createNodeServerSelect').value,
+        server_uuid: srvUuid,
+        server_name: serverName,
+        server_ip: serverIp,
         protocol: document.getElementById('createNodeProtocol').value,
-        name: document.getElementById('createNodeName').value.trim() || '自建节点',
+        name: document.getElementById('createNodeName').value.trim() || `${serverName || '自建'} - Reality`,
         port: parseInt(document.getElementById('createNodePort').value) || 20082,
         sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
         enabled: 1

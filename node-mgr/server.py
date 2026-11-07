@@ -702,6 +702,77 @@ def fix_all_dangling_rules(default_fallback="PROXY"):
     conn.close()
     return {"fixed": fixed_count}
 
+def sync_ping_tasks_all_clients():
+    """Ensure all servers in Komari clients table are included in ping tasks marked with all_clients = 1"""
+    if not os.path.exists(KOMARI_DB):
+        return 0
+    try:
+        conn_k = sqlite3.connect(KOMARI_DB)
+        c_k = conn_k.cursor()
+        c_k.execute("SELECT uuid FROM clients")
+        all_uuids = [r[0] for r in c_k.fetchall() if r[0]]
+        if not all_uuids:
+            conn_k.close()
+            return 0
+
+        c_k.execute("SELECT id, clients, all_clients FROM ping_tasks WHERE all_clients = 1")
+        tasks = c_k.fetchall()
+        updated_count = 0
+        for tid, clients_json, all_clients in tasks:
+            try:
+                clist = json.loads(clients_json) if clients_json else []
+            except Exception:
+                clist = []
+            cset = set(clist)
+            changed = False
+            for u in all_uuids:
+                if u not in cset:
+                    clist.append(u)
+                    cset.add(u)
+                    changed = True
+            if changed:
+                c_k.execute("UPDATE ping_tasks SET clients = ? WHERE id = ?", (json.dumps(clist), tid))
+                updated_count += 1
+        if updated_count > 0:
+            conn_k.commit()
+        conn_k.close()
+        return updated_count
+    except Exception as e:
+        print(f"[PingSync] Error syncing all_clients ping tasks: {e}")
+        return 0
+
+def auto_repair_node_ips():
+    """Automatically resolve missing server_ip and server_name for native nodes from komari clients table"""
+    if not os.path.exists(KOMARI_DB) or not os.path.exists(NODES_DB):
+        return 0
+    try:
+        conn_k = sqlite3.connect(KOMARI_DB)
+        c_k = conn_k.cursor()
+        c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
+        clients_map = {r[0]: {"name": r[1] or "", "ip": r[2] or r[3] or ""} for r in c_k.fetchall() if r[0]}
+        conn_k.close()
+
+        conn_n = sqlite3.connect(NODES_DB)
+        c_n = conn_n.cursor()
+        c_n.execute("SELECT id, server_uuid, server_name, server_ip FROM nodes WHERE is_external = 0")
+        rows = c_n.fetchall()
+        repaired = 0
+        for nid, suuid, sname, sip in rows:
+            if suuid in clients_map:
+                cinfo = clients_map[suuid]
+                new_name = sname if sname else cinfo["name"]
+                new_ip = sip if sip else cinfo["ip"]
+                if (not sname and new_name) or (not sip and new_ip):
+                    c_n.execute("UPDATE nodes SET server_name = ?, server_ip = ? WHERE id = ?", (new_name, new_ip, nid))
+                    repaired += 1
+        if repaired > 0:
+            conn_n.commit()
+        conn_n.close()
+        return repaired
+    except Exception as e:
+        print(f"[NodeRepair] Error auto-repairing node IPs: {e}")
+        return 0
+
 def ping_node_handshake(server_ip, port, protocol="", sni="", timeout=3.5):
     """
     真实发起网络握手检测节点连通性与延时
@@ -898,6 +969,13 @@ def get_servers_with_stats():
     c_k.execute('SELECT * FROM clients ORDER BY weight DESC, name ASC')
     clients = [dict(r) for r in c_k.fetchall()]
     conn_k.close()
+
+    # Auto-sync ping tasks with all_clients=1 & auto-heal missing server IPs
+    try:
+        sync_ping_tasks_all_clients()
+        auto_repair_node_ips()
+    except Exception as e:
+        pass
 
     # Auto-cleanup orphan nodes whose server was deleted from Komari
     try:
@@ -3243,6 +3321,10 @@ rules:
             return
 
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
+            try:
+                auto_repair_node_ips()
+            except Exception:
+                pass
             servers_data = get_cached_servers_with_stats()
             servers_map = {s["uuid"]: s for s in servers_data.get("servers", [])}
 
@@ -3253,8 +3335,19 @@ rules:
             nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
 
-            # Filter out orphan nodes whose server no longer exists
-            nodes = [n for n in nodes if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in servers_map]
+            # Filter out orphan nodes whose server no longer exists & auto-populate missing server IP/name
+            valid_nodes = []
+            for n in nodes:
+                if n.get("is_external") or n.get("server_uuid") == "external":
+                    valid_nodes.append(n)
+                elif n.get("server_uuid") in servers_map:
+                    srv = servers_map[n.get("server_uuid")]
+                    if not n.get("server_ip"):
+                        n["server_ip"] = srv.get("ipv4") or srv.get("ipv6") or ""
+                    if not n.get("server_name"):
+                        n["server_name"] = srv.get("name") or ""
+                    valid_nodes.append(n)
+            nodes = valid_nodes
 
             for n in nodes:
                 n["link"] = build_node_share_link(n)
@@ -4133,6 +4226,10 @@ rules:
                             (new_uuid, new_token, name, now_iso, now_iso))
                 conn_k.commit()
                 conn_k.close()
+                try:
+                    sync_ping_tasks_all_clients()
+                except Exception:
+                    pass
             install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}"
             self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "install_cmd": install_cmd})
             return
@@ -4525,6 +4622,22 @@ rules:
             server_name = body.get("server_name", "")
             server_ip = body.get("server_ip", "")
             name = str(body.get("name") or "Node").strip()
+
+            # Auto-resolve server name and IP from komari clients table if missing
+            if server_uuid and (not server_ip or not server_name) and os.path.exists(KOMARI_DB):
+                try:
+                    conn_k = sqlite3.connect(KOMARI_DB)
+                    c_k = conn_k.cursor()
+                    c_k.execute("SELECT name, ipv4, ipv6 FROM clients WHERE uuid = ?", (server_uuid,))
+                    crow = c_k.fetchone()
+                    conn_k.close()
+                    if crow:
+                        if not server_name:
+                            server_name = crow[0] or ""
+                        if not server_ip:
+                            server_ip = crow[1] or crow[2] or ""
+                except Exception as e:
+                    print(f"Error resolving client info for new node: {e}")
 
             # Duplicate name check
             conn_chk = sqlite3.connect(NODES_DB)
