@@ -1520,9 +1520,19 @@
 
   <!-- Modal F: 移动端“更多”菜单抽屉 -->
   <div id="sheetMore" class="fixed inset-0 z-50 flex items-end justify-center p-0 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
-    <div class="sheet-panel w-full bg-white dark:bg-zinc-900 rounded-t-3xl p-5 shadow-2xl border-t border-slate-200 dark:border-zinc-800 pb-10">
-      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-4"></div>
-      <h3 class="text-sm font-bold text-slate-400 mb-3 px-2">更多管理模块</h3>
+    <div class="sheet-panel w-full bg-white dark:bg-zinc-900 rounded-t-3xl p-5 shadow-2xl border-t border-slate-200 dark:border-zinc-800 pb-10 transition-transform duration-200">
+      <div onclick="closeModal('sheetMore')" class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 hover:bg-slate-400 dark:hover:bg-zinc-600 rounded-full mx-auto mb-3 cursor-pointer transition btn-tap" title="点击收回"></div>
+      
+      <div class="flex items-center justify-between mb-3 px-1">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+          <h3 class="text-sm font-bold text-slate-700 dark:text-slate-200">更多管理模块</h3>
+        </div>
+        <button onclick="closeModal('sheetMore')" class="p-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-500 dark:text-slate-400 transition btn-tap" title="收起菜单">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
         <button onclick="switchTab('theme'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-fuchsia-50 dark:bg-fuchsia-950/20 text-fuchsia-600 flex flex-col items-center gap-2 btn-tap">
           <i data-lucide="palette" class="w-6 h-6"></i>
@@ -1547,11 +1557,15 @@
       </div>
 
       <div class="mt-4 pt-3 border-t border-slate-100 dark:border-zinc-800 flex items-center justify-between px-2">
-        <a href="/" target="_blank" class="text-xs font-semibold text-purple-600 flex items-center gap-1.5">
+        <a href="/" target="_blank" class="text-xs font-semibold text-purple-600 hover:underline flex items-center gap-1.5">
           <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
-          <span>打开前台展示大屏</span>
+          <span>打开前台</span>
         </a>
-        <button onclick="handleLogout()" class="text-xs font-semibold text-rose-500 flex items-center gap-1">
+        <button onclick="closeModal('sheetMore')" class="px-3.5 py-1.5 rounded-xl bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 dark:hover:bg-zinc-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition flex items-center gap-1 btn-tap">
+          <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+          <span>收起菜单</span>
+        </button>
+        <button onclick="handleLogout()" class="text-xs font-semibold text-rose-500 hover:underline flex items-center gap-1">
           <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
           <span>退出登录</span>
         </button>
@@ -1703,14 +1717,86 @@
     }
     function closeModal(id) {
       const el = document.getElementById(id);
-      if (el) el.classList.add('hidden');
+      if (el) {
+        el.classList.add('hidden');
+        const panel = el.querySelector('.sheet-panel');
+        if (panel) panel.style.transform = '';
+      }
     }
-    function openMoreSheet() { openModal('sheetMore'); }
+    function toggleMoreSheet() {
+      const el = document.getElementById('sheetMore');
+      if (el && !el.classList.contains('hidden')) {
+        closeModal('sheetMore');
+      } else {
+        openModal('sheetMore');
+      }
+    }
+    function openMoreSheet() { toggleMoreSheet(); }
     function openAddServerModal() { openModal('modalAddServer'); }
     function openClientImportModal() { openModal('modalClientImport'); generateUniversalQr(); }
     function openCreateUserModal() { openModal('modalCreateUser'); }
     function openCreateNodeModal() { populateServerSelectForNode(); openModal('modalCreateNode'); }
     function openImportNodeModal() { openModal('modalImportNode'); }
+
+    // Close modal when tapping backdrop outside sheet/dialog
+    document.addEventListener('click', (e) => {
+      if (e.target && e.target.classList && e.target.classList.contains('sheet-backdrop')) {
+        if (e.target.id === 'loginOverlay') return;
+        closeModal(e.target.id);
+      }
+    });
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        document.querySelectorAll('.sheet-backdrop:not(.hidden)').forEach(el => {
+          if (el.id !== 'loginOverlay') closeModal(el.id);
+        });
+      }
+    });
+
+    // Mobile swipe-down to dismiss for bottom sheets
+    (function initBottomSheetSwipe() {
+      document.addEventListener('DOMContentLoaded', () => {
+        const sheets = ['sheetMore', 'modalEditServer', 'modalPingTask', 'modalServerDeploy', 'modalImportThemeUrl', 'modalUploadThemeZip', 'modalAddServer', 'modalClientImport', 'modalCreateUser', 'modalCreateNode', 'modalImportNode'];
+        sheets.forEach(id => {
+          const sheet = document.getElementById(id);
+          if (!sheet) return;
+          const panel = sheet.querySelector('.sheet-panel');
+          if (!panel) return;
+          let startY = 0;
+          let currentY = 0;
+          let isDragging = false;
+
+          panel.addEventListener('touchstart', (e) => {
+            if (panel.scrollTop > 5) return;
+            startY = e.touches[0].clientY;
+            currentY = startY;
+            isDragging = true;
+          }, { passive: true });
+
+          panel.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            currentY = e.touches[0].clientY;
+            const diff = currentY - startY;
+            if (diff > 0) {
+              panel.style.transform = `translateY(${diff}px)`;
+            }
+          }, { passive: true });
+
+          panel.addEventListener('touchend', () => {
+            if (!isDragging) return;
+            isDragging = false;
+            const diff = currentY - startY;
+            if (diff > 70) {
+              closeModal(id);
+            } else {
+              panel.style.transform = '';
+            }
+          });
+        });
+      });
+    })();
 
     // ==============================================================
     // DATA FETCHING & SYNC ENGINE
