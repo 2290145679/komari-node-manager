@@ -4311,6 +4311,15 @@ rules:
                 tid = c_k.lastrowid
             conn_k.commit()
             conn_k.close()
+
+            # Hot-restart Komari probe so agent scheduler dispatches new clients list immediately
+            def _restart_komari():
+                try:
+                    subprocess.run(["systemctl", "restart", "komari"], timeout=5)
+                except Exception:
+                    pass
+            threading.Thread(target=_restart_komari, daemon=True).start()
+
             self._send_json({"ok": True, "id": tid})
             return
 

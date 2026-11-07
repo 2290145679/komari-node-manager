@@ -1169,9 +1169,29 @@
           <input type="text" id="pingTaskTarget" placeholder="例如: gd-ct-v4.ip.zstaticcdn.com:80 或 1.1.1.1:53" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
         </div>
 
-        <div class="flex items-center gap-2 pt-1">
-          <input type="checkbox" id="pingTaskAllClients" checked class="w-4 h-4 rounded text-teal-600 focus:ring-0">
-          <label for="pingTaskAllClients" class="text-xs font-medium text-slate-700 dark:text-slate-300">所有服务器均参与此目标测速</label>
+        <!-- 参与测速的服务器选择区 -->
+        <div class="space-y-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-1.5">
+              <label class="font-bold text-slate-700 dark:text-slate-200 text-xs">执行测速的服务器</label>
+              <span id="pingSelectedServersCountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 dark:bg-teal-950/50 text-teal-700 dark:text-teal-300">0 台已选</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="setAllPingServers(true)" class="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200">全选</button>
+              <button type="button" onclick="setAllPingServers(false)" class="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200">全清</button>
+              <button type="button" onclick="selectIpv6PingServers()" class="px-2 py-0.5 rounded-lg text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 hover:bg-purple-100">仅IPv6</button>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input type="checkbox" id="pingTaskAllClients" onchange="onPingTaskAllClientsChange()" class="w-4 h-4 rounded text-teal-600 focus:ring-0">
+            <label for="pingTaskAllClients" class="text-[11px] text-slate-600 dark:text-slate-400 cursor-pointer">全网默认执行 (新添加服务器时自动纳管绑定)</label>
+          </div>
+
+          <!-- 勾选列表 -->
+          <div id="pingServerCheckboxesList" class="max-h-48 overflow-y-auto space-y-1 pr-1 border border-slate-200 dark:border-zinc-800 rounded-2xl p-2 bg-slate-50/70 dark:bg-zinc-800/40 divide-y divide-slate-100 dark:divide-zinc-800/60">
+            <!-- 动态渲染每台服务器的复选框 -->
+          </div>
         </div>
 
         <button onclick="submitSavePingTask()" class="w-full py-3 rounded-2xl font-bold text-white bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 shadow-md shadow-teal-500/20 btn-tap flex items-center justify-center gap-1.5">
@@ -3111,6 +3131,85 @@
       initLucide();
     }
 
+    function renderPingServerSelection(selectedUuids = []) {
+      const list = document.getElementById('pingServerCheckboxesList');
+      if (!list) return;
+      const selSet = new Set(selectedUuids);
+
+      if (!state.servers || state.servers.length === 0) {
+        list.innerHTML = `<div class="p-3 text-center text-[11px] text-slate-400">暂无在线服务器</div>`;
+        updatePingSelectedServersBadge();
+        return;
+      }
+
+      list.innerHTML = state.servers.map(srv => {
+        const isChecked = selSet.has(srv.uuid);
+        const ipDisplay = srv.ipv4 || srv.ipv6 || '无IP';
+        return `
+          <label class="flex items-center justify-between p-2 hover:bg-white dark:hover:bg-zinc-800/80 rounded-xl cursor-pointer transition select-none group">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <input type="checkbox" value="${srv.uuid}" data-has-ipv6="${srv.ipv6 ? '1' : '0'}" onchange="onPingServerCheckboxChange()" class="ping-server-cb w-4 h-4 rounded text-teal-600 focus:ring-0" ${isChecked ? 'checked' : ''}>
+              <div class="min-w-0">
+                <div class="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">${escapeHtml(srv.name)}</div>
+                <div class="text-[10px] font-mono text-slate-400 truncate">${escapeHtml(ipDisplay)}</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0">
+              ${srv.ipv6 ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400">IPv6</span>' : ''}
+              <span class="w-2 h-2 rounded-full ${srv.server_online ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-zinc-600'}"></span>
+            </div>
+          </label>
+        `;
+      }).join('');
+      updatePingSelectedServersBadge();
+    }
+
+    function updatePingSelectedServersBadge() {
+      const cbs = document.querySelectorAll('.ping-server-cb');
+      const checked = document.querySelectorAll('.ping-server-cb:checked');
+      const badge = document.getElementById('pingSelectedServersCountBadge');
+      if (badge) {
+        badge.textContent = `${checked.length} / ${cbs.length} 台已选`;
+      }
+    }
+
+    function onPingServerCheckboxChange() {
+      updatePingSelectedServersBadge();
+      const cbs = document.querySelectorAll('.ping-server-cb');
+      const checked = document.querySelectorAll('.ping-server-cb:checked');
+      const allClientsCb = document.getElementById('pingTaskAllClients');
+      if (allClientsCb && checked.length !== cbs.length) {
+        allClientsCb.checked = false;
+      }
+    }
+
+    function onPingTaskAllClientsChange() {
+      const allClientsCb = document.getElementById('pingTaskAllClients');
+      if (allClientsCb && allClientsCb.checked) {
+        setAllPingServers(true);
+      }
+    }
+
+    function setAllPingServers(checked) {
+      document.querySelectorAll('.ping-server-cb').forEach(cb => {
+        cb.checked = checked;
+      });
+      const allClientsCb = document.getElementById('pingTaskAllClients');
+      if (allClientsCb) {
+        allClientsCb.checked = checked;
+      }
+      updatePingSelectedServersBadge();
+    }
+
+    function selectIpv6PingServers() {
+      document.querySelectorAll('.ping-server-cb').forEach(cb => {
+        cb.checked = cb.getAttribute('data-has-ipv6') === '1';
+      });
+      const allClientsCb = document.getElementById('pingTaskAllClients');
+      if (allClientsCb) allClientsCb.checked = false;
+      updatePingSelectedServersBadge();
+    }
+
     function openAddPingTaskModal() {
       document.getElementById('pingTaskId').value = '';
       document.getElementById('pingTaskName').value = '';
@@ -3118,6 +3217,7 @@
       document.getElementById('pingTaskType').value = 'tcp';
       document.getElementById('pingTaskInterval').value = '60';
       document.getElementById('pingTaskAllClients').checked = true;
+      renderPingServerSelection((state.servers || []).map(s => s.uuid));
       openModal('modalPingTask');
     }
 
@@ -3130,6 +3230,12 @@
       document.getElementById('pingTaskType').value = t.type || 'tcp';
       document.getElementById('pingTaskInterval').value = t.interval || 60;
       document.getElementById('pingTaskAllClients').checked = !!t.all_clients;
+
+      let clientUuids = t.clients || [];
+      if (t.all_clients && (!clientUuids || clientUuids.length === 0)) {
+        clientUuids = (state.servers || []).map(s => s.uuid);
+      }
+      renderPingServerSelection(clientUuids);
       openModal('modalPingTask');
     }
 
@@ -3141,18 +3247,43 @@
         showToast('任务名称与目标地址不能为空', 'warn');
         return;
       }
-      const allClients = document.getElementById('pingTaskAllClients').checked;
+
+      const checkedUuids = Array.from(document.querySelectorAll('.ping-server-cb:checked')).map(cb => cb.value);
+      if (checkedUuids.length === 0) {
+        showToast('请至少勾选一台执行此测速的服务器', 'warn');
+        return;
+      }
+
+      const allClientsCb = document.getElementById('pingTaskAllClients');
+      const isAll = !!(allClientsCb && allClientsCb.checked && checkedUuids.length === state.servers.length);
+
       const payload = {
         id: id ? parseInt(id) : undefined,
         name,
         target,
         type: document.getElementById('pingTaskType').value,
         interval: parseInt(document.getElementById('pingTaskInterval').value) || 60,
-        all_clients: allClients,
-        clients: allClients ? (state.servers || []).map(s => s.uuid) : undefined
+        all_clients: isAll,
+        clients: checkedUuids
       };
 
       try {
+        const res = await fetch('/api/node-mgr/ping-tasks/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎉 延迟测速任务已成功保存！', 'success');
+          closeModal('modalPingTask');
+          loadPingTasks();
+        } else {
+          showToast(res.error || '保存失败', 'error');
+        }
+      } catch(e) {
+        showToast('保存失败: ' + e.message, 'error');
+      }
+    }
         const res = await fetch('/api/node-mgr/ping-tasks/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
