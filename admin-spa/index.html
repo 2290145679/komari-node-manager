@@ -186,6 +186,14 @@
         <span id="badgeUserCount" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-500/10 text-pink-600">0</span>
       </button>
 
+      <button onclick="switchTab('theme')" data-tab="theme" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
+        <div class="w-8 h-8 rounded-lg bg-fuchsia-100 dark:bg-fuchsia-900/30 text-fuchsia-600 dark:text-fuchsia-400 flex items-center justify-center group-hover:scale-105 transition">
+          <i data-lucide="palette" class="w-4 h-4"></i>
+        </div>
+        <span class="flex-1 text-left">主题设置</span>
+        <span id="badgeThemeName" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-500/10 text-fuchsia-600">LuminaPlus</span>
+      </button>
+
       <button onclick="switchTab('rules')" data-tab="rules" class="nav-item w-full flex items-center gap-3.5 px-3.5 py-3 rounded-xl font-semibold text-xs sm:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800/60 transition group btn-tap">
         <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 flex items-center justify-center group-hover:scale-105 transition">
           <i data-lucide="git-fork" class="w-4 h-4"></i>
@@ -291,46 +299,46 @@
       <!-- Top Bento Overview Stats -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         <!-- Stat 1: 在线服务器 -->
-        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bento-card p-3 sm:p-4 min-h-[78px] sm:min-h-[88px] flex items-center gap-2.5 sm:gap-3 bg-emerald-50/50 dark:bg-emerald-950/10 border-emerald-100 dark:border-emerald-900/30 overflow-hidden">
+          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <i data-lucide="server" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs font-medium text-emerald-800 dark:text-emerald-300">在线服务器</div>
-            <div class="text-lg sm:text-2xl font-black mt-0.5 text-emerald-950 dark:text-emerald-100" id="statOnlineServers">0 / 0</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] sm:text-xs font-semibold text-emerald-800 dark:text-emerald-300 truncate">在线服务器</div>
+            <div class="text-sm sm:text-lg font-bold font-mono tabular-nums tracking-tight mt-0.5 text-emerald-950 dark:text-emerald-100 truncate" id="statOnlineServers">0 / 0</div>
           </div>
         </div>
 
         <!-- Stat 2: 全网实时下行速度 -->
-        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-            <i data-lucide="arrow-down-circle" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bento-card p-3 sm:p-4 min-h-[78px] sm:min-h-[88px] flex items-center gap-2.5 sm:gap-3 bg-blue-50/50 dark:bg-blue-950/10 border-blue-100 dark:border-blue-900/30 overflow-hidden">
+          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+            <i data-lucide="arrow-down-circle" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs font-medium text-blue-800 dark:text-blue-300">全网实时下行</div>
-            <div class="text-lg sm:text-2xl font-black mt-0.5 text-blue-950 dark:text-blue-100" id="statRealtimeDown">0 KB/s</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] sm:text-xs font-semibold text-blue-800 dark:text-blue-300 truncate">全网实时下行</div>
+            <div class="text-sm sm:text-lg font-bold font-mono tabular-nums tracking-tight mt-0.5 text-blue-950 dark:text-blue-100 truncate" id="statRealtimeDown">0.0 KB/s</div>
           </div>
         </div>
 
         <!-- Stat 3: 全网实时上行速度 -->
-        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-purple-50/50 dark:bg-purple-950/10 border-purple-100 dark:border-purple-900/30">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-            <i data-lucide="arrow-up-circle" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bento-card p-3 sm:p-4 min-h-[78px] sm:min-h-[88px] flex items-center gap-2.5 sm:gap-3 bg-purple-50/50 dark:bg-purple-950/10 border-purple-100 dark:border-purple-900/30 overflow-hidden">
+          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+            <i data-lucide="arrow-up-circle" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs font-medium text-purple-800 dark:text-purple-300">全网实时上行</div>
-            <div class="text-lg sm:text-2xl font-black mt-0.5 text-purple-950 dark:text-purple-100" id="statRealtimeUp">0 KB/s</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] sm:text-xs font-semibold text-purple-800 dark:text-purple-300 truncate">全网实时上行</div>
+            <div class="text-sm sm:text-lg font-bold font-mono tabular-nums tracking-tight mt-0.5 text-purple-950 dark:text-purple-100 truncate" id="statRealtimeUp">0.0 KB/s</div>
           </div>
         </div>
 
         <!-- Stat 4: 全网累计流量 -->
-        <div class="bento-card p-3.5 sm:p-5 flex items-center gap-3 bg-pink-50/50 dark:bg-pink-950/10 border-pink-100 dark:border-pink-900/30">
-          <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl bg-pink-500/15 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0">
-            <i data-lucide="hard-drive" class="w-5 h-5 sm:w-6 sm:h-6"></i>
+        <div class="bento-card p-3 sm:p-4 min-h-[78px] sm:min-h-[88px] flex items-center gap-2.5 sm:gap-3 bg-pink-50/50 dark:bg-pink-950/10 border-pink-100 dark:border-pink-900/30 overflow-hidden">
+          <div class="w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-pink-500/15 text-pink-600 dark:text-pink-400 flex items-center justify-center shrink-0">
+            <i data-lucide="hard-drive" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
-          <div class="min-w-0">
-            <div class="text-[11px] sm:text-xs font-medium text-pink-800 dark:text-pink-300">累计流转流量</div>
-            <div class="text-lg sm:text-2xl font-black mt-0.5 text-pink-950 dark:text-pink-100" id="statTotalTraffic">0 GB</div>
+          <div class="min-w-0 flex-1">
+            <div class="text-[10px] sm:text-xs font-semibold text-pink-800 dark:text-pink-300 truncate">累计流转流量</div>
+            <div class="text-sm sm:text-lg font-bold font-mono tabular-nums tracking-tight mt-0.5 text-pink-950 dark:text-pink-100 truncate" id="statTotalTraffic">0 B</div>
           </div>
         </div>
       </div>
@@ -708,10 +716,320 @@
       </div>
     </section>
 
+    <!-- TAB: 🎨 前台主题与外观设置 (THEME SETTINGS) -->
+    <section id="tab-theme" class="tab-panel hidden space-y-4 sm:space-y-6">
+      <!-- Top Action Banner -->
+      <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-purple/30 to-fuchsia-500/10 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-fuchsia-500 status-pulse"></span>
+            <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">前台主题与外观设置</h1>
+          </div>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">管理访客前台监控大屏主题风格 · 动态视频背景、自定义壁纸、樱花动效与账单公开偏好</p>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <a href="/" target="_blank" class="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-fuchsia-800 dark:text-fuchsia-200 bg-fuchsia-100 dark:bg-fuchsia-950/50 hover:bg-fuchsia-200 transition btn-tap flex items-center justify-center gap-1.5" title="新标签页打开前台">
+            <i data-lucide="external-link" class="w-4 h-4"></i>
+            <span>预览前台展示</span>
+          </a>
+          <button onclick="saveThemeConfig()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 shadow-md shadow-fuchsia-500/20 flex items-center justify-center gap-2 btn-tap">
+            <i data-lucide="save" class="w-4 h-4"></i>
+            <span>保存全部配置</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Bento Grid: Theme Selection & Visual Styles -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <!-- Card 1: 🎭 主题切换与主题库 (Col-span 1) -->
+        <div class="bento-card p-4 sm:p-6 space-y-4">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="sparkles" class="w-4 h-4 text-fuchsia-500"></i>
+              <span>前台大屏主题</span>
+            </h2>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 font-bold" id="currentThemeBadge">当前: LuminaPlus</span>
+          </div>
+
+          <!-- Theme Option: LuminaPlus -->
+          <div class="p-3.5 rounded-2xl border-2 border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-950/20 relative space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <span>🌸 LuminaPlus</span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-500 text-white">当前使用中</span>
+              </div>
+              <span class="text-[10px] font-mono text-fuchsia-600">v1.3.6</span>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">全功能现代高颜值大屏主题，支持 LanternRivers 动态视频壁纸、三网延迟多任务绑定、评级徽章、账单展示与分组折叠。</p>
+            <div class="flex items-center justify-between pt-1 text-[11px]">
+              <span class="text-slate-400">作者: shark & shanyang</span>
+              <button onclick="switchActiveTheme('LuminaPlus')" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-fuchsia-600 text-white shadow-sm btn-tap">已启用</button>
+            </div>
+          </div>
+
+          <!-- Theme Option: Default -->
+          <div class="p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                <span>🖥️ Komari 原生默认主题</span>
+              </div>
+              <span class="text-[10px] font-mono text-slate-400">Built-in</span>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">官方内置原生极简风格监控展示大屏，纯粹轻量。</p>
+            <div class="flex items-center justify-between pt-1 text-[11px]">
+              <span class="text-slate-400">Komari 官方</span>
+              <button onclick="switchActiveTheme('default')" class="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 transition btn-tap">切换为此主题</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: 🖼️ LuminaPlus 外观视觉与背景设置 (Col-span 2) -->
+        <div class="bento-card p-4 sm:p-6 space-y-4 lg:col-span-2">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="image" class="w-4 h-4 text-purple-500"></i>
+              <span>LuminaPlus 视觉背景与动态特效</span>
+            </h2>
+            <span class="text-xs text-slate-400">修改后实时存盘</span>
+          </div>
+
+          <!-- Background Media Type Selector -->
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">背景媒体类型 (Background Media)</label>
+            <div class="grid grid-cols-3 gap-2.5">
+              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
+                <input type="radio" name="themeBgType" id="themeBgTypeVideo" value="video" class="text-fuchsia-600 focus:ring-0">
+                <span>🎬 动态视频背景</span>
+              </label>
+              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
+                <input type="radio" name="themeBgType" id="themeBgTypeImage" value="image" class="text-fuchsia-600 focus:ring-0">
+                <span>🖼️ 静态壁纸</span>
+              </label>
+              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
+                <input type="radio" name="themeBgType" id="themeBgTypeNone" value="none" class="text-fuchsia-600 focus:ring-0">
+                <span>⚪ 纯色模式</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Video & Image URL Inputs -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">桌面端动态背景视频 URL</label>
+              <input type="text" id="themeBackgroundVideo" placeholder="/assets/LanternRivers_1080p15fps2Mbps3s.mp4" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">桌面端静态壁纸 URL (留空使用默认)</label>
+              <input type="text" id="themeBackgroundImage" placeholder="https://... 或 /assets/bg.jpg" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">移动端专属背景壁纸 URL (可选)</label>
+              <input type="text" id="themeBackgroundImageMobile" placeholder="移动端若不填则沿用桌面壁纸" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">壁纸填充与对齐方式</label>
+              <select id="themeBackgroundAlignment" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+                <option value="cover,center">全屏裁切拉伸居中 (cover,center)</option>
+                <option value="contain,center">保持比例完整居中 (contain,center)</option>
+                <option value="cover,top">全屏拉伸顶部对齐 (cover,top)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Slider: Card Opacity & Ambient Effect -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pt-2">
+            <div class="sm:col-span-1 space-y-1">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold text-slate-600 dark:text-slate-400">卡片透明度 (Surface)</label>
+                <span id="surfaceOpacityVal" class="text-xs font-mono font-bold text-fuchsia-600">100%</span>
+              </div>
+              <input type="range" id="themeSurfaceOpacity" min="20" max="100" step="5" value="100" oninput="document.getElementById('surfaceOpacityVal').textContent = this.value + '%'" class="w-full accent-fuchsia-600">
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">环境动态粒子特效</label>
+              <div class="flex items-center gap-2">
+                <input type="checkbox" id="themeEnableAmbientEffect" class="w-4 h-4 rounded text-fuchsia-600 focus:ring-0">
+                <select id="themeAmbientEffect" class="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+                  <option value="sakura">🌸 浪漫樱花飘落 (Sakura)</option>
+                  <option value="snow">❄️ 冬日雪花纷飞 (Snow)</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">默认配色偏好</label>
+              <select id="themeDefaultAppearance" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+                <option value="system">跟随访客系统 (System)</option>
+                <option value="dark">默认深色极夜 (Dark)</option>
+                <option value="light">默认浅色纯白 (Light)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bento Grid 2: Layout & Billing & Ping Bindings -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <!-- Card 3: 📊 首页卡片排版偏好 -->
+        <div class="bento-card p-4 sm:p-6 space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="layout-grid" class="w-4 h-4 text-blue-500"></i>
+              <span>卡片排版与排序</span>
+            </h2>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2.5">
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 mb-1">桌面端卡片模式</label>
+              <select id="themeDesktopNodeViewMode" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+                <option value="large">多行大卡片 (Large)</option>
+                <option value="compact">紧凑小卡片 (Compact)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] font-semibold text-slate-500 mb-1">移动端卡片模式</label>
+              <select id="themeMobileNodeViewMode" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+                <option value="compact">紧凑小卡片 (推荐)</option>
+                <option value="large">多行大卡片</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-1 text-xs">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowGroupTabs" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示服务器分组标签页 (Group Tabs)</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowRegionBar" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示国家地区分布比例条 (Region Bar)</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowHomeOverview" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示顶部全网概览汇总统计</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowConnections" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示实时网络连接数</span>
+            </label>
+          </div>
+
+          <div class="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-2">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeEnableHomeSort" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
+              <span class="text-xs font-bold text-slate-700 dark:text-slate-300">开启首页卡片自动排序</span>
+            </label>
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <select id="themeHomeSortField" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+                <option value="default">默认权重排序</option>
+                <option value="name">按服务器名称</option>
+                <option value="traffic">按流量使用量</option>
+                <option value="uptime">按在线时长</option>
+              </select>
+              <select id="themeHomeSortDirection" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+                <option value="asc">升序排列 (ASC)</option>
+                <option value="desc">降序排列 (DESC)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4: 💰 账单与费用向访客展示控制 -->
+        <div class="bento-card p-4 sm:p-6 space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-amber-500"></i>
+              <span>账单与费用公开策略</span>
+            </h2>
+          </div>
+
+          <div class="space-y-2 text-xs">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowCostSummary" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">在首页展示服务器费用总览汇总</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowCostsToGuests" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">向未登录访客直接公开价格账单</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowCostSummaryFloatingButton" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示右下角费用统计浮动气泡</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeCompactShowBilling" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">紧凑模式卡片也显示续费周期与价格</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeCompactShowTrafficTotal" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">紧凑模式卡片显示总流量流转</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowTodayTrafficPopover" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">允许查看今日流量弹窗明细</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowBandwidthRating" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示带宽等级评分徽章</span>
+            </label>
+            <label class="flex items-center gap-2">
+              <input type="checkbox" id="themeShowAssetRating" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
+              <span class="font-medium text-slate-700 dark:text-slate-300">显示服务器资产价值评级徽章</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Card 5: 📡 首页三网 Ping 延迟监控绑定 -->
+        <div class="bento-card p-4 sm:p-6 space-y-3.5">
+          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="radio" class="w-4 h-4 text-teal-500"></i>
+              <span>首页三网 Ping 延迟绑定</span>
+            </h2>
+          </div>
+
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" id="themeEnableHomepageMultiPing" class="w-4 h-4 rounded text-teal-600 focus:ring-0">
+            <span class="font-bold text-slate-700 dark:text-slate-300">在首页探针卡片展示多任务延迟</span>
+          </label>
+
+          <p class="text-[11px] text-slate-400">勾选您希望在首页卡片上常驻展示延迟的任务 (如广东电信、联通、移动)：</p>
+
+          <div id="themePingTasksList" class="space-y-2 max-h-48 overflow-y-auto pt-1">
+            <!-- Rendered by JS from pingTasks -->
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- TAB 7: ⚙️ 系统设置 (SYSTEM SETTINGS) -->
     <section id="tab-settings" class="tab-panel space-y-4 sm:space-y-6 hidden">
       <!-- System Info Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Card 0: Theme Settings Shortcut -->
+        <div class="bento-card p-5 space-y-3 bg-gradient-to-br from-fuchsia-50/50 via-white to-purple-50/40 dark:from-zinc-800 dark:to-zinc-800/80 border border-fuchsia-200 dark:border-zinc-700 md:col-span-2">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-fuchsia-100 dark:bg-fuchsia-950/40 text-fuchsia-600 flex items-center justify-center">🎨</div>
+              <div>
+                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-100">前台展示大屏主题管理</h3>
+                <p class="text-xs text-slate-400">当前激活主题: <span class="font-bold text-fuchsia-600">LuminaPlus v1.3.6</span> · 现代多功能大屏</p>
+              </div>
+            </div>
+            <button onclick="switchTab('theme')" class="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 rounded-xl shadow-md shadow-fuchsia-500/20 transition btn-tap flex items-center gap-1.5">
+              <i data-lucide="palette" class="w-4 h-4"></i>
+              <span>进入主题与视觉工作室</span>
+              <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <p class="text-xs text-slate-500">支持自定义 LanternRivers 动态背景视频、静态壁纸、卡片透明度、樱花特效与三网延迟绑定。</p>
+        </div>
+
         <!-- Card 1: BBR & Network -->
         <div class="bento-card p-5 space-y-3">
           <div class="flex items-center justify-between">
@@ -867,6 +1185,32 @@
 
       <div class="overflow-y-auto py-4 space-y-4 flex-1 text-xs sm:text-sm">
         <input type="hidden" id="editServerUuid">
+
+        <!-- Section 0: 客户端一键对接与部署指令 -->
+        <div class="p-3.5 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/40 dark:from-zinc-800 dark:to-zinc-800/80 border border-blue-200 dark:border-zinc-700 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-blue-900 dark:text-blue-300 flex items-center gap-1.5">
+              <i data-lucide="terminal" class="w-4 h-4"></i>
+              <span>该服务器专属一键对接与部署指令</span>
+            </span>
+            <div class="flex items-center gap-1 bg-white dark:bg-zinc-900 p-0.5 rounded-lg border border-slate-200 dark:border-zinc-700">
+              <button type="button" onclick="setEditDeployCmdTool('wget')" id="toolBtnWget" class="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white">wget</button>
+              <button type="button" onclick="setEditDeployCmdTool('curl')" id="toolBtnCurl" class="px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200">curl</button>
+            </div>
+          </div>
+          <div class="p-3 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] break-all select-all relative">
+            <span id="editDeployCmdText" class="text-emerald-400"></span>
+            <button type="button" onclick="copyEditDeployCmd()" class="mt-2 w-full py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-sans font-bold text-xs flex items-center justify-center gap-1.5 btn-tap">
+              <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+              <span>复制此服务器一键对接命令</span>
+            </button>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 pt-0.5">
+            <span class="flex items-center gap-1">Token: <code id="editDeployTokenText" class="font-mono text-purple-600 dark:text-purple-400 select-all font-bold"></code></span>
+            <button type="button" onclick="copyEditDeployToken()" class="text-purple-600 dark:text-purple-400 hover:underline font-semibold">复制 Token</button>
+          </div>
+          <p class="text-[10px] text-slate-400">⚡ 执行该命令将自动安装并对接 Komari 探针 + Sing-box 核心，并自动开启 TCP BBR 加速。</p>
+        </div>
 
         <!-- Section 1: 基本标识 -->
         <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/40 border border-slate-100 dark:border-zinc-800 space-y-3">
@@ -1035,6 +1379,84 @@
           <i data-lucide="check" class="w-4 h-4"></i>
           <span>保存测速任务</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 单个服务器专属部署与对接指令 -->
+  <div id="modalServerDeploy" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <div>
+          <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+            <span class="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+              <i data-lucide="terminal" class="w-4 h-4"></i>
+            </span>
+            <span id="deployModalTitle">⚡ 服务器专属一键对接指令</span>
+          </h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">在目标 VPS 终端执行此命令，快速完成探针上报与 Sing-box 核心部署</p>
+        </div>
+        <button onclick="closeModal('modalServerDeploy')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1 text-xs">
+        <!-- Server Summary Pill -->
+        <div class="flex flex-wrap items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 dark:bg-zinc-800/50 border border-slate-100 dark:border-zinc-800">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-slate-700 dark:text-slate-200" id="deployServerNameText">-</span>
+            <span class="text-slate-400 font-mono text-[11px]" id="deployServerIpText">-</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] text-slate-400">Token:</span>
+            <code id="deployServerTokenBadge" class="font-mono text-purple-600 dark:text-purple-400 font-bold bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded select-all">-</code>
+          </div>
+        </div>
+
+        <!-- Tool & Mode Selectors -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">下载工具</label>
+            <div class="flex p-1 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+              <button type="button" onclick="updateDeployModalCmd('wget')" id="deployToolWget" class="flex-1 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">wget (推荐)</button>
+              <button type="button" onclick="updateDeployModalCmd('curl')" id="deployToolCurl" class="flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">curl</button>
+            </div>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">安装组件</label>
+            <select id="deployComponentSelect" onchange="updateDeployModalCmd()" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs focus:outline-none">
+              <option value="all">完整安装 (Komari探针 + Sing-box + BBR)</option>
+              <option value="skip_sb">仅安装探针 (跳过Sing-box)</option>
+              <option value="skip_probe">仅安装Sing-box (跳过探针)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Terminal Command Box -->
+        <div class="space-y-2">
+          <label class="block font-semibold text-slate-600 dark:text-slate-400">一键安装命令 (VPS 终端复制粘贴回车即可):</label>
+          <div class="p-3.5 rounded-2xl bg-slate-900 text-slate-200 font-mono text-xs break-all select-all relative">
+            <span id="deployModalCmdText" class="text-emerald-400"></span>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="grid grid-cols-2 gap-3 pt-1">
+          <button onclick="copyDeployModalCmd()" class="py-2.5 rounded-xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 flex items-center justify-center gap-1.5 btn-tap">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>复制一键指令</span>
+          </button>
+          <button onclick="copyDeployModalToken()" class="py-2.5 rounded-xl font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition flex items-center justify-center gap-1.5 btn-tap">
+            <i data-lucide="key" class="w-3.5 h-3.5"></i>
+            <span>仅复制 Token</span>
+          </button>
+        </div>
+
+        <p class="text-[11px] text-slate-400 pt-1">
+          💡 提示：本一键命令已集成系统 BBR 内核拥塞优化、自启守护与心跳汇报，重装或更换 VPS 随时重新运行即可恢复在线。
+        </p>
       </div>
     </div>
   </div>
@@ -1229,7 +1651,11 @@
     <div class="sheet-panel w-full bg-white dark:bg-zinc-900 rounded-t-3xl p-5 shadow-2xl border-t border-slate-200 dark:border-zinc-800 pb-10">
       <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-4"></div>
       <h3 class="text-sm font-bold text-slate-400 mb-3 px-2">更多管理模块</h3>
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+        <button onclick="switchTab('theme'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-fuchsia-50 dark:bg-fuchsia-950/20 text-fuchsia-600 flex flex-col items-center gap-2 btn-tap">
+          <i data-lucide="palette" class="w-6 h-6"></i>
+          <span class="text-xs font-bold">主题设置</span>
+        </button>
         <button onclick="switchTab('rules'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 flex flex-col items-center gap-2 btn-tap">
           <i data-lucide="git-fork" class="w-6 h-6"></i>
           <span class="text-xs font-bold">分流配置</span>
@@ -1291,7 +1717,7 @@
       initTheme();
       initLucide();
       const hash = window.location.hash.replace('#', '');
-      if (['probe', 'nodes', 'ping', 'users', 'rules', 'traffic', 'alerts', 'settings'].includes(hash)) {
+      if (['probe', 'nodes', 'ping', 'users', 'theme', 'rules', 'traffic', 'alerts', 'settings'].includes(hash)) {
         switchTab(hash);
       }
       await checkAuthAndLoad();
@@ -1462,6 +1888,7 @@
         loadNodes(),
         loadPingTasks(),
         loadUsers(),
+        loadThemeConfig(),
         loadRules(),
         loadAlerts(),
         loadSystem(),
@@ -1654,6 +2081,10 @@
                 <span class="text-purple-500">↑ ${formatSpeed(s.out_rate || 0)}</span>
               </div>
               <div class="flex items-center gap-1.5">
+                <button onclick="openServerDeployModal('${s.uuid}')" class="px-2.5 py-1 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap flex items-center gap-1" title="查看专属一键对接指令">
+                  <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
+                  <span>部署指令</span>
+                </button>
                 <button onclick="openServerEditModal('${s.uuid}')" class="px-2.5 py-1 rounded-lg text-xs font-semibold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1" title="配置服务器与账单">
                   <i data-lucide="settings-2" class="w-3.5 h-3.5"></i>
                   <span>配置与账单</span>
@@ -2204,6 +2635,103 @@
       copyText(text, '一键安装命令已复制到剪贴板！');
     }
 
+    function setEditDeployCmdTool(tool) {
+      state.editDeployTool = tool;
+      const btnW = document.getElementById('toolBtnWget');
+      const btnC = document.getElementById('toolBtnCurl');
+      if (btnW && btnC) {
+        btnW.className = tool === 'wget' 
+          ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white' 
+          : 'px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
+        btnC.className = tool === 'curl' 
+          ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white' 
+          : 'px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
+      }
+      const host = window.location.host;
+      const proto = window.location.protocol;
+      const ep = `${proto}//${host}`;
+      const token = state.currentEditServerToken || '';
+      let cmd = '';
+      if (tool === 'curl') {
+        cmd = `curl -fsSL ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}`;
+      } else {
+        cmd = `wget -qO- ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}`;
+      }
+      const el = document.getElementById('editDeployCmdText');
+      if (el) el.textContent = cmd;
+    }
+
+    function copyEditDeployCmd() {
+      const text = document.getElementById('editDeployCmdText').textContent;
+      copyText(text, '此服务器一键对接命令已复制！可在 VPS 执行');
+    }
+
+    function copyEditDeployToken() {
+      const token = state.currentEditServerToken || '';
+      if (token) copyText(token, '服务器 Token 已复制！');
+    }
+
+    function openServerDeployModal(uuid) {
+      const s = state.servers.find(srv => srv.uuid === uuid);
+      if (!s) return;
+      state.activeDeployServer = s;
+      state.deployTool = 'wget';
+      document.getElementById('deployServerNameText').textContent = s.name || 'Server';
+      document.getElementById('deployServerIpText').textContent = s.ipv4 || s.ipv6 || '无IP';
+      document.getElementById('deployServerTokenBadge').textContent = s.token || '无 Token';
+      document.getElementById('deployComponentSelect').value = 'all';
+      updateDeployModalCmd('wget');
+      openModal('modalServerDeploy');
+    }
+
+    function updateDeployModalCmd(tool) {
+      if (tool) state.deployTool = tool;
+      const currentTool = state.deployTool || 'wget';
+      const s = state.activeDeployServer;
+      if (!s) return;
+
+      const btnWget = document.getElementById('deployToolWget');
+      const btnCurl = document.getElementById('deployToolCurl');
+      if (btnWget && btnCurl) {
+        btnWget.className = currentTool === 'wget' 
+          ? 'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition' 
+          : 'flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition';
+        btnCurl.className = currentTool === 'curl' 
+          ? 'flex-1 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition' 
+          : 'flex-1 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition';
+      }
+
+      const comp = document.getElementById('deployComponentSelect').value;
+      const host = window.location.host;
+      const proto = window.location.protocol;
+      const ep = `${proto}//${host}`;
+      const token = s.token || '';
+
+      let flags = '';
+      if (comp === 'skip_sb') flags = ' --skip-singbox';
+      else if (comp === 'skip_probe') flags = ' --skip-probe';
+
+      let cmd = '';
+      if (currentTool === 'curl') {
+        cmd = `curl -fsSL ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+      } else {
+        cmd = `wget -qO- ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+      }
+      document.getElementById('deployModalCmdText').textContent = cmd;
+    }
+
+    function copyDeployModalCmd() {
+      const text = document.getElementById('deployModalCmdText').textContent;
+      copyText(text, '一键安装部署指令已复制！直接粘贴到 VPS 回车');
+    }
+
+    function copyDeployModalToken() {
+      const s = state.activeDeployServer;
+      if (s && s.token) {
+        copyText(s.token, 'Token 已复制！');
+      }
+    }
+
     function openServerEditModal(uuid) {
       const s = state.servers.find(srv => srv.uuid === uuid);
       if (!s) return;
@@ -2212,6 +2740,11 @@
       document.getElementById('editServerGroup').value = s.group || '';
       document.getElementById('editServerTags').value = s.tags || '';
       document.getElementById('editServerWeight').value = s.weight || 0;
+
+      // Populate deploy command box inside modal
+      state.currentEditServerToken = s.token || '';
+      document.getElementById('editDeployTokenText').textContent = s.token || '(无 Token)';
+      setEditDeployCmdTool('wget');
 
       document.getElementById('editServerPrice').value = (s.price !== undefined && s.price !== null) ? s.price : '';
       document.getElementById('editServerCurrency').value = s.currency || '$';
@@ -2900,6 +3433,201 @@
       }
     }
 
+    // ==============================================================
+    // THEME SETTINGS & VISUAL STUDIO
+    // ==============================================================
+    async function loadThemeConfig() {
+      try {
+        const res = await fetch('/api/node-mgr/theme/config?_t=' + Date.now()).then(r => r.json());
+        if (res.ok) {
+          state.themeData = res;
+          renderThemeSettingsUI();
+        }
+      } catch(e) {
+        console.error('Failed to load theme config:', e);
+      }
+    }
+
+    function renderThemeSettingsUI() {
+      if (!state.themeData) return;
+      const { active_theme, installed_themes, theme_config } = state.themeData;
+      
+      const badge = document.getElementById('badgeThemeName');
+      if (badge) badge.textContent = active_theme || '默认';
+
+      const curBadge = document.getElementById('currentThemeBadge');
+      if (curBadge) curBadge.textContent = '当前: ' + (active_theme || '默认');
+
+      const cfg = theme_config || {};
+      
+      const mediaType = cfg.backgroundMediaType || 'image';
+      const rImage = document.getElementById('themeBgTypeImage');
+      const rVideo = document.getElementById('themeBgTypeVideo');
+      const rNone = document.getElementById('themeBgTypeNone');
+      if (rVideo && mediaType === 'video') rVideo.checked = true;
+      else if (rNone && mediaType === 'none') rNone.checked = true;
+      else if (rImage) rImage.checked = true;
+
+      const bgVideo = document.getElementById('themeBackgroundVideo');
+      if (bgVideo) bgVideo.value = cfg.backgroundVideo || '/assets/LanternRivers_1080p15fps2Mbps3s.mp4';
+
+      const bgImg = document.getElementById('themeBackgroundImage');
+      if (bgImg) bgImg.value = cfg.backgroundImage || '';
+
+      const bgImgMobile = document.getElementById('themeBackgroundImageMobile');
+      if (bgImgMobile) bgImgMobile.value = cfg.backgroundImageMobile || '';
+
+      const bgAlign = document.getElementById('themeBackgroundAlignment');
+      if (bgAlign) bgAlign.value = cfg.backgroundAlignment || 'cover,center';
+
+      const opacity = cfg.surfaceOpacity !== undefined ? cfg.surfaceOpacity : 100;
+      const opacitySlider = document.getElementById('themeSurfaceOpacity');
+      if (opacitySlider) {
+        opacitySlider.value = opacity;
+        const opacityValText = document.getElementById('surfaceOpacityVal');
+        if (opacityValText) opacityValText.textContent = opacity + '%';
+      }
+
+      const ambientToggle = document.getElementById('themeEnableAmbientEffect');
+      if (ambientToggle) ambientToggle.checked = !!cfg.enableAmbientEffect;
+
+      const ambientSelect = document.getElementById('themeAmbientEffect');
+      if (ambientSelect) ambientSelect.value = cfg.ambientEffect || 'sakura';
+
+      const appearance = document.getElementById('themeDefaultAppearance');
+      if (appearance) appearance.value = cfg.defaultAppearance || 'system';
+
+      const deskMode = document.getElementById('themeDesktopNodeViewMode');
+      if (deskMode) deskMode.value = cfg.desktopNodeViewMode || 'large';
+
+      const mobMode = document.getElementById('themeMobileNodeViewMode');
+      if (mobMode) mobMode.value = cfg.mobileNodeViewMode || 'compact';
+
+      const setCheck = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!val;
+      };
+
+      setCheck('themeShowGroupTabs', cfg.showGroupTabs !== false);
+      setCheck('themeShowRegionBar', cfg.showRegionBar !== false);
+      setCheck('themeShowHomeOverview', cfg.showHomeOverview !== false);
+      setCheck('themeShowConnections', cfg.showConnections);
+      setCheck('themeEnableHomeSort', cfg.enableHomeSort);
+      
+      const sortField = document.getElementById('themeHomeSortField');
+      if (sortField) sortField.value = cfg.homeSortField || 'default';
+      const sortDir = document.getElementById('themeHomeSortDirection');
+      if (sortDir) sortDir.value = cfg.homeSortDirection || 'asc';
+
+      setCheck('themeShowCostSummary', cfg.showCostSummary !== false);
+      setCheck('themeShowCostsToGuests', cfg.showCostsToGuests !== false);
+      setCheck('themeShowCostSummaryFloatingButton', cfg.showCostSummaryFloatingButton !== false);
+      setCheck('themeCompactShowBilling', cfg.compactShowBilling !== false);
+      setCheck('themeCompactShowTrafficTotal', cfg.compactShowTrafficTotal !== false);
+      setCheck('themeShowTodayTrafficPopover', cfg.showTodayTrafficPopover !== false);
+      setCheck('themeShowBandwidthRating', cfg.showBandwidthRating !== false);
+      setCheck('themeShowAssetRating', cfg.showAssetRating !== false);
+
+      setCheck('themeEnableHomepageMultiPing', cfg.enableHomepageMultiPing !== false);
+
+      renderThemePingTaskCheckboxes(cfg.homepageMultiPingTaskIds || [3, 2, 1]);
+    }
+
+    function renderThemePingTaskCheckboxes(selectedIds) {
+      const container = document.getElementById('themePingTasksList');
+      if (!container) return;
+      if (!state.pingTasks || state.pingTasks.length === 0) {
+        container.innerHTML = '<span class="text-xs text-slate-400">暂无测速任务，请在“延迟设置”中创建</span>';
+        return;
+      }
+      container.innerHTML = state.pingTasks.map(t => {
+        const isChecked = selectedIds && selectedIds.includes(t.id) ? 'checked' : '';
+        return `
+          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-700/50">
+            <input type="checkbox" name="themePingTask" value="${t.id}" ${isChecked} class="rounded text-teal-600 focus:ring-0">
+            <span class="truncate text-slate-700 dark:text-slate-200">${escapeHtml(t.name)}</span>
+            <span class="text-[10px] text-slate-400 font-mono">(${t.type})</span>
+          </label>
+        `;
+      }).join('');
+    }
+
+    async function switchActiveTheme(themeName) {
+      try {
+        const res = await fetch('/api/node-mgr/theme/switch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: themeName })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`已成功切换前台主题为 ${themeName}！`, 'success');
+          await loadThemeConfig();
+        } else {
+          showToast('切换失败: ' + (res.error || '未知错误'), 'error');
+        }
+      } catch(e) {
+        showToast('请求异常: ' + e.message, 'error');
+      }
+    }
+
+    async function saveThemeConfig() {
+      const curConfig = (state.themeData && state.themeData.theme_config) ? { ...state.themeData.theme_config } : {};
+      
+      let bgType = 'image';
+      if (document.getElementById('themeBgTypeVideo') && document.getElementById('themeBgTypeVideo').checked) bgType = 'video';
+      else if (document.getElementById('themeBgTypeNone') && document.getElementById('themeBgTypeNone').checked) bgType = 'none';
+
+      const selectedPingTasks = Array.from(document.querySelectorAll('input[name="themePingTask"]:checked')).map(el => parseInt(el.value));
+
+      const updated = {
+        ...curConfig,
+        backgroundMediaType: bgType,
+        backgroundVideo: (document.getElementById('themeBackgroundVideo') ? document.getElementById('themeBackgroundVideo').value.trim() : ''),
+        backgroundImage: (document.getElementById('themeBackgroundImage') ? document.getElementById('themeBackgroundImage').value.trim() : ''),
+        backgroundImageMobile: (document.getElementById('themeBackgroundImageMobile') ? document.getElementById('themeBackgroundImageMobile').value.trim() : ''),
+        backgroundAlignment: (document.getElementById('themeBackgroundAlignment') ? document.getElementById('themeBackgroundAlignment').value : 'cover,center'),
+        surfaceOpacity: parseInt(document.getElementById('themeSurfaceOpacity') ? document.getElementById('themeSurfaceOpacity').value : 100) || 100,
+        enableAmbientEffect: document.getElementById('themeEnableAmbientEffect') ? document.getElementById('themeEnableAmbientEffect').checked : false,
+        ambientEffect: document.getElementById('themeAmbientEffect') ? document.getElementById('themeAmbientEffect').value : 'sakura',
+        defaultAppearance: document.getElementById('themeDefaultAppearance') ? document.getElementById('themeDefaultAppearance').value : 'system',
+        desktopNodeViewMode: document.getElementById('themeDesktopNodeViewMode') ? document.getElementById('themeDesktopNodeViewMode').value : 'large',
+        mobileNodeViewMode: document.getElementById('themeMobileNodeViewMode') ? document.getElementById('themeMobileNodeViewMode').value : 'compact',
+        showGroupTabs: document.getElementById('themeShowGroupTabs') ? document.getElementById('themeShowGroupTabs').checked : true,
+        showRegionBar: document.getElementById('themeShowRegionBar') ? document.getElementById('themeShowRegionBar').checked : true,
+        showHomeOverview: document.getElementById('themeShowHomeOverview') ? document.getElementById('themeShowHomeOverview').checked : true,
+        showConnections: document.getElementById('themeShowConnections') ? document.getElementById('themeShowConnections').checked : false,
+        enableHomeSort: document.getElementById('themeEnableHomeSort') ? document.getElementById('themeEnableHomeSort').checked : false,
+        homeSortField: document.getElementById('themeHomeSortField') ? document.getElementById('themeHomeSortField').value : 'default',
+        homeSortDirection: document.getElementById('themeHomeSortDirection') ? document.getElementById('themeHomeSortDirection').value : 'asc',
+        showCostSummary: document.getElementById('themeShowCostSummary') ? document.getElementById('themeShowCostSummary').checked : true,
+        showCostsToGuests: document.getElementById('themeShowCostsToGuests') ? document.getElementById('themeShowCostsToGuests').checked : true,
+        showCostSummaryFloatingButton: document.getElementById('themeShowCostSummaryFloatingButton') ? document.getElementById('themeShowCostSummaryFloatingButton').checked : true,
+        compactShowBilling: document.getElementById('themeCompactShowBilling') ? document.getElementById('themeCompactShowBilling').checked : true,
+        compactShowTrafficTotal: document.getElementById('themeCompactShowTrafficTotal') ? document.getElementById('themeCompactShowTrafficTotal').checked : true,
+        showTodayTrafficPopover: document.getElementById('themeShowTodayTrafficPopover') ? document.getElementById('themeShowTodayTrafficPopover').checked : true,
+        showBandwidthRating: document.getElementById('themeShowBandwidthRating') ? document.getElementById('themeShowBandwidthRating').checked : true,
+        showAssetRating: document.getElementById('themeShowAssetRating') ? document.getElementById('themeShowAssetRating').checked : true,
+        enableHomepageMultiPing: document.getElementById('themeEnableHomepageMultiPing') ? document.getElementById('themeEnableHomepageMultiPing').checked : true,
+        homepageMultiPingTaskIds: selectedPingTasks
+      };
+
+      try {
+        const res = await fetch('/api/node-mgr/theme/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ theme: 'LuminaPlus', config: updated })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('🎨 主题配置已保存并立即生效！前台已更新', 'success');
+          await loadThemeConfig();
+        } else {
+          showToast('保存失败: ' + (res.error || '未知错误'), 'error');
+        }
+      } catch(e) {
+        showToast('网络请求失败: ' + e.message, 'error');
+      }
+    }
+
     // Utilities
     function copyText(txt, successMsg = '已复制到剪贴板！') {
       if (navigator.clipboard && window.isSecureContext) {
@@ -2916,10 +3644,12 @@
     }
 
     function formatSpeed(bytesPerSec) {
-      if (!bytesPerSec || bytesPerSec <= 0) return '0 KB/s';
+      if (!bytesPerSec || bytesPerSec <= 0) return '0.0 KB/s';
       const k = 1024;
+      if (bytesPerSec < k) return bytesPerSec.toFixed(0) + ' B/s';
       if (bytesPerSec < k * k) return (bytesPerSec / k).toFixed(1) + ' KB/s';
-      return (bytesPerSec / (k * k)).toFixed(2) + ' MB/s';
+      if (bytesPerSec < k * k * k) return (bytesPerSec / (k * k)).toFixed(1) + ' MB/s';
+      return (bytesPerSec / (k * k * k)).toFixed(2) + ' GB/s';
     }
 
     function formatBytes(bytes) {

@@ -817,6 +817,8 @@ def get_servers_with_stats():
             "os": os_name or "",
             "arch": arch or "",
             "token": token or "",
+            "install_cmd_wget": f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}",
+            "install_cmd_curl": f"curl -fsSL https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}",
             "updated_at": str(rec_updated) if rec_updated else "",
             "price": float(price) if price is not None else 0.0,
             "billing_cycle": int(billing_cycle) if billing_cycle is not None else 0,
@@ -2694,6 +2696,75 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "configs": configs})
             return
 
+        # Theme Configuration GET Endpoint
+        if path in ["/api/theme/config", "/api/node-mgr/theme/config"]:
+            active_theme = "default"
+            installed_themes = [
+                {
+                    "short": "default",
+                    "name": "Komari 默认主题 (Default)",
+                    "description": "Komari 官方原生极简监控大屏",
+                    "version": "1.0.0",
+                    "author": "Komari",
+                    "builtin": True
+                }
+            ]
+            theme_config = {}
+
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT value FROM configs WHERE key = 'theme'")
+                row = c_k.fetchone()
+                if row and row[0]:
+                    try:
+                        active_theme = json.loads(row[0])
+                    except Exception:
+                        active_theme = str(row[0]).strip('"')
+
+                # Scan theme directory
+                theme_dir = "/opt/komari/data/theme"
+                if not os.path.exists(theme_dir) and os.path.exists("./data/theme"):
+                    theme_dir = "./data/theme"
+
+                if os.path.exists(theme_dir):
+                    for d in os.listdir(theme_dir):
+                        dp = os.path.join(theme_dir, d)
+                        if os.path.isdir(dp):
+                            cfg_path = os.path.join(dp, "komari-theme.json")
+                            if os.path.exists(cfg_path):
+                                try:
+                                    with open(cfg_path, "r", encoding="utf-8") as f:
+                                        tinfo = json.load(f)
+                                        tinfo["short"] = tinfo.get("short") or d
+                                        installed_themes.append(tinfo)
+                                except Exception:
+                                    installed_themes.append({"short": d, "name": d})
+                            else:
+                                installed_themes.append({"short": d, "name": d})
+
+                # Fetch theme configuration for active theme (or LuminaPlus)
+                target_short = active_theme if active_theme != "default" else "LuminaPlus"
+                c_k.execute("SELECT data FROM theme_configurations WHERE short = ?", (target_short,))
+                t_row = c_k.fetchone()
+                if not t_row and target_short != "LuminaPlus":
+                    c_k.execute("SELECT data FROM theme_configurations WHERE short = 'LuminaPlus'")
+                    t_row = c_k.fetchone()
+                if t_row and t_row[0]:
+                    try:
+                        theme_config = json.loads(t_row[0])
+                    except Exception:
+                        pass
+                conn_k.close()
+
+            self._send_json({
+                "ok": True,
+                "active_theme": active_theme,
+                "installed_themes": installed_themes,
+                "theme_config": theme_config
+            })
+            return
+
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
             servers_data = get_cached_servers_with_stats()
             servers_map = {s["uuid"]: s for s in servers_data.get("servers", [])}
@@ -3494,6 +3565,37 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 for k, v in body.items():
                     val_str = json.dumps(v)
                     c_k.execute("INSERT OR REPLACE INTO configs (key, value) VALUES (?, ?)", (k, val_str))
+                conn_k.commit()
+                conn_k.close()
+            self._send_json({"ok": True})
+            return
+
+        # Theme Switching & Configuration POST Endpoints
+        if path in ["/api/theme/switch", "/api/node-mgr/theme/switch"]:
+            target_theme = str(body.get("theme") or "").strip()
+            if not target_theme:
+                self._send_json({"ok": False, "error": "主题标识不能为空"}, 400)
+                return
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('theme', ?)", (json.dumps(target_theme),))
+                conn_k.commit()
+                conn_k.close()
+            self._send_json({"ok": True, "active_theme": target_theme})
+            return
+
+        if path in ["/api/theme/config", "/api/node-mgr/theme/config"]:
+            target_theme = str(body.get("theme") or "LuminaPlus").strip()
+            cfg_data = body.get("config")
+            if cfg_data is None:
+                self._send_json({"ok": False, "error": "配置内容不能为空"}, 400)
+                return
+            data_str = json.dumps(cfg_data, ensure_ascii=False)
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("INSERT OR REPLACE INTO theme_configurations (short, data) VALUES (?, ?)", (target_theme, data_str))
                 conn_k.commit()
                 conn_k.close()
             self._send_json({"ok": True})
