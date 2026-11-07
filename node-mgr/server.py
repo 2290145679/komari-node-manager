@@ -18,6 +18,7 @@ import re
 import io
 import zipfile
 import shutil
+import html
 from datetime import datetime
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -47,6 +48,59 @@ os.makedirs(THEME_DIR, exist_ok=True)
 
 _market_cache = {"ts": 0, "data": []}
 
+DEFAULT_THEME_PREVIEW_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="50%" stop-color="#6366F1"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+    <linearGradient id="cardBg" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.22)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.08)"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <circle cx="100" cy="80" r="160" fill="rgba(255,255,255,0.06)" />
+  <circle cx="720" cy="360" r="200" fill="rgba(0,0,0,0.12)" />
+  <g transform="translate(60, 40)">
+    <rect x="0" y="0" width="680" height="46" rx="14" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+    <circle cx="26" cy="23" r="8" fill="#10B981" />
+    <text x="46" y="29" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="16" font-weight="900" fill="#FFFFFF">Komari 官方原生大屏</text>
+    <rect x="560" y="12" width="96" height="22" rx="11" fill="rgba(255,255,255,0.25)" />
+    <text x="608" y="27" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF">全网在线 9/9</text>
+    <rect x="0" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+    <circle cx="24" cy="88" r="5" fill="#10B981" />
+    <text x="38" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">HKcloudx AMD 1号鸡</text>
+    <text x="24" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 28%  RAM 35%</text>
+    <rect x="24" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
+    <rect x="24" y="124" width="55" height="6" rx="3" fill="#34D399" />
+    <text x="24" y="152" font-family="monospace" font-size="11" fill="rgba(255,255,255,0.85)">↓ 18.5 MB/s ↑ 4.2 MB/s</text>
+    <text x="24" y="172" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">连通率 100.0% · 32ms</text>
+    <rect x="233" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+    <circle cx="257" cy="88" r="5" fill="#10B981" />
+    <text x="271" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">甲骨文 ARM 韩国首尔</text>
+    <text x="257" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 14%  RAM 22%</text>
+    <rect x="257" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
+    <rect x="257" y="124" width="40" height="6" rx="3" fill="#60A5FA" />
+    <text x="257" y="152" font-family="monospace" font-size="11" fill="rgba(255,255,255,0.85)">↓ 32.1 MB/s ↑ 12.8 MB/s</text>
+    <text x="257" y="172" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">连通率 100.0% · 48ms</text>
+    <rect x="467" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+    <circle cx="491" cy="88" r="5" fill="#10B981" />
+    <text x="505" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">懒猫 JPL 日本东京</text>
+    <text x="491" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 45%  RAM 50%</text>
+    <rect x="491" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
+    <rect x="491" y="124" width="90" height="6" rx="3" fill="#FBBF24" />
+    <text x="491" y="152" font-family="monospace" font-size="11" fill="rgba(255,255,255,0.85)">↓ 8.4 MB/s ↑ 2.1 MB/s</text>
+    <text x="491" y="172" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">连通率 99.8% · 65ms</text>
+    <rect x="0" y="215" width="680" height="145" rx="18" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
+    <text x="32" y="260" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" font-size="22" font-weight="900" fill="#FFFFFF">Komari 官方原生默认主题 (Classic Default)</text>
+    <text x="32" y="292" font-family="sans-serif" font-size="13" fill="rgba(255,255,255,0.9)">极简架构 · 响应敏捷 · 原生高帧率探针实时监控</text>
+    <rect x="32" y="312" width="100" height="26" rx="13" fill="#10B981" />
+    <text x="82" y="329" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="bold" fill="#FFFFFF">✓ 官方内置</text>
+  </g>
+</svg>"""
+
 def get_installed_themes_list(active_theme=""):
     installed = [
         {
@@ -57,8 +111,8 @@ def get_installed_themes_list(active_theme=""):
             "author": "Komari 官方",
             "url": "https://github.com/komari-monitor/komari",
             "homepage": "https://github.com/komari-monitor/komari",
-            "preview": "",
-            "preview_url": "",
+            "preview": "/api/node-mgr/theme/preview?theme=default",
+            "preview_url": "/api/node-mgr/theme/preview?theme=default",
             "builtin": True,
             "is_builtin": True,
             "is_active": (active_theme in ["default", "", None])
@@ -2928,6 +2982,16 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Missing theme parameter")
                 return
             theme_short = re.sub(r"[^a-zA-Z0-9_-]", "", theme_short)
+            if theme_short.lower() in ["default", ""]:
+                svg_data = DEFAULT_THEME_PREVIEW_SVG.encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+                self.send_header("Content-Length", str(len(svg_data)))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(svg_data)
+                return
+
             dp = os.path.join(THEME_DIR, theme_short)
             for fname, mime in [("preview.png", "image/png"), ("preview.webp", "image/webp"), ("preview.jpg", "image/jpeg"), ("preview.svg", "image/svg+xml")]:
                 fpath = os.path.join(dp, fname)
@@ -2944,7 +3008,24 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                         return
                     except Exception:
                         pass
-            self.send_error(404, "Preview not found")
+            # Fallback SVG for any other theme that doesn't have an image file
+            fallback_svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" width="800" height="450">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/><stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#bg)"/>
+  <text x="400" y="210" text-anchor="middle" font-family="sans-serif" font-size="48">🎨</text>
+  <text x="400" y="260" text-anchor="middle" font-family="sans-serif" font-size="22" font-weight="bold" fill="#F8FAFC">{html.escape(theme_short)}</text>
+  <text x="400" y="295" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#94A3B8">Komari Monitor Theme</text>
+</svg>""".encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "image/svg+xml; charset=utf-8")
+            self.send_header("Content-Length", str(len(fallback_svg)))
+            self.send_header("Cache-Control", "public, max-age=86400")
+            self.end_headers()
+            self.wfile.write(fallback_svg)
             return
 
         # Theme Configuration GET Endpoint (Legacy / compatibility)
@@ -4185,6 +4266,44 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             conn.close()
 
             self._send_json({"ok": True, "id": new_id, "name": clone_name, "ipv6": ipv6})
+            return
+
+        if path in ["/api/nodes/edit", "/api/node-mgr/nodes/edit"]:
+            node_id = body.get("id")
+            if not node_id:
+                self._send_json({"ok": False, "error": "缺少节点 ID"}, 400)
+                return
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, server_ip, port, uuid_or_passwd, sni, public_key, short_id FROM nodes WHERE id = ?", (node_id,))
+            row = c.fetchone()
+            if not row:
+                conn.close()
+                self._send_json({"ok": False, "error": "节点不存在"}, 404)
+                return
+
+            name = str(body.get("name") or "").strip()
+            server_ip = str(body.get("server_ip") or "").strip()
+            port = int(body.get("port") or 0)
+            uuid_or_passwd = str(body.get("uuid_or_passwd") or "").strip()
+            sni = str(body.get("sni") or "").strip()
+            public_key = str(body.get("public_key") or "").strip()
+            short_id = str(body.get("short_id") or "").strip()
+
+            c.execute("""
+                UPDATE nodes SET
+                    name = coalesce(nullif(?, ''), name),
+                    server_ip = coalesce(nullif(?, ''), server_ip),
+                    port = case when ? > 0 then ? else port end,
+                    uuid_or_passwd = coalesce(nullif(?, ''), uuid_or_passwd),
+                    sni = ?,
+                    public_key = ?,
+                    short_id = ?
+                WHERE id = ?
+            """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id, node_id))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True, "message": "节点配置已更新"})
             return
 
         self._send_json({"error": "not found"}, 404)
