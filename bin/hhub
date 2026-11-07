@@ -19,7 +19,11 @@ BOLD='\033[1m'
 DIM='\033[2m'
 
 # 核心路径常量
-KOMARI_DIR="/opt/komari"
+if [ -d "/opt/komari-pro" ]; then
+    KOMARI_DIR="/opt/komari-pro"
+else
+    KOMARI_DIR="/opt/komari"
+fi
 DATA_DIR="${KOMARI_DIR}/data"
 CONF_DIR="${KOMARI_DIR}/conf"
 NODE_MGR_DIR="${KOMARI_DIR}/node-mgr"
