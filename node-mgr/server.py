@@ -643,14 +643,15 @@ def get_servers_with_stats():
         return {"ok": True, "servers": [], "singbox_online_count": 0, "total_servers": 0, "total_traffic": 0, "total_raw_traffic": 0}
 
     conn_k = sqlite3.connect(KOMARI_DB)
+    conn_k.row_factory = sqlite3.Row
     c_k = conn_k.cursor()
-    c_k.execute("SELECT uuid, name, ipv4, ipv6, os, arch, token, updated_at FROM clients ORDER BY name ASC")
-    clients = c_k.fetchall()
+    c_k.execute('SELECT * FROM clients ORDER BY weight DESC, name ASC')
+    clients = [dict(r) for r in c_k.fetchall()]
     conn_k.close()
 
     # Auto-cleanup orphan nodes whose server was deleted from Komari
     try:
-        valid_uuids = set(r[0] for r in clients)
+        valid_uuids = set(r["uuid"] for r in clients)
         conn_clean = sqlite3.connect(NODES_DB)
         c_clean = conn_clean.cursor()
         c_clean.execute("SELECT id, server_uuid, name FROM nodes WHERE is_external = 0 AND server_uuid != 'external'")
@@ -688,7 +689,7 @@ def get_servers_with_stats():
                 return uuid_val, None
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-            recent_metrics = dict(executor.map(fetch_recent, [r[0] for r in clients]))
+            recent_metrics = dict(executor.map(fetch_recent, [r["uuid"] for r in clients]))
     except Exception:
         pass
 
@@ -717,7 +718,7 @@ def get_servers_with_stats():
     # Auto-initialize missing baselines
     new_baselines = []
     for row in clients:
-        uuid_val = row[0]
+        uuid_val = row["uuid"]
         rec = recent_metrics.get(uuid_val)
         if rec and "network" in rec:
             cur_up = int(rec["network"].get("totalUp", 0))
@@ -748,7 +749,28 @@ def get_servers_with_stats():
     total_raw_traffic = 0
 
     for row in clients:
-        uuid_val, name, ip4, ip6, os_name, arch, token, updated_at = row
+        uuid_val = row["uuid"]
+        name = row.get("name")
+        ip4 = row.get("ipv4")
+        ip6 = row.get("ipv6")
+        os_name = row.get("os")
+        arch = row.get("arch")
+        token = row.get("token")
+        updated_at = row.get("updated_at")
+        price = row.get("price")
+        billing_cycle = row.get("billing_cycle")
+        currency = row.get("currency") or "$"
+        auto_renewal = bool(row.get("auto_renewal"))
+        expired_at = row.get("expired_at")
+        traffic_limit = row.get("traffic_limit") or 0
+        traffic_limit_type = row.get("traffic_limit_type") or "max"
+        group_name = row.get("group") or ""
+        tags = row.get("tags") or ""
+        hidden = bool(row.get("hidden"))
+        weight = row.get("weight") or 0
+        remark = row.get("remark") or ""
+        public_remark = row.get("public_remark") or ""
+
         last_seen = heartbeats.get(token, 0)
         is_online = (now - last_seen) <= 35 if last_seen > 0 else False
 
@@ -796,6 +818,19 @@ def get_servers_with_stats():
             "arch": arch or "",
             "token": token or "",
             "updated_at": str(rec_updated) if rec_updated else "",
+            "price": float(price) if price is not None else 0.0,
+            "billing_cycle": int(billing_cycle) if billing_cycle is not None else 0,
+            "currency": currency or "$",
+            "auto_renewal": bool(auto_renewal),
+            "expired_at": str(expired_at) if expired_at else "",
+            "traffic_limit": int(traffic_limit) if traffic_limit is not None else 0,
+            "traffic_limit_type": traffic_limit_type or "max",
+            "group": group_name or "",
+            "tags": tags or "",
+            "hidden": bool(hidden),
+            "weight": int(weight) if weight is not None else 0,
+            "remark": remark or "",
+            "public_remark": public_remark or "",
             "probe_online": is_probe_online,
             "singbox_online": is_online,
             "server_online": is_server_online,
@@ -2619,6 +2654,46 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             })
             return
 
+        if path in ["/api/ping-tasks", "/api/node-mgr/ping-tasks"]:
+            tasks = []
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT id, weight, name, clients, all_clients, type, target, interval FROM ping_tasks ORDER BY weight DESC, id ASC")
+                for r in c_k.fetchall():
+                    try:
+                        c_list = json.loads(r[3]) if r[3] else []
+                    except:
+                        c_list = []
+                    tasks.append({
+                        "id": r[0],
+                        "weight": r[1],
+                        "name": r[2],
+                        "clients": c_list,
+                        "all_clients": bool(r[4]),
+                        "type": r[5] or "tcp",
+                        "target": r[6],
+                        "interval": r[7] or 60
+                    })
+                conn_k.close()
+            self._send_json({"ok": True, "tasks": tasks})
+            return
+
+        if path in ["/api/system/configs", "/api/node-mgr/system/configs"]:
+            configs = {}
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT key, value FROM configs")
+                for k, v in c_k.fetchall():
+                    try:
+                        configs[k] = json.loads(v)
+                    except:
+                        configs[k] = v
+                conn_k.close()
+            self._send_json({"ok": True, "configs": configs})
+            return
+
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":
             servers_data = get_cached_servers_with_stats()
             servers_map = {s["uuid"]: s for s in servers_data.get("servers", [])}
@@ -3290,17 +3365,138 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
         if path in ["/api/servers/edit", "/api/node-mgr/servers/edit"]:
             suuid = body.get("uuid")
-            name = body.get("name")
-            if suuid and name and os.path.exists(KOMARI_DB):
+            if not suuid or not os.path.exists(KOMARI_DB):
+                self._send_json({"ok": False, "error": "invalid params"}, 400)
+                return
+
+            fields = []
+            vals = []
+            allowed = [
+                ("name", str), ("price", float), ("billing_cycle", int),
+                ("currency", str), ("auto_renewal", int), ("expired_at", str),
+                ("traffic_limit", int), ("traffic_limit_type", str),
+                ("group", str), ("tags", str), ("hidden", int),
+                ("weight", int), ("remark", str), ("public_remark", str)
+            ]
+            for f_name, f_type in allowed:
+                if f_name in body:
+                    val = body[f_name]
+                    if val is not None and f_name in ["auto_renewal", "hidden"]:
+                        val = 1 if val else 0
+                    elif val is not None and f_type == float:
+                        try: val = float(val)
+                        except: val = 0.0
+                    elif val is not None and f_type == int:
+                        try: val = int(val)
+                        except: val = 0
+                    fields.append(f"`{f_name}` = ?")
+                    vals.append(val)
+
+            fields.append("`updated_at` = ?")
+            vals.append(datetime.now().isoformat())
+            vals.append(suuid)
+
+            conn_k = sqlite3.connect(KOMARI_DB)
+            c_k = conn_k.cursor()
+            c_k.execute(f"UPDATE clients SET {', '.join(fields)} WHERE uuid = ?", vals)
+            conn_k.commit()
+            conn_k.close()
+
+            if "name" in body and body["name"]:
+                conn_n = sqlite3.connect(NODES_DB)
+                c_n = conn_n.cursor()
+                c_n.execute("UPDATE nodes SET server_name = ? WHERE server_uuid = ?", (body["name"], suuid))
+                conn_n.commit()
+                conn_n.close()
+
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/ping-tasks/save", "/api/node-mgr/ping-tasks/save"]:
+            tid = body.get("id")
+            name = str(body.get("name", "")).strip()
+            target = str(body.get("target", "")).strip()
+            ttype = body.get("type", "tcp")
+            interval = int(body.get("interval", 60))
+            all_clients = 1 if body.get("all_clients", True) else 0
+            clients_json = json.dumps(body.get("clients", []))
+            weight = int(body.get("weight", 0))
+
+            if not name or not target:
+                self._send_json({"ok": False, "error": "任务名称和目标地址不能为空"}, 400)
+                return
+
+            conn_k = sqlite3.connect(KOMARI_DB)
+            c_k = conn_k.cursor()
+            if tid:
+                c_k.execute("""
+                    UPDATE ping_tasks SET name=?, target=?, type=?, interval=?, all_clients=?, clients=?, weight=? WHERE id=?
+                """, (name, target, ttype, interval, all_clients, clients_json, weight, tid))
+            else:
+                c_k.execute("""
+                    INSERT INTO ping_tasks (name, target, type, interval, all_clients, clients, weight)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (name, target, ttype, interval, all_clients, clients_json, weight))
+                tid = c_k.lastrowid
+            conn_k.commit()
+            conn_k.close()
+            self._send_json({"ok": True, "id": tid})
+            return
+
+        if path in ["/api/ping-tasks/delete", "/api/node-mgr/ping-tasks/delete"]:
+            tid = body.get("id")
+            if tid and os.path.exists(KOMARI_DB):
                 conn_k = sqlite3.connect(KOMARI_DB)
                 c_k = conn_k.cursor()
-                c_k.execute("UPDATE clients SET name = ?, updated_at = ? WHERE uuid = ?",
-                            (name, datetime.now().isoformat(), suuid))
+                c_k.execute("DELETE FROM ping_tasks WHERE id = ?", (tid,))
                 conn_k.commit()
                 conn_k.close()
                 self._send_json({"ok": True})
                 return
-            self._send_json({"ok": False, "error": "invalid params"}, 400)
+            self._send_json({"ok": False, "error": "缺少任务ID"}, 400)
+            return
+
+        if path in ["/api/ping-tasks/test", "/api/node-mgr/ping-tasks/test"]:
+            target = body.get("target", "")
+            if not target:
+                self._send_json({"ok": False, "error": "缺少目标地址"}, 400)
+                return
+            host = target
+            port = 80
+            if ":" in target:
+                parts = target.split(":")
+                host = parts[0]
+                try: port = int(parts[1])
+                except: port = 80
+
+            t0 = time.time()
+            success = False
+            latency_ms = None
+            err = None
+            try:
+                family = socket.AF_INET6 if (":" in host or "[" in host) else socket.AF_INET
+                s = socket.socket(family, socket.SOCK_STREAM)
+                s.settimeout(2.5)
+                s.connect((host.strip("[]"), port))
+                latency_ms = round((time.time() - t0) * 1000, 1)
+                success = True
+                s.close()
+            except Exception as e:
+                err = str(e)
+
+            self._send_json({"ok": success, "latency_ms": latency_ms, "error": err, "target": target})
+            return
+
+        if path in ["/api/system/configs", "/api/node-mgr/system/configs"]:
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                for k, v in body.items():
+                    val_str = json.dumps(v)
+                    c_k.execute("INSERT OR REPLACE INTO configs (key, value) VALUES (?, ?)", (k, val_str))
+                conn_k.commit()
+                conn_k.close()
+            self._send_json({"ok": True})
             return
 
         if path in ["/api/bbr/enable", "/api/node-mgr/bbr/enable"]:
