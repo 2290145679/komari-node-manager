@@ -15,6 +15,9 @@ import threading
 import socket
 import ssl
 import re
+import io
+import zipfile
+import shutil
 from datetime import datetime
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -36,6 +39,166 @@ DOMAIN = "jgw2.yohoo.xyz"
 
 os.makedirs(CERT_DIR, exist_ok=True)
 os.makedirs("/opt/komari/data", exist_ok=True)
+
+THEME_DIR = "/opt/komari/data/theme"
+if not os.path.exists(THEME_DIR) and os.path.exists("./data/theme"):
+    THEME_DIR = "./data/theme"
+os.makedirs(THEME_DIR, exist_ok=True)
+
+_market_cache = {"ts": 0, "data": []}
+
+def get_installed_themes_list(active_theme=""):
+    installed = [
+        {
+            "short": "default",
+            "name": "Komari 默认主题 (Default)",
+            "description": "Komari 官方原生极简监控大屏，经典轻量",
+            "version": "1.0.0",
+            "author": "Komari 官方",
+            "url": "https://github.com/komari-monitor/komari",
+            "homepage": "https://github.com/komari-monitor/komari",
+            "preview": "",
+            "preview_url": "",
+            "builtin": True,
+            "is_builtin": True,
+            "is_active": (active_theme in ["default", "", None])
+        }
+    ]
+    if os.path.exists(THEME_DIR):
+        for d in sorted(os.listdir(THEME_DIR)):
+            dp = os.path.join(THEME_DIR, d)
+            if os.path.isdir(dp):
+                cfg_path = os.path.join(dp, "komari-theme.json")
+                has_preview = os.path.exists(os.path.join(dp, "preview.png")) or os.path.exists(os.path.join(dp, "preview.webp")) or os.path.exists(os.path.join(dp, "preview.jpg"))
+                preview_url = f"/api/node-mgr/theme/preview?theme={d}" if has_preview else ""
+                tinfo = {
+                    "short": d,
+                    "name": d,
+                    "version": "1.0.0",
+                    "author": "未知",
+                    "description": "",
+                    "url": "",
+                    "homepage": "",
+                    "preview": preview_url,
+                    "preview_url": preview_url,
+                    "builtin": False,
+                    "is_builtin": False,
+                    "is_active": (d == active_theme)
+                }
+                if os.path.exists(cfg_path):
+                    try:
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            parsed = json.load(f)
+                            tinfo.update(parsed)
+                            tinfo["short"] = parsed.get("short") or d
+                            if preview_url:
+                                tinfo["preview"] = preview_url
+                                tinfo["preview_url"] = preview_url
+                            tinfo["builtin"] = False
+                            tinfo["is_builtin"] = False
+                            tinfo["homepage"] = tinfo.get("url") or tinfo.get("homepage") or ""
+                            tinfo["is_active"] = (tinfo["short"] == active_theme or d == active_theme)
+                    except Exception:
+                        pass
+                installed.append(tinfo)
+    return installed
+
+def install_theme_from_zip_bytes(zip_bytes, custom_short=None):
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
+        manifest_path = None
+        for name in z.namelist():
+            if name.endswith("komari-theme.json") and not name.startswith("__MACOSX"):
+                manifest_path = name
+                break
+        
+        if not manifest_path:
+            raise ValueError("ZIP 压缩包中未检测到 komari-theme.json 配置文件，非标准 Komari 主题包")
+        
+        manifest_data = json.loads(z.read(manifest_path).decode("utf-8"))
+        short = custom_short or manifest_data.get("short") or manifest_data.get("name")
+        if not short:
+            raise ValueError("主题配置中缺少 short 或 name 标识")
+        
+        short = re.sub(r"[^a-zA-Z0-9_-]", "", short)
+        if not short:
+            short = "theme_" + str(int(time.time()))
+        
+        target_dir = os.path.join(THEME_DIR, short)
+        if os.path.exists(target_dir):
+            shutil.rmtree(target_dir)
+        os.makedirs(target_dir, exist_ok=True)
+        
+        prefix = os.path.dirname(manifest_path)
+        if prefix:
+            prefix += "/"
+        
+        for item in z.infolist():
+            if item.filename.startswith("__MACOSX"):
+                continue
+            if prefix and not item.filename.startswith(prefix):
+                continue
+            rel_path = item.filename[len(prefix):] if prefix else item.filename
+            if not rel_path or rel_path.endswith("/"):
+                continue
+            dest_file = os.path.join(target_dir, rel_path)
+            os.makedirs(os.path.dirname(dest_file), exist_ok=True)
+            with z.open(item) as src, open(dest_file, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+        
+        return {
+            "short": short,
+            "name": manifest_data.get("name", short),
+            "version": manifest_data.get("version", "1.0.0"),
+            "author": manifest_data.get("author", ""),
+            "description": manifest_data.get("description", ""),
+            "url": manifest_data.get("url", "")
+        }
+
+def resolve_theme_download_url(url):
+    url = url.strip()
+    if url.endswith(".zip"):
+        return url
+    
+    gh_match = re.match(r"^https?://github\.com/([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)/?$", url)
+    if gh_match:
+        owner, repo = gh_match.groups()
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/releases/latest"
+        try:
+            req = urllib.request.Request(api_url, headers={"User-Agent": "Komari-Theme-Manager"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                rel = json.loads(resp.read().decode())
+                assets = rel.get("assets", [])
+                for a in assets:
+                    if a.get("browser_download_url", "").endswith(".zip"):
+                        return a["browser_download_url"]
+        except Exception:
+            pass
+        return f"https://github.com/{owner}/{repo}/archive/refs/heads/main.zip"
+    return url
+
+def get_theme_market_catalog():
+    global _market_cache
+    now = time.time()
+    if _market_cache["data"] and (now - _market_cache["ts"]) < 300:
+        return _market_cache["data"]
+    
+    catalog_urls = [
+        "https://raw.githubusercontent.com/komari-monitor/theme-market/main/v1.json",
+        "https://cdn.jsdelivr.net/gh/komari-monitor/theme-market@main/v1.json"
+    ]
+    for curl in catalog_urls:
+        try:
+            req = urllib.request.Request(curl, headers={"User-Agent": "Komari-Theme-Manager"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+                themes = data.get("themes", [])
+                if themes:
+                    _market_cache["ts"] = now
+                    _market_cache["data"] = themes
+                    return themes
+        except Exception:
+            continue
+    return _market_cache.get("data", [])
 
 _cached_active_uuids = None
 _cached_active_uuids_time = 0
@@ -2696,7 +2859,95 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "configs": configs})
             return
 
-        # Theme Configuration GET Endpoint
+        # Theme Management & Market GET Endpoints
+        if path in ["/api/theme/list", "/api/node-mgr/theme/list"]:
+            active_theme = "default"
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT value FROM configs WHERE key = 'theme'")
+                row = c_k.fetchone()
+                if row and row[0]:
+                    try:
+                        active_theme = json.loads(row[0])
+                    except Exception:
+                        active_theme = str(row[0]).strip('"')
+                conn_k.close()
+            themes = get_installed_themes_list(active_theme)
+            self._send_json({"ok": True, "active_theme": active_theme, "themes": themes})
+            return
+
+        if path in ["/api/theme/market", "/api/node-mgr/theme/market"]:
+            active_theme = "default"
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT value FROM configs WHERE key = 'theme'")
+                row = c_k.fetchone()
+                if row and row[0]:
+                    try:
+                        active_theme = json.loads(row[0])
+                    except Exception:
+                        active_theme = str(row[0]).strip('"')
+                conn_k.close()
+            installed_list = get_installed_themes_list(active_theme)
+            installed_map = {t["short"]: t.get("version", "1.0.0") for t in installed_list}
+            market_themes = get_theme_market_catalog()
+            
+            # Enrich market themes with installed status
+            res_themes = []
+            for m in market_themes:
+                m_copy = dict(m)
+                m_short = m.get("short")
+                m_copy["download_url"] = m.get("download") or m.get("download_url") or ""
+                m_copy["preview_url"] = m.get("preview") or m.get("preview_url") or ""
+                m_copy["homepage"] = m.get("url") or m.get("homepage") or ""
+                if m_short in installed_map:
+                    m_copy["is_installed"] = True
+                    m_copy["installed_version"] = installed_map[m_short]
+                    m_copy["has_update"] = (m.get("version", "") != installed_map[m_short])
+                else:
+                    m_copy["is_installed"] = False
+                    m_copy["installed_version"] = ""
+                    m_copy["has_update"] = False
+                res_themes.append(m_copy)
+
+            self._send_json({
+                "ok": True,
+                "active_theme": active_theme,
+                "catalog": res_themes,
+                "themes": res_themes,
+                "installed_count": len(installed_list),
+                "total_market_count": len(market_themes)
+            })
+            return
+
+        if path in ["/api/theme/preview", "/api/node-mgr/theme/preview"]:
+            theme_short = query.get("theme", [""])[0]
+            if not theme_short:
+                self.send_error(400, "Missing theme parameter")
+                return
+            theme_short = re.sub(r"[^a-zA-Z0-9_-]", "", theme_short)
+            dp = os.path.join(THEME_DIR, theme_short)
+            for fname, mime in [("preview.png", "image/png"), ("preview.webp", "image/webp"), ("preview.jpg", "image/jpeg"), ("preview.svg", "image/svg+xml")]:
+                fpath = os.path.join(dp, fname)
+                if os.path.exists(fpath):
+                    try:
+                        with open(fpath, "rb") as f:
+                            data = f.read()
+                        self.send_response(200)
+                        self.send_header("Content-Type", mime)
+                        self.send_header("Content-Length", str(len(data)))
+                        self.send_header("Cache-Control", "public, max-age=86400")
+                        self.end_headers()
+                        self.wfile.write(data)
+                        return
+                    except Exception:
+                        pass
+            self.send_error(404, "Preview not found")
+            return
+
+        # Theme Configuration GET Endpoint (Legacy / compatibility)
         if path in ["/api/theme/config", "/api/node-mgr/theme/config"]:
             active_theme = "default"
             installed_themes = [
@@ -3570,9 +3821,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True})
             return
 
-        # Theme Switching & Configuration POST Endpoints
-        if path in ["/api/theme/switch", "/api/node-mgr/theme/switch"]:
-            target_theme = str(body.get("theme") or "").strip()
+        # Theme Management & Market POST Endpoints
+        if path in ["/api/theme/set", "/api/node-mgr/theme/set", "/api/theme/switch", "/api/node-mgr/theme/switch"]:
+            target_theme = str(body.get("short") or body.get("theme") or "").strip()
             if not target_theme:
                 self._send_json({"ok": False, "error": "主题标识不能为空"}, 400)
                 return
@@ -3583,6 +3834,91 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 conn_k.commit()
                 conn_k.close()
             self._send_json({"ok": True, "active_theme": target_theme})
+            return
+
+        if path in ["/api/theme/delete", "/api/node-mgr/theme/delete"]:
+            short = str(body.get("short") or "").strip()
+            if not short or short in ["default", ""]:
+                self._send_json({"ok": False, "error": "官方原生默认主题不可删除"}, 400)
+                return
+            short = re.sub(r"[^a-zA-Z0-9_-]", "", short)
+            target_dir = os.path.join(THEME_DIR, short)
+            if os.path.exists(target_dir):
+                try:
+                    shutil.rmtree(target_dir)
+                except Exception as e:
+                    self._send_json({"ok": False, "error": f"删除主题文件失败: {e}"}, 500)
+                    return
+
+            # If current active theme was deleted, reset to default
+            if os.path.exists(KOMARI_DB):
+                conn_k = sqlite3.connect(KOMARI_DB)
+                c_k = conn_k.cursor()
+                c_k.execute("SELECT value FROM configs WHERE key = 'theme'")
+                row = c_k.fetchone()
+                if row and row[0]:
+                    try:
+                        cur = json.loads(row[0])
+                        if cur == short:
+                            c_k.execute("INSERT OR REPLACE INTO configs (key, value) VALUES ('theme', ?)", (json.dumps("default"),))
+                            conn_k.commit()
+                    except Exception:
+                        pass
+                conn_k.close()
+            self._send_json({"ok": True})
+            return
+
+        if path in ["/api/theme/import", "/api/node-mgr/theme/import"]:
+            url = str(body.get("url") or "").strip()
+            if not url:
+                self._send_json({"ok": False, "error": "主题下载链接或 GitHub 仓库地址不能为空"}, 400)
+                return
+            try:
+                real_url = resolve_theme_download_url(url)
+                req = urllib.request.Request(
+                    real_url,
+                    headers={"User-Agent": "Komari-Theme-Manager/1.0 (+https://github.com/komari-monitor)"}
+                )
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    zip_bytes = resp.read()
+
+                theme_info = install_theme_from_zip_bytes(zip_bytes)
+                self._send_json({"ok": True, "theme": theme_info})
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"导入主题失败: {e}"}, 500)
+            return
+
+        if path in ["/api/theme/market/install", "/api/node-mgr/theme/market/install"]:
+            download_url = str(body.get("download_url") or "").strip()
+            short = str(body.get("short") or "").strip()
+            if not download_url:
+                self._send_json({"ok": False, "error": "缺少主题下载地址"}, 400)
+                return
+            try:
+                req = urllib.request.Request(
+                    download_url,
+                    headers={"User-Agent": "Komari-Theme-Manager/1.0"}
+                )
+                with urllib.request.urlopen(req, timeout=35) as resp:
+                    zip_bytes = resp.read()
+
+                theme_info = install_theme_from_zip_bytes(zip_bytes, custom_short=short)
+                self._send_json({"ok": True, "theme": theme_info})
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"安装主题失败: {e}"}, 500)
+            return
+
+        if path in ["/api/theme/upload", "/api/node-mgr/theme/upload"]:
+            data_b64 = str(body.get("data_base64") or body.get("data") or "").strip()
+            if not data_b64:
+                self._send_json({"ok": False, "error": "上传的主题文件数据为空"}, 400)
+                return
+            try:
+                zip_bytes = base64.b64decode(data_b64)
+                theme_info = install_theme_from_zip_bytes(zip_bytes)
+                self._send_json({"ok": True, "theme": theme_info})
+            except Exception as e:
+                self._send_json({"ok": False, "error": f"解析并安装主题失败: {e}"}, 500)
             return
 
         if path in ["/api/theme/config", "/api/node-mgr/theme/config"]:

@@ -716,293 +716,96 @@
       </div>
     </section>
 
-    <!-- TAB: 🎨 前台主题与外观设置 (THEME SETTINGS) -->
+    <!-- TAB: 🎨 前台主题管理与主题商店 (THEMES & MARKET) -->
     <section id="tab-theme" class="tab-panel hidden space-y-4 sm:space-y-6">
       <!-- Top Action Banner -->
       <div class="bento-card p-4 sm:p-6 bg-gradient-to-br from-white via-macaron-purple/30 to-fuchsia-500/10 dark:from-zinc-900 dark:to-zinc-800/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-fuchsia-500 status-pulse"></span>
-            <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">前台主题与外观设置</h1>
+            <h1 class="text-lg sm:text-2xl font-black text-slate-800 dark:text-slate-100">前台主题与主题商店</h1>
           </div>
-          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">管理访客前台监控大屏主题风格 · 动态视频背景、自定义壁纸、樱花动效与账单公开偏好</p>
+          <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">管理已安装前台展示大屏主题 · 导入在线或本地主题包 · 从官方主题商店一键安装</p>
         </div>
-        <div class="flex items-center gap-2 w-full sm:w-auto">
-          <a href="/" target="_blank" class="w-full sm:w-auto px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-fuchsia-800 dark:text-fuchsia-200 bg-fuchsia-100 dark:bg-fuchsia-950/50 hover:bg-fuchsia-200 transition btn-tap flex items-center justify-center gap-1.5" title="新标签页打开前台">
+        <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+          <a href="/" target="_blank" class="px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-fuchsia-800 dark:text-fuchsia-200 bg-fuchsia-100 dark:bg-fuchsia-950/50 hover:bg-fuchsia-200 transition btn-tap flex items-center justify-center gap-1.5" title="新标签页打开前台">
             <i data-lucide="external-link" class="w-4 h-4"></i>
-            <span>预览前台展示</span>
+            <span>预览前台大屏</span>
           </a>
-          <button onclick="saveThemeConfig()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-700 hover:to-purple-700 shadow-md shadow-fuchsia-500/20 flex items-center justify-center gap-2 btn-tap">
-            <i data-lucide="save" class="w-4 h-4"></i>
-            <span>保存全部配置</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- Bento Grid: Theme Selection & Visual Styles -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <!-- Card 1: 🎭 主题切换与主题库 (Col-span 1) -->
-        <div class="bento-card p-4 sm:p-6 space-y-4">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <i data-lucide="sparkles" class="w-4 h-4 text-fuchsia-500"></i>
-              <span>前台大屏主题</span>
-            </h2>
-            <span class="text-xs px-2 py-0.5 rounded-full bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 font-bold" id="currentThemeBadge">当前: LuminaPlus</span>
-          </div>
-
-          <!-- Theme Option: LuminaPlus -->
-          <div class="p-3.5 rounded-2xl border-2 border-fuchsia-400 bg-fuchsia-50/40 dark:bg-fuchsia-950/20 relative space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                <span>🌸 LuminaPlus</span>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-500 text-white">当前使用中</span>
-              </div>
-              <span class="text-[10px] font-mono text-fuchsia-600">v1.3.6</span>
-            </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">全功能现代高颜值大屏主题，支持 LanternRivers 动态视频壁纸、三网延迟多任务绑定、评级徽章、账单展示与分组折叠。</p>
-            <div class="flex items-center justify-between pt-1 text-[11px]">
-              <span class="text-slate-400">作者: shark & shanyang</span>
-              <button onclick="switchActiveTheme('LuminaPlus')" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-fuchsia-600 text-white shadow-sm btn-tap">已启用</button>
-            </div>
-          </div>
-
-          <!-- Theme Option: Default -->
-          <div class="p-3.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 space-y-2">
-            <div class="flex items-center justify-between">
-              <div class="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                <span>🖥️ Komari 原生默认主题</span>
-              </div>
-              <span class="text-[10px] font-mono text-slate-400">Built-in</span>
-            </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">官方内置原生极简风格监控展示大屏，纯粹轻量。</p>
-            <div class="flex items-center justify-between pt-1 text-[11px]">
-              <span class="text-slate-400">Komari 官方</span>
-              <button onclick="switchActiveTheme('default')" class="px-2.5 py-1 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-200 dark:bg-zinc-700 hover:bg-slate-300 transition btn-tap">切换为此主题</button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Card 2: 🖼️ LuminaPlus 外观视觉与背景设置 (Col-span 2) -->
-        <div class="bento-card p-4 sm:p-6 space-y-4 lg:col-span-2">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <i data-lucide="image" class="w-4 h-4 text-purple-500"></i>
-              <span>LuminaPlus 视觉背景与动态特效</span>
-            </h2>
-            <span class="text-xs text-slate-400">修改后实时存盘</span>
-          </div>
-
-          <!-- Background Media Type Selector -->
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">背景媒体类型 (Background Media)</label>
-            <div class="grid grid-cols-3 gap-2.5">
-              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
-                <input type="radio" name="themeBgType" id="themeBgTypeVideo" value="video" class="text-fuchsia-600 focus:ring-0">
-                <span>🎬 动态视频背景</span>
-              </label>
-              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
-                <input type="radio" name="themeBgType" id="themeBgTypeImage" value="image" class="text-fuchsia-600 focus:ring-0">
-                <span>🖼️ 静态壁纸</span>
-              </label>
-              <label class="flex items-center justify-center gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-bold cursor-pointer hover:bg-slate-50">
-                <input type="radio" name="themeBgType" id="themeBgTypeNone" value="none" class="text-fuchsia-600 focus:ring-0">
-                <span>⚪ 纯色模式</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- Video & Image URL Inputs -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">桌面端动态背景视频 URL</label>
-              <input type="text" id="themeBackgroundVideo" placeholder="/assets/LanternRivers_1080p15fps2Mbps3s.mp4" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">桌面端静态壁纸 URL (留空使用默认)</label>
-              <input type="text" id="themeBackgroundImage" placeholder="https://... 或 /assets/bg.jpg" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">移动端专属背景壁纸 URL (可选)</label>
-              <input type="text" id="themeBackgroundImageMobile" placeholder="移动端若不填则沿用桌面壁纸" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs font-mono focus:outline-none">
-            </div>
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">壁纸填充与对齐方式</label>
-              <select id="themeBackgroundAlignment" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
-                <option value="cover,center">全屏裁切拉伸居中 (cover,center)</option>
-                <option value="contain,center">保持比例完整居中 (contain,center)</option>
-                <option value="cover,top">全屏拉伸顶部对齐 (cover,top)</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Slider: Card Opacity & Ambient Effect -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center pt-2">
-            <div class="sm:col-span-1 space-y-1">
-              <div class="flex items-center justify-between">
-                <label class="text-xs font-semibold text-slate-600 dark:text-slate-400">卡片透明度 (Surface)</label>
-                <span id="surfaceOpacityVal" class="text-xs font-mono font-bold text-fuchsia-600">100%</span>
-              </div>
-              <input type="range" id="themeSurfaceOpacity" min="20" max="100" step="5" value="100" oninput="document.getElementById('surfaceOpacityVal').textContent = this.value + '%'" class="w-full accent-fuchsia-600">
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">环境动态粒子特效</label>
-              <div class="flex items-center gap-2">
-                <input type="checkbox" id="themeEnableAmbientEffect" class="w-4 h-4 rounded text-fuchsia-600 focus:ring-0">
-                <select id="themeAmbientEffect" class="flex-1 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
-                  <option value="sakura">🌸 浪漫樱花飘落 (Sakura)</option>
-                  <option value="snow">❄️ 冬日雪花纷飞 (Snow)</option>
-                </select>
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">默认配色偏好</label>
-              <select id="themeDefaultAppearance" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
-                <option value="system">跟随访客系统 (System)</option>
-                <option value="dark">默认深色极夜 (Dark)</option>
-                <option value="light">默认浅色纯白 (Light)</option>
-              </select>
-            </div>
+          <!-- Sub-Tab Switcher (Installed vs Market) -->
+          <div class="flex p-1 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+            <button onclick="switchThemeSubTab('installed')" id="btnThemeSubInstalled" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-fuchsia-600 shadow-sm transition flex items-center gap-1.5">
+              <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+              <span>已安装主题</span>
+            </button>
+            <button onclick="switchThemeSubTab('market')" id="btnThemeSubMarket" class="px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center gap-1.5">
+              <i data-lucide="shopping-bag" class="w-3.5 h-3.5"></i>
+              <span>主题商店</span>
+            </button>
           </div>
         </div>
       </div>
 
-      <!-- Bento Grid 2: Layout & Billing & Ping Bindings -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <!-- Card 3: 📊 首页卡片排版偏好 -->
-        <div class="bento-card p-4 sm:p-6 space-y-3.5">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
+      <!-- VIEW 1: 🖥️ 已安装主题 (INSTALLED THEMES) -->
+      <div id="themeViewInstalled" class="space-y-4">
+        <!-- Installed Toolbar -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 flex-wrap">
             <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <i data-lucide="layout-grid" class="w-4 h-4 text-blue-500"></i>
-              <span>卡片排版与排序</span>
+              <i data-lucide="palette" class="w-4 h-4 text-fuchsia-500"></i>
+              <span>已安装主题列表</span>
             </h2>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-fuchsia-50 dark:bg-fuchsia-950/40 text-fuchsia-600 font-bold" id="installedThemesCountBadge">0 个</span>
+            <span class="text-xs text-slate-400">当前激活: <span id="currentActiveThemeName" class="font-bold text-fuchsia-600">LuminaPlus</span></span>
           </div>
-
-          <div class="grid grid-cols-2 gap-2.5">
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">桌面端卡片模式</label>
-              <select id="themeDesktopNodeViewMode" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
-                <option value="large">多行大卡片 (Large)</option>
-                <option value="compact">紧凑小卡片 (Compact)</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-[11px] font-semibold text-slate-500 mb-1">移动端卡片模式</label>
-              <select id="themeMobileNodeViewMode" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
-                <option value="compact">紧凑小卡片 (推荐)</option>
-                <option value="large">多行大卡片</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="space-y-2 pt-1 text-xs">
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowGroupTabs" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示服务器分组标签页 (Group Tabs)</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowRegionBar" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示国家地区分布比例条 (Region Bar)</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowHomeOverview" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示顶部全网概览汇总统计</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowConnections" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示实时网络连接数</span>
-            </label>
-          </div>
-
-          <div class="pt-2 border-t border-slate-100 dark:border-zinc-800 space-y-2">
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeEnableHomeSort" class="w-4 h-4 rounded text-blue-600 focus:ring-0">
-              <span class="text-xs font-bold text-slate-700 dark:text-slate-300">开启首页卡片自动排序</span>
-            </label>
-            <div class="grid grid-cols-2 gap-2 text-xs">
-              <select id="themeHomeSortField" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
-                <option value="default">默认权重排序</option>
-                <option value="name">按服务器名称</option>
-                <option value="traffic">按流量使用量</option>
-                <option value="uptime">按在线时长</option>
-              </select>
-              <select id="themeHomeSortDirection" class="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
-                <option value="asc">升序排列 (ASC)</option>
-                <option value="desc">降序排列 (DESC)</option>
-              </select>
-            </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+            <button onclick="openImportThemeUrlModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1.5">
+              <i data-lucide="link" class="w-3.5 h-3.5"></i>
+              <span>从 URL / GitHub 导入</span>
+            </button>
+            <button onclick="openUploadThemeModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap flex items-center gap-1.5">
+              <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+              <span>上传 ZIP 主题包</span>
+            </button>
+            <button onclick="loadInstalledThemes()" class="p-2 rounded-xl border border-slate-200 dark:border-zinc-700 text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap" title="刷新列表">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            </button>
           </div>
         </div>
 
-        <!-- Card 4: 💰 账单与费用向访客展示控制 -->
-        <div class="bento-card p-4 sm:p-6 space-y-3.5">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <i data-lucide="badge-dollar-sign" class="w-4 h-4 text-amber-500"></i>
-              <span>账单与费用公开策略</span>
-            </h2>
-          </div>
+        <!-- Installed Themes Grid -->
+        <div id="installedThemesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
 
-          <div class="space-y-2 text-xs">
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowCostSummary" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">在首页展示服务器费用总览汇总</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowCostsToGuests" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">向未登录访客直接公开价格账单</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowCostSummaryFloatingButton" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示右下角费用统计浮动气泡</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeCompactShowBilling" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">紧凑模式卡片也显示续费周期与价格</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeCompactShowTrafficTotal" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">紧凑模式卡片显示总流量流转</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowTodayTrafficPopover" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">允许查看今日流量弹窗明细</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowBandwidthRating" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示带宽等级评分徽章</span>
-            </label>
-            <label class="flex items-center gap-2">
-              <input type="checkbox" id="themeShowAssetRating" class="w-4 h-4 rounded text-amber-600 focus:ring-0">
-              <span class="font-medium text-slate-700 dark:text-slate-300">显示服务器资产价值评级徽章</span>
-            </label>
+      <!-- VIEW 2: 🏪 主题商店 / 市场 (THEME MARKET) -->
+      <div id="themeViewMarket" class="space-y-4 hidden">
+        <!-- Market Toolbar -->
+        <div class="bento-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 flex-wrap">
+            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <i data-lucide="shopping-bag" class="w-4 h-4 text-emerald-500"></i>
+              <span>官方主题商店</span>
+            </h2>
+            <span class="text-xs px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 font-bold" id="marketThemesCountBadge">0 个主题</span>
+            <span class="text-xs text-slate-400">来源: komari-monitor 官方仓库</span>
+          </div>
+          <div class="flex items-center gap-2 w-full sm:w-auto">
+            <div class="relative flex-1 sm:w-64">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+              <input type="text" id="marketSearchInput" oninput="filterMarketThemes()" placeholder="搜索主题名称 / 描述 / 作者..." class="w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
+            </div>
+            <button onclick="loadMarketThemes(true)" id="refreshMarketBtn" class="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-800 transition btn-tap flex items-center gap-1.5">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>刷新商店</span>
+            </button>
           </div>
         </div>
 
-        <!-- Card 5: 📡 首页三网 Ping 延迟监控绑定 -->
-        <div class="bento-card p-4 sm:p-6 space-y-3.5">
-          <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-zinc-800">
-            <h2 class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-              <i data-lucide="radio" class="w-4 h-4 text-teal-500"></i>
-              <span>首页三网 Ping 延迟绑定</span>
-            </h2>
-          </div>
-
-          <label class="flex items-center gap-2 text-xs">
-            <input type="checkbox" id="themeEnableHomepageMultiPing" class="w-4 h-4 rounded text-teal-600 focus:ring-0">
-            <span class="font-bold text-slate-700 dark:text-slate-300">在首页探针卡片展示多任务延迟</span>
-          </label>
-
-          <p class="text-[11px] text-slate-400">勾选您希望在首页卡片上常驻展示延迟的任务 (如广东电信、联通、移动)：</p>
-
-          <div id="themePingTasksList" class="space-y-2 max-h-48 overflow-y-auto pt-1">
-            <!-- Rendered by JS from pingTasks -->
-          </div>
+        <!-- Market Themes Grid -->
+        <div id="marketThemesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
+          <!-- Rendered by JS -->
         </div>
       </div>
     </section>
@@ -1461,6 +1264,75 @@
     </div>
   </div>
 
+  <!-- Modal: 通过 URL / GitHub 导入主题 -->
+  <div id="modalImportThemeUrl" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <i data-lucide="link" class="w-4 h-4 text-purple-600"></i>
+          <span>从 URL / GitHub 导入主题</span>
+        </h3>
+        <button onclick="closeModal('modalImportThemeUrl')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1.5">主题仓库地址或 ZIP 下载直链 *</label>
+          <input type="text" id="importThemeUrlInput" placeholder="例如: https://github.com/adminsama/Aemeath 或 release .zip 地址" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none font-mono">
+        </div>
+
+        <div class="p-3 rounded-xl bg-purple-50 dark:bg-purple-950/20 text-purple-900 dark:text-purple-300 text-[11px] space-y-1">
+          <div class="font-bold flex items-center gap-1">
+            <i data-lucide="info" class="w-3.5 h-3.5"></i>
+            <span>导入说明</span>
+          </div>
+          <p>• 支持直接填入 GitHub 主题仓库链接 (后台将自动查询最新 Release 并下载对应 zip 压缩包)。</p>
+          <p>• 也支持直接填入带有 <code>komari-theme.json</code> 的打包 zip 直链。</p>
+        </div>
+
+        <button onclick="submitImportThemeUrl()" id="btnSubmitImportThemeUrl" class="w-full py-3 rounded-2xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap flex items-center justify-center gap-1.5">
+          <i data-lucide="download" class="w-4 h-4"></i>
+          <span>开始下载并导入安装</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 上传本地 ZIP 主题包 -->
+  <div id="modalUploadThemeZip" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <i data-lucide="upload" class="w-4 h-4 text-blue-600"></i>
+          <span>上传本地 ZIP 主题包</span>
+        </h3>
+        <button onclick="closeModal('modalUploadThemeZip')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1 text-xs">
+        <div class="border-2 border-dashed border-slate-300 dark:border-zinc-700 rounded-2xl p-6 text-center hover:border-blue-500 transition cursor-pointer bg-slate-50 dark:bg-zinc-800/40" onclick="document.getElementById('uploadThemeFileInput').click()">
+          <input type="file" id="uploadThemeFileInput" accept=".zip" class="hidden" onchange="handleThemeFileSelected(this)">
+          <div class="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto mb-3">
+            <i data-lucide="folder-archive" class="w-6 h-6"></i>
+          </div>
+          <p class="font-bold text-slate-700 dark:text-slate-200 text-xs" id="uploadThemeFileNameText">点击选择本地主题 .zip 压缩包</p>
+          <p class="text-[11px] text-slate-400 mt-1">压缩包根目录或一级子目录须包含 komari-theme.json 与 dist 文件夹</p>
+        </div>
+
+        <button onclick="submitUploadThemeZip()" id="btnSubmitUploadThemeZip" disabled class="w-full py-3 rounded-2xl font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 disabled:opacity-50 disabled:pointer-events-none btn-tap flex items-center justify-center gap-1.5">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>确认上传并解压安装</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal A: 添加服务器一键命令 -->
   <div id="modalAddServer" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
     <div class="sheet-panel w-full sm:max-w-xl bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
@@ -1707,6 +1579,11 @@
       traffic: {},
       system: {},
       systemConfigs: {},
+      activeTheme: 'LuminaPlus',
+      themeSubTab: 'installed',
+      installedThemes: [],
+      marketThemes: [],
+      selectedThemeFile: null,
       activeTab: 'probe',
       ws: null,
       pollTimer: null
@@ -1775,6 +1652,7 @@
         nodes: '节点管理',
         ping: '延迟设置',
         users: '用户订阅',
+        theme: '主题管理',
         rules: '分流配置',
         traffic: '流量统计',
         alerts: '告警规则',
@@ -1782,6 +1660,14 @@
       };
       const titleEl = document.getElementById('mobileTitle');
       if (titleEl) titleEl.textContent = titleMap[tabId] || '管理中心';
+
+      if (tabId === 'theme') {
+        if (state.themeSubTab === 'market') {
+          loadMarketThemes();
+        } else {
+          loadInstalledThemes();
+        }
+      }
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
       initLucide();
@@ -1888,7 +1774,7 @@
         loadNodes(),
         loadPingTasks(),
         loadUsers(),
-        loadThemeConfig(),
+        loadInstalledThemes(),
         loadRules(),
         loadAlerts(),
         loadSystem(),
@@ -3434,198 +3320,470 @@
     }
 
     // ==============================================================
-    // THEME SETTINGS & VISUAL STUDIO
+    // THEME MANAGEMENT & THEME MARKET (Komari 原生主题体系与官方市场)
     // ==============================================================
-    async function loadThemeConfig() {
+    function switchThemeSubTab(tab) {
+      state.themeSubTab = tab;
+      const vInstalled = document.getElementById('themeViewInstalled');
+      const vMarket = document.getElementById('themeViewMarket');
+      const btnInstalled = document.getElementById('btnThemeSubInstalled');
+      const btnMarket = document.getElementById('btnThemeSubMarket');
+
+      if (tab === 'installed') {
+        if (vInstalled) vInstalled.classList.remove('hidden');
+        if (vMarket) vMarket.classList.add('hidden');
+        if (btnInstalled) {
+          btnInstalled.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-fuchsia-600 shadow-sm transition flex items-center gap-1.5';
+        }
+        if (btnMarket) {
+          btnMarket.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center gap-1.5';
+        }
+        if (!state.installedThemes || state.installedThemes.length === 0) {
+          loadInstalledThemes();
+        }
+      } else {
+        if (vInstalled) vInstalled.classList.add('hidden');
+        if (vMarket) vMarket.classList.remove('hidden');
+        if (btnMarket) {
+          btnMarket.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-fuchsia-600 shadow-sm transition flex items-center gap-1.5';
+        }
+        if (btnInstalled) {
+          btnInstalled.className = 'px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition flex items-center gap-1.5';
+        }
+        if (!state.marketThemes || state.marketThemes.length === 0) {
+          loadMarketThemes();
+        }
+      }
+      initLucide();
+    }
+
+    async function loadInstalledThemes() {
       try {
-        const res = await fetch('/api/node-mgr/theme/config?_t=' + Date.now()).then(r => r.json());
+        const res = await fetch('/api/node-mgr/theme/list?_t=' + Date.now()).then(r => r.json());
         if (res.ok) {
-          state.themeData = res;
-          renderThemeSettingsUI();
+          state.activeTheme = res.active_theme || '';
+          state.installedThemes = res.themes || [];
+
+          const badgeNav = document.getElementById('badgeThemeName');
+          if (badgeNav) badgeNav.textContent = state.activeTheme || '默认';
+
+          const badgeCount = document.getElementById('installedThemesCountBadge');
+          if (badgeCount) badgeCount.textContent = state.installedThemes.length + ' 个';
+
+          const curName = document.getElementById('currentActiveThemeName');
+          if (curName) curName.textContent = state.activeTheme || '默认';
+
+          renderInstalledThemesGrid();
         }
       } catch(e) {
-        console.error('Failed to load theme config:', e);
+        console.error('Failed to load installed themes:', e);
       }
     }
 
-    function renderThemeSettingsUI() {
-      if (!state.themeData) return;
-      const { active_theme, installed_themes, theme_config } = state.themeData;
-      
-      const badge = document.getElementById('badgeThemeName');
-      if (badge) badge.textContent = active_theme || '默认';
-
-      const curBadge = document.getElementById('currentThemeBadge');
-      if (curBadge) curBadge.textContent = '当前: ' + (active_theme || '默认');
-
-      const cfg = theme_config || {};
-      
-      const mediaType = cfg.backgroundMediaType || 'image';
-      const rImage = document.getElementById('themeBgTypeImage');
-      const rVideo = document.getElementById('themeBgTypeVideo');
-      const rNone = document.getElementById('themeBgTypeNone');
-      if (rVideo && mediaType === 'video') rVideo.checked = true;
-      else if (rNone && mediaType === 'none') rNone.checked = true;
-      else if (rImage) rImage.checked = true;
-
-      const bgVideo = document.getElementById('themeBackgroundVideo');
-      if (bgVideo) bgVideo.value = cfg.backgroundVideo || '/assets/LanternRivers_1080p15fps2Mbps3s.mp4';
-
-      const bgImg = document.getElementById('themeBackgroundImage');
-      if (bgImg) bgImg.value = cfg.backgroundImage || '';
-
-      const bgImgMobile = document.getElementById('themeBackgroundImageMobile');
-      if (bgImgMobile) bgImgMobile.value = cfg.backgroundImageMobile || '';
-
-      const bgAlign = document.getElementById('themeBackgroundAlignment');
-      if (bgAlign) bgAlign.value = cfg.backgroundAlignment || 'cover,center';
-
-      const opacity = cfg.surfaceOpacity !== undefined ? cfg.surfaceOpacity : 100;
-      const opacitySlider = document.getElementById('themeSurfaceOpacity');
-      if (opacitySlider) {
-        opacitySlider.value = opacity;
-        const opacityValText = document.getElementById('surfaceOpacityVal');
-        if (opacityValText) opacityValText.textContent = opacity + '%';
-      }
-
-      const ambientToggle = document.getElementById('themeEnableAmbientEffect');
-      if (ambientToggle) ambientToggle.checked = !!cfg.enableAmbientEffect;
-
-      const ambientSelect = document.getElementById('themeAmbientEffect');
-      if (ambientSelect) ambientSelect.value = cfg.ambientEffect || 'sakura';
-
-      const appearance = document.getElementById('themeDefaultAppearance');
-      if (appearance) appearance.value = cfg.defaultAppearance || 'system';
-
-      const deskMode = document.getElementById('themeDesktopNodeViewMode');
-      if (deskMode) deskMode.value = cfg.desktopNodeViewMode || 'large';
-
-      const mobMode = document.getElementById('themeMobileNodeViewMode');
-      if (mobMode) mobMode.value = cfg.mobileNodeViewMode || 'compact';
-
-      const setCheck = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.checked = !!val;
-      };
-
-      setCheck('themeShowGroupTabs', cfg.showGroupTabs !== false);
-      setCheck('themeShowRegionBar', cfg.showRegionBar !== false);
-      setCheck('themeShowHomeOverview', cfg.showHomeOverview !== false);
-      setCheck('themeShowConnections', cfg.showConnections);
-      setCheck('themeEnableHomeSort', cfg.enableHomeSort);
-      
-      const sortField = document.getElementById('themeHomeSortField');
-      if (sortField) sortField.value = cfg.homeSortField || 'default';
-      const sortDir = document.getElementById('themeHomeSortDirection');
-      if (sortDir) sortDir.value = cfg.homeSortDirection || 'asc';
-
-      setCheck('themeShowCostSummary', cfg.showCostSummary !== false);
-      setCheck('themeShowCostsToGuests', cfg.showCostsToGuests !== false);
-      setCheck('themeShowCostSummaryFloatingButton', cfg.showCostSummaryFloatingButton !== false);
-      setCheck('themeCompactShowBilling', cfg.compactShowBilling !== false);
-      setCheck('themeCompactShowTrafficTotal', cfg.compactShowTrafficTotal !== false);
-      setCheck('themeShowTodayTrafficPopover', cfg.showTodayTrafficPopover !== false);
-      setCheck('themeShowBandwidthRating', cfg.showBandwidthRating !== false);
-      setCheck('themeShowAssetRating', cfg.showAssetRating !== false);
-
-      setCheck('themeEnableHomepageMultiPing', cfg.enableHomepageMultiPing !== false);
-
-      renderThemePingTaskCheckboxes(cfg.homepageMultiPingTaskIds || [3, 2, 1]);
-    }
-
-    function renderThemePingTaskCheckboxes(selectedIds) {
-      const container = document.getElementById('themePingTasksList');
+    function renderInstalledThemesGrid() {
+      const container = document.getElementById('installedThemesGrid');
       if (!container) return;
-      if (!state.pingTasks || state.pingTasks.length === 0) {
-        container.innerHTML = '<span class="text-xs text-slate-400">暂无测速任务，请在“延迟设置”中创建</span>';
+
+      if (!state.installedThemes || state.installedThemes.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-400">
+            <i data-lucide="layers" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+            <p class="text-sm font-semibold">暂无安装的主题</p>
+          </div>
+        `;
+        initLucide();
         return;
       }
-      container.innerHTML = state.pingTasks.map(t => {
-        const isChecked = selectedIds && selectedIds.includes(t.id) ? 'checked' : '';
+
+      container.innerHTML = state.installedThemes.map(t => {
+        const isActive = t.is_active;
+        const previewUrl = `/api/node-mgr/theme/preview?theme=${encodeURIComponent(t.short)}&_t=${Date.now()}`;
+        
         return `
-          <label class="flex items-center gap-2 p-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 text-xs font-semibold cursor-pointer hover:bg-slate-50 dark:hover:bg-zinc-700/50">
-            <input type="checkbox" name="themePingTask" value="${t.id}" ${isChecked} class="rounded text-teal-600 focus:ring-0">
-            <span class="truncate text-slate-700 dark:text-slate-200">${escapeHtml(t.name)}</span>
-            <span class="text-[10px] text-slate-400 font-mono">(${t.type})</span>
-          </label>
+          <div class="bento-card overflow-hidden flex flex-col justify-between group transition-all duration-300 ${isActive ? 'ring-2 ring-fuchsia-500 shadow-md shadow-fuchsia-500/10' : 'hover:shadow-lg hover:border-slate-300 dark:hover:border-zinc-700'}">
+            <!-- Theme Preview Banner -->
+            <div class="relative w-full h-36 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-zinc-800 dark:to-zinc-900 overflow-hidden flex items-center justify-center border-b border-slate-100 dark:border-zinc-800">
+              <img src="${previewUrl}" alt="${escapeHtml(t.name)}" 
+                onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'flex flex-col items-center justify-center w-full h-full text-slate-400 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-zinc-800 dark:to-zinc-900\'><span class=\'text-3xl mb-1\'>🎨</span><span class=\'text-xs font-bold text-slate-500\'>${escapeHtml(t.name)}</span></div>';"
+                class="w-full h-full object-cover transition duration-300 group-hover:scale-105">
+              ${isActive ? `
+                <div class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-emerald-500 text-white font-bold text-[11px] shadow-md flex items-center gap-1 backdrop-blur-md">
+                  <span class="w-1.5 h-1.5 rounded-full bg-white status-pulse"></span>
+                  <span>当前使用中</span>
+                </div>
+              ` : `
+                <div class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-slate-900/60 text-white font-mono text-[10px] backdrop-blur-md">
+                  v${escapeHtml(t.version || '1.0.0')}
+                </div>
+              `}
+              ${t.is_builtin ? `
+                <div class="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-md bg-slate-800/70 text-slate-200 text-[10px] font-semibold backdrop-blur-md">
+                  内置主题
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Theme Info Body -->
+            <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-1">
+                  <h3 class="font-black text-sm text-slate-800 dark:text-slate-100 truncate" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</h3>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-500 truncate max-w-[100px]">${escapeHtml(t.short)}</span>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed h-8 mb-2">${escapeHtml(t.description || '暂无描述')}</p>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                  <span class="truncate max-w-[140px]">作者: <span class="font-medium text-slate-600 dark:text-slate-300">${escapeHtml(t.author || 'Komari Community')}</span></span>
+                  ${t.homepage ? `
+                    <a href="${escapeHtml(t.homepage)}" target="_blank" class="text-fuchsia-600 hover:underline flex items-center gap-0.5">
+                      <span>主页</span>
+                      <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                  ` : ''}
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="flex items-center gap-2 pt-2">
+                ${isActive ? `
+                  <button disabled class="flex-1 py-2 rounded-xl text-xs font-bold text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 cursor-default flex items-center justify-center gap-1.5">
+                    <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                    <span>已激活</span>
+                  </button>
+                ` : `
+                  <button onclick="setActiveTheme('${escapeHtml(t.short)}')" class="flex-1 py-2 rounded-xl text-xs font-bold text-white bg-fuchsia-600 hover:bg-fuchsia-700 shadow-sm shadow-fuchsia-500/20 btn-tap flex items-center justify-center gap-1.5">
+                    <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                    <span>启用此主题</span>
+                  </button>
+                `}
+                ${!t.is_builtin ? `
+                  <button onclick="deleteInstalledTheme('${escapeHtml(t.short)}', '${escapeHtml(t.name)}')" class="p-2 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 border border-slate-200 dark:border-zinc-700 btn-tap transition" title="删除主题">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                  </button>
+                ` : ''}
+              </div>
+            </div>
+          </div>
         `;
       }).join('');
+
+      initLucide();
     }
 
-    async function switchActiveTheme(themeName) {
+    async function setActiveTheme(short) {
       try {
-        const res = await fetch('/api/node-mgr/theme/switch', {
+        const res = await fetch('/api/node-mgr/theme/set', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theme: themeName })
+          body: JSON.stringify({ theme: short })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(`已成功切换前台主题为 ${themeName}！`, 'success');
-          await loadThemeConfig();
+          showToast(`已成功切换前台主题为 ${short}！大屏已更新`, 'success');
+          await loadInstalledThemes();
         } else {
-          showToast('切换失败: ' + (res.error || '未知错误'), 'error');
+          showToast('切换主题失败: ' + (res.error || '未知错误'), 'error');
         }
       } catch(e) {
         showToast('请求异常: ' + e.message, 'error');
       }
     }
 
-    async function saveThemeConfig() {
-      const curConfig = (state.themeData && state.themeData.theme_config) ? { ...state.themeData.theme_config } : {};
-      
-      let bgType = 'image';
-      if (document.getElementById('themeBgTypeVideo') && document.getElementById('themeBgTypeVideo').checked) bgType = 'video';
-      else if (document.getElementById('themeBgTypeNone') && document.getElementById('themeBgTypeNone').checked) bgType = 'none';
-
-      const selectedPingTasks = Array.from(document.querySelectorAll('input[name="themePingTask"]:checked')).map(el => parseInt(el.value));
-
-      const updated = {
-        ...curConfig,
-        backgroundMediaType: bgType,
-        backgroundVideo: (document.getElementById('themeBackgroundVideo') ? document.getElementById('themeBackgroundVideo').value.trim() : ''),
-        backgroundImage: (document.getElementById('themeBackgroundImage') ? document.getElementById('themeBackgroundImage').value.trim() : ''),
-        backgroundImageMobile: (document.getElementById('themeBackgroundImageMobile') ? document.getElementById('themeBackgroundImageMobile').value.trim() : ''),
-        backgroundAlignment: (document.getElementById('themeBackgroundAlignment') ? document.getElementById('themeBackgroundAlignment').value : 'cover,center'),
-        surfaceOpacity: parseInt(document.getElementById('themeSurfaceOpacity') ? document.getElementById('themeSurfaceOpacity').value : 100) || 100,
-        enableAmbientEffect: document.getElementById('themeEnableAmbientEffect') ? document.getElementById('themeEnableAmbientEffect').checked : false,
-        ambientEffect: document.getElementById('themeAmbientEffect') ? document.getElementById('themeAmbientEffect').value : 'sakura',
-        defaultAppearance: document.getElementById('themeDefaultAppearance') ? document.getElementById('themeDefaultAppearance').value : 'system',
-        desktopNodeViewMode: document.getElementById('themeDesktopNodeViewMode') ? document.getElementById('themeDesktopNodeViewMode').value : 'large',
-        mobileNodeViewMode: document.getElementById('themeMobileNodeViewMode') ? document.getElementById('themeMobileNodeViewMode').value : 'compact',
-        showGroupTabs: document.getElementById('themeShowGroupTabs') ? document.getElementById('themeShowGroupTabs').checked : true,
-        showRegionBar: document.getElementById('themeShowRegionBar') ? document.getElementById('themeShowRegionBar').checked : true,
-        showHomeOverview: document.getElementById('themeShowHomeOverview') ? document.getElementById('themeShowHomeOverview').checked : true,
-        showConnections: document.getElementById('themeShowConnections') ? document.getElementById('themeShowConnections').checked : false,
-        enableHomeSort: document.getElementById('themeEnableHomeSort') ? document.getElementById('themeEnableHomeSort').checked : false,
-        homeSortField: document.getElementById('themeHomeSortField') ? document.getElementById('themeHomeSortField').value : 'default',
-        homeSortDirection: document.getElementById('themeHomeSortDirection') ? document.getElementById('themeHomeSortDirection').value : 'asc',
-        showCostSummary: document.getElementById('themeShowCostSummary') ? document.getElementById('themeShowCostSummary').checked : true,
-        showCostsToGuests: document.getElementById('themeShowCostsToGuests') ? document.getElementById('themeShowCostsToGuests').checked : true,
-        showCostSummaryFloatingButton: document.getElementById('themeShowCostSummaryFloatingButton') ? document.getElementById('themeShowCostSummaryFloatingButton').checked : true,
-        compactShowBilling: document.getElementById('themeCompactShowBilling') ? document.getElementById('themeCompactShowBilling').checked : true,
-        compactShowTrafficTotal: document.getElementById('themeCompactShowTrafficTotal') ? document.getElementById('themeCompactShowTrafficTotal').checked : true,
-        showTodayTrafficPopover: document.getElementById('themeShowTodayTrafficPopover') ? document.getElementById('themeShowTodayTrafficPopover').checked : true,
-        showBandwidthRating: document.getElementById('themeShowBandwidthRating') ? document.getElementById('themeShowBandwidthRating').checked : true,
-        showAssetRating: document.getElementById('themeShowAssetRating') ? document.getElementById('themeShowAssetRating').checked : true,
-        enableHomepageMultiPing: document.getElementById('themeEnableHomepageMultiPing') ? document.getElementById('themeEnableHomepageMultiPing').checked : true,
-        homepageMultiPingTaskIds: selectedPingTasks
-      };
-
+    async function deleteInstalledTheme(short, name) {
+      if (!confirm(`确定要彻底删除已安装主题「${name || short}」吗？此操作不可逆。`)) return;
       try {
-        const res = await fetch('/api/node-mgr/theme/config', {
+        const res = await fetch('/api/node-mgr/theme/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ theme: 'LuminaPlus', config: updated })
+          body: JSON.stringify({ theme: short })
         }).then(r => r.json());
         if (res.ok) {
-          showToast('🎨 主题配置已保存并立即生效！前台已更新', 'success');
-          await loadThemeConfig();
+          showToast('主题已成功删除！', 'success');
+          await loadInstalledThemes();
         } else {
-          showToast('保存失败: ' + (res.error || '未知错误'), 'error');
+          showToast('删除失败: ' + (res.error || '未知错误'), 'error');
         }
       } catch(e) {
-        showToast('网络请求失败: ' + e.message, 'error');
+        showToast('删除请求异常: ' + e.message, 'error');
       }
+    }
+
+    async function loadMarketThemes(force = false) {
+      const btn = document.getElementById('refreshMarketBtn');
+      if (btn) btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>加载中...</span>';
+      try {
+        const res = await fetch('/api/node-mgr/theme/market' + (force ? '?refresh=1' : '')).then(r => r.json());
+        if (res.ok && (res.catalog || res.themes)) {
+          state.marketThemes = res.catalog || res.themes;
+          const badgeCount = document.getElementById('marketThemesCountBadge');
+          if (badgeCount) badgeCount.textContent = state.marketThemes.length + ' 个主题';
+          filterMarketThemes();
+        } else {
+          showToast('获取主题商店数据失败: ' + (res.error || '请检查网络'), 'error');
+        }
+      } catch(e) {
+        showToast('加载主题商店网络异常: ' + e.message, 'error');
+      } finally {
+        if (btn) btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>刷新商店</span>';
+        initLucide();
+      }
+    }
+
+    function filterMarketThemes() {
+      const q = (document.getElementById('marketSearchInput')?.value || '').trim().toLowerCase();
+      let list = state.marketThemes || [];
+      if (q) {
+        list = list.filter(t => 
+          (t.name && t.name.toLowerCase().includes(q)) ||
+          (t.short && t.short.toLowerCase().includes(q)) ||
+          (t.description && t.description.toLowerCase().includes(q)) ||
+          (t.author && t.author.toLowerCase().includes(q))
+        );
+      }
+      renderMarketThemesGrid(list);
+    }
+
+    function renderMarketThemesGrid(list) {
+      const container = document.getElementById('marketThemesGrid');
+      if (!container) return;
+
+      if (!list || list.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-full py-12 text-center text-slate-400">
+            <i data-lucide="search" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+            <p class="text-sm font-semibold">没有找到匹配的主题</p>
+          </div>
+        `;
+        initLucide();
+        return;
+      }
+
+      container.innerHTML = list.map(t => {
+        const isInstalled = t.is_installed;
+        const hasUpdate = t.has_update;
+        const previewUrl = t.preview_url || t.preview || '';
+        const downloadUrl = t.download_url || t.download || '';
+        const homepage = t.homepage || t.url || '';
+
+        return `
+          <div class="bento-card overflow-hidden flex flex-col justify-between group transition-all duration-300 hover:shadow-lg hover:border-slate-300 dark:hover:border-zinc-700">
+            <!-- Market Preview Banner -->
+            <div class="relative w-full h-36 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-zinc-800 dark:to-zinc-900 overflow-hidden flex items-center justify-center border-b border-slate-100 dark:border-zinc-800">
+              ${previewUrl ? `
+                <img src="${previewUrl}" alt="${escapeHtml(t.name)}" 
+                  onerror="this.onerror=null; this.parentElement.innerHTML='<div class=\'flex flex-col items-center justify-center w-full h-full text-slate-400 bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-zinc-800 dark:to-zinc-900\'><span class=\'text-3xl mb-1\'>🏪</span><span class=\'text-xs font-bold text-slate-500\'>${escapeHtml(t.name)}</span></div>';"
+                  class="w-full h-full object-cover transition duration-300 group-hover:scale-105">
+              ` : `
+                <div class="flex flex-col items-center justify-center w-full h-full text-slate-400 bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-zinc-800 dark:to-zinc-900">
+                  <span class="text-3xl mb-1">🏪</span>
+                  <span class="text-xs font-bold text-slate-500">${escapeHtml(t.name)}</span>
+                </div>
+              `}
+              <div class="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full bg-slate-900/60 text-white font-mono text-[10px] backdrop-blur-md">
+                v${escapeHtml(t.version || '1.0.0')}
+              </div>
+              ${isInstalled ? `
+                <div class="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-emerald-500 text-white font-bold text-[10px] shadow-sm backdrop-blur-md flex items-center gap-1">
+                  <i data-lucide="check-circle" class="w-3 h-3"></i>
+                  <span>${hasUpdate ? '可更新' : '已安装'}</span>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- Market Info Body -->
+            <div class="p-4 flex-1 flex flex-col justify-between space-y-3">
+              <div>
+                <div class="flex items-center justify-between gap-2 mb-1">
+                  <h3 class="font-black text-sm text-slate-800 dark:text-slate-100 truncate" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}</h3>
+                  <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-zinc-800 text-slate-500 truncate max-w-[100px]">${escapeHtml(t.short)}</span>
+                </div>
+                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed h-8 mb-2">${escapeHtml(t.description || '暂无描述')}</p>
+                <div class="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-100 dark:border-zinc-800/80">
+                  <span class="truncate max-w-[140px]">作者: <span class="font-medium text-slate-600 dark:text-slate-300">${escapeHtml(t.author || '未知')}</span></span>
+                  ${t.homepage ? `
+                    <a href="${escapeHtml(t.homepage)}" target="_blank" class="text-teal-600 hover:underline flex items-center gap-0.5">
+                      <span>主页</span>
+                      <i data-lucide="external-link" class="w-3 h-3"></i>
+                    </a>
+                  ` : ''}
+                </div>
+              </div>
+
+              <!-- Install / Update Action Button -->
+              <div class="pt-2">
+                ${hasUpdate ? `
+                  <button onclick="installMarketTheme('${escapeHtml(t.short)}', '${escapeHtml(downloadUrl)}')" class="w-full py-2 rounded-xl text-xs font-bold text-white bg-amber-500 hover:bg-amber-600 shadow-sm shadow-amber-500/20 btn-tap flex items-center justify-center gap-1.5">
+                    <i data-lucide="arrow-up-circle" class="w-3.5 h-3.5"></i>
+                    <span>更新至 v${escapeHtml(t.version)}</span>
+                  </button>
+                ` : isInstalled ? `
+                  <div class="flex items-center gap-2">
+                    <button onclick="setActiveTheme('${escapeHtml(t.short)}')" class="flex-1 py-2 rounded-xl text-xs font-bold text-fuchsia-600 bg-fuchsia-50 dark:bg-fuchsia-950/40 hover:bg-fuchsia-100 transition btn-tap flex items-center justify-center gap-1.5">
+                      <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                      <span>设为前台主题</span>
+                    </button>
+                    <button onclick="installMarketTheme('${escapeHtml(t.short)}', '${escapeHtml(downloadUrl)}')" class="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-700 btn-tap transition" title="重新安装">
+                      <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                    </button>
+                  </div>
+                ` : `
+                  <button onclick="installMarketTheme('${escapeHtml(t.short)}', '${escapeHtml(downloadUrl)}')" class="w-full py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 shadow-sm shadow-emerald-500/20 btn-tap flex items-center justify-center gap-1.5">
+                    <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                    <span>一键安装主题</span>
+                  </button>
+                `}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      initLucide();
+    }
+
+    async function installMarketTheme(short, downloadUrl) {
+      if (!confirm(`确定要从主题商店安装主题「${short}」吗？`)) return;
+      showToast(`正在下载并安装主题 ${short}...`, 'info');
+      try {
+        const res = await fetch('/api/node-mgr/theme/market/install', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ short: short, download_url: downloadUrl })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`主题「${short}」安装成功！`, 'success');
+          await loadInstalledThemes();
+          await loadMarketThemes(false);
+        } else {
+          showToast('安装失败: ' + (res.error || '未知错误'), 'error');
+        }
+      } catch(e) {
+        showToast('安装异常: ' + e.message, 'error');
+      }
+    }
+
+    function openImportThemeUrlModal() {
+      const inp = document.getElementById('importThemeUrlInput');
+      if (inp) inp.value = '';
+      openModal('modalImportThemeUrl');
+    }
+
+    async function submitImportThemeUrl() {
+      const inp = document.getElementById('importThemeUrlInput');
+      const url = inp ? inp.value.trim() : '';
+      if (!url) {
+        showToast('请输入有效的主题下载直链或 GitHub 仓库地址', 'error');
+        return;
+      }
+      const btn = document.getElementById('btnSubmitImportThemeUrl');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>正在下载并解压...</span>';
+      }
+      try {
+        const res = await fetch('/api/node-mgr/theme/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(`主题已成功导入并安装！`, 'success');
+          closeModal('modalImportThemeUrl');
+          await loadInstalledThemes();
+        } else {
+          showToast('导入失败: ' + (res.error || '未知错误'), 'error');
+        }
+      } catch(e) {
+        showToast('导入网络异常: ' + e.message, 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i data-lucide="download" class="w-4 h-4"></i><span>开始下载并导入安装</span>';
+        }
+        initLucide();
+      }
+    }
+
+    function openUploadThemeModal() {
+      state.selectedThemeFile = null;
+      const fileInp = document.getElementById('uploadThemeFileInput');
+      if (fileInp) fileInp.value = '';
+      const text = document.getElementById('uploadThemeFileNameText');
+      if (text) text.textContent = '点击选择本地主题 .zip 压缩包';
+      const btn = document.getElementById('btnSubmitUploadThemeZip');
+      if (btn) btn.disabled = true;
+      openModal('modalUploadThemeZip');
+    }
+
+    function handleThemeFileSelected(input) {
+      const file = input.files && input.files[0];
+      const text = document.getElementById('uploadThemeFileNameText');
+      const btn = document.getElementById('btnSubmitUploadThemeZip');
+      if (file) {
+        if (!file.name.toLowerCase().endsWith('.zip')) {
+          showToast('请选择 .zip 格式的主题压缩文件', 'error');
+          input.value = '';
+          return;
+        }
+        state.selectedThemeFile = file;
+        if (text) text.textContent = `${file.name} (${formatBytes(file.size)})`;
+        if (btn) btn.disabled = false;
+      } else {
+        state.selectedThemeFile = null;
+        if (text) text.textContent = '点击选择本地主题 .zip 压缩包';
+        if (btn) btn.disabled = true;
+      }
+    }
+
+    async function submitUploadThemeZip() {
+      if (!state.selectedThemeFile) {
+        showToast('请先选择要上传的 ZIP 文件', 'error');
+        return;
+      }
+      const file = state.selectedThemeFile;
+      const btn = document.getElementById('btnSubmitUploadThemeZip');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>正在读取并上传...</span>';
+      }
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        try {
+          const base64Data = e.target.result.split(',')[1];
+          const res = await fetch('/api/node-mgr/theme/upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: file.name,
+              data_base64: base64Data
+            })
+          }).then(r => r.json());
+          if (res.ok) {
+            const themeName = (res.theme && (res.theme.name || res.theme.short)) || '新主题';
+            showToast(`主题「${themeName}」已成功上传解压并安装！`, 'success');
+            closeModal('modalUploadThemeZip');
+            await loadInstalledThemes();
+          } else {
+            showToast('上传安装失败: ' + (res.error || '未知错误'), 'error');
+          }
+        } catch(err) {
+          showToast('上传异常: ' + err.message, 'error');
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>确认上传并解压安装</span>';
+          }
+          initLucide();
+        }
+      };
+      reader.onerror = function() {
+        showToast('读取本地文件失败', 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i><span>确认上传并解压安装</span>';
+        }
+        initLucide();
+      };
+      reader.readAsDataURL(file);
     }
 
     // Utilities
