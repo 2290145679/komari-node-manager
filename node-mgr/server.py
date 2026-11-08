@@ -1366,14 +1366,14 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
     type: vless
     server: "{ip}"
     port: {port}
-    uuid: {u}
+    uuid: "{u}"
     network: tcp
     tls: true
     udp: true
-    flow: {n.get('flow') or 'xtls-rprx-vision'}
-    servername: {sni}
+    flow: "{n.get('flow') or 'xtls-rprx-vision'}"
+    servername: "{sni}"
     reality-opts:
-      public-key: {n.get('public_key')}
+      public-key: "{n.get('public_key')}"
       short-id: "{n.get('short_id') or ''}"
     client-fingerprint: chrome""")
         elif proto == "hysteria2":
@@ -1573,7 +1573,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
     # 5. China Direct rule
     if rules_cfg.get("direct_cn", True):
         rules_list.append("  # === 中国大陆域名与 IP 直连 ===")
-        rules_list.append("  - GEOSITE,cn,DIRECT")
+        rules_list.append("  - DOMAIN-SUFFIX,cn,DIRECT")
         rules_list.append("  - GEOIP,CN,DIRECT,no-resolve")
 
     # 6. Final match
@@ -1588,6 +1588,11 @@ allow-lan: true
 mode: rule
 log-level: info
 ipv6: false
+geodata-mode: false
+geox-url:
+  geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
+  geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
+  mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
 
 proxies:
 {proxies_text}
