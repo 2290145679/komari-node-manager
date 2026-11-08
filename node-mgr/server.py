@@ -3681,14 +3681,16 @@ rules:
         if path in ["/api/nodes/ping-all", "/api/node-mgr/nodes/ping-all"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
+            c.execute("SELECT id, name, server_ip, port, protocol, sni, is_relay, relay_server_ip, relay_port FROM nodes WHERE enabled = 1")
             rows = c.fetchall()
             conn.close()
 
             results = {}
             def _check(r):
-                nid, name, server_ip, port, proto, sni = r
-                res = ping_node_handshake(server_ip, port, protocol=proto, sni=sni, timeout=2.5)
+                nid, name, server_ip, port, proto, sni, is_relay, relay_server_ip, relay_port = r
+                target_ip = relay_server_ip if (is_relay and relay_server_ip) else server_ip
+                target_port = (relay_port or port) if is_relay else port
+                res = ping_node_handshake(target_ip, target_port, protocol=proto, sni=sni, timeout=2.5)
                 p_item = {
                     "ok": res["success"],
                     "node_id": nid,
@@ -3713,15 +3715,17 @@ rules:
             node_id = m_ping.group(1)
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, server_ip, port, protocol, sni FROM nodes WHERE id = ?", (node_id,))
+            c.execute("SELECT id, name, server_ip, port, protocol, sni, is_relay, relay_server_ip, relay_port FROM nodes WHERE id = ?", (node_id,))
             row = c.fetchone()
             conn.close()
             if not row:
                 self._send_json({"ok": False, "error": "节点不存在"}, 404)
                 return
 
-            nid, name, server_ip, port, proto, sni = row
-            result = ping_node_handshake(server_ip, port, protocol=proto, sni=sni)
+            nid, name, server_ip, port, proto, sni, is_relay, relay_server_ip, relay_port = row
+            target_ip = relay_server_ip if (is_relay and relay_server_ip) else server_ip
+            target_port = (relay_port or port) if is_relay else port
+            result = ping_node_handshake(target_ip, target_port, protocol=proto, sni=sni)
             p_data = {
                 "ok": result["success"],
                 "node_id": nid,
