@@ -1304,11 +1304,20 @@
 
         <!-- Download Tool & Component Selector -->
         <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <label class="font-semibold text-slate-600 dark:text-slate-400">下载工具</label>
-            <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
-              <button type="button" onclick="updateDeployModalCmd('wget')" id="deployToolWget" class="px-3 py-1 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">wget (推荐)</button>
-              <button type="button" onclick="updateDeployModalCmd('curl')" id="deployToolCurl" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">curl</button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <label class="font-semibold text-slate-600 dark:text-slate-400 text-xs">下载工具</label>
+              <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+                <button type="button" onclick="updateDeployModalCmd('wget')" id="deployToolWget" class="px-3 py-1 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">wget (推荐)</button>
+                <button type="button" onclick="updateDeployModalCmd('curl')" id="deployToolCurl" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">curl</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="font-semibold text-slate-600 dark:text-slate-400 text-xs">执行权限</label>
+              <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+                <button type="button" onclick="setGlobalDeploySudo(true)" id="deploySudoTrue" class="px-3 py-1 rounded-lg text-xs font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">sudo bash</button>
+                <button type="button" onclick="setGlobalDeploySudo(false)" id="deploySudoFalse" class="px-3 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">免 sudo (Root)</button>
+              </div>
             </div>
           </div>
 
@@ -1488,11 +1497,20 @@
         </button>
 
         <div id="installCmdBox" class="space-y-3 hidden">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">下载工具:</span>
-            <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs">
-              <button type="button" onclick="setAddServerTool('wget')" id="addToolWget" class="px-3 py-1 rounded-lg font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">wget</button>
-              <button type="button" onclick="setAddServerTool('curl')" id="addToolCurl" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">curl</button>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">下载工具:</span>
+              <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs">
+                <button type="button" onclick="setAddServerTool('wget')" id="addToolWget" class="px-3 py-1 rounded-lg font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">wget</button>
+                <button type="button" onclick="setAddServerTool('curl')" id="addToolCurl" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">curl</button>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-semibold text-slate-600 dark:text-slate-400">权限:</span>
+              <div class="flex p-0.5 rounded-xl bg-slate-100 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-xs">
+                <button type="button" onclick="setGlobalDeploySudo(true)" id="addSudoTrue" class="px-3 py-1 rounded-lg font-bold bg-white dark:bg-zinc-900 text-blue-600 shadow-sm transition">sudo</button>
+                <button type="button" onclick="setGlobalDeploySudo(false)" id="addSudoFalse" class="px-3 py-1 rounded-lg font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition">免 sudo (Root)</button>
+              </div>
             </div>
           </div>
 
@@ -3761,6 +3779,54 @@
     state.addServerTool = 'wget';
     state.addServerToken = '';
 
+    function getDeployUseSudo() {
+      const saved = localStorage.getItem('komari_deploy_use_sudo');
+      return saved !== 'false';
+    }
+
+    function setGlobalDeploySudo(useSudo) {
+      localStorage.setItem('komari_deploy_use_sudo', useSudo ? 'true' : 'false');
+      renderDeploySudoButtons();
+      if (state.activeDeployServer) {
+        updateDeployModalCmd();
+      }
+      if (state.addServerToken) {
+        updateAddServerCmd();
+      }
+      if (state.currentEditServerToken) {
+        setEditDeployCmdTool(state.editDeployTool || 'wget');
+      }
+    }
+
+    function renderDeploySudoButtons() {
+      const useSudo = getDeployUseSudo();
+      const activeClass = 'bg-white dark:bg-zinc-900 text-blue-600 shadow-sm';
+      const inactiveClass = 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
+      const activeSmallClass = 'bg-blue-600 text-white';
+      const inactiveSmallClass = 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
+
+      const btnDepTrue = document.getElementById('deploySudoTrue');
+      const btnDepFalse = document.getElementById('deploySudoFalse');
+      if (btnDepTrue && btnDepFalse) {
+        btnDepTrue.className = `px-3 py-1 rounded-lg text-xs font-bold transition ${useSudo ? activeClass : inactiveClass}`;
+        btnDepFalse.className = `px-3 py-1 rounded-lg text-xs font-bold transition ${!useSudo ? activeClass : inactiveClass}`;
+      }
+
+      const btnAddTrue = document.getElementById('addSudoTrue');
+      const btnAddFalse = document.getElementById('addSudoFalse');
+      if (btnAddTrue && btnAddFalse) {
+        btnAddTrue.className = `px-3 py-1 rounded-lg font-bold transition ${useSudo ? activeClass : inactiveClass}`;
+        btnAddFalse.className = `px-3 py-1 rounded-lg font-bold transition ${!useSudo ? activeClass : inactiveClass}`;
+      }
+
+      const btnEditTrue = document.getElementById('editDeploySudoTrue');
+      const btnEditFalse = document.getElementById('editDeploySudoFalse');
+      if (btnEditTrue && btnEditFalse) {
+        btnEditTrue.className = `px-2 py-0.5 rounded text-[10px] font-bold transition ${useSudo ? activeSmallClass : inactiveSmallClass}`;
+        btnEditFalse.className = `px-2 py-0.5 rounded text-[10px] font-bold transition ${!useSudo ? activeSmallClass : inactiveSmallClass}`;
+      }
+    }
+
     function setAddServerTool(tool) {
       state.addServerTool = tool;
       const btnW = document.getElementById('addToolWget');
@@ -3778,6 +3844,7 @@
 
     function updateAddServerCmd() {
       if (!state.addServerToken) return;
+      renderDeploySudoButtons();
       const compProbe = document.getElementById('addCompProbe')?.checked ?? true;
       const compSingbox = document.getElementById('addCompSingbox')?.checked ?? true;
       const compRealm = document.getElementById('addCompRealm')?.checked ?? false;
@@ -3792,12 +3859,13 @@
       const ep = `${proto}//${host}`;
       const token = state.addServerToken;
       const tool = state.addServerTool || 'wget';
+      const bashExec = getDeployUseSudo() ? 'sudo bash' : 'bash';
 
       let cmd = '';
       if (tool === 'curl') {
-        cmd = `curl -fsSL ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+        cmd = `curl -fsSL ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       } else {
-        cmd = `wget -qO- ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+        cmd = `wget -qO- ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       }
       const el = document.getElementById('installCmdText');
       if (el) el.textContent = cmd;
@@ -3813,6 +3881,7 @@
         }).then(r => r.json());
         if (res.ok) {
           state.addServerToken = res.token;
+          renderDeploySudoButtons();
           updateAddServerCmd();
           document.getElementById('installCmdBox').classList.remove('hidden');
           loadServers();
@@ -3830,26 +3899,29 @@
     }
 
     function setEditDeployCmdTool(tool) {
-      state.editDeployTool = tool;
+      if (tool) state.editDeployTool = tool;
+      const currentTool = state.editDeployTool || 'wget';
       const btnW = document.getElementById('toolBtnWget');
       const btnC = document.getElementById('toolBtnCurl');
       if (btnW && btnC) {
-        btnW.className = tool === 'wget' 
+        btnW.className = currentTool === 'wget' 
           ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white' 
           : 'px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
-        btnC.className = tool === 'curl' 
+        btnC.className = currentTool === 'curl' 
           ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white' 
           : 'px-2 py-0.5 rounded text-[10px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200';
       }
+      renderDeploySudoButtons();
       const host = window.location.host;
       const proto = window.location.protocol;
       const ep = `${proto}//${host}`;
       const token = state.currentEditServerToken || '';
+      const bashExec = getDeployUseSudo() ? 'sudo bash' : 'bash';
       let cmd = '';
-      if (tool === 'curl') {
-        cmd = `curl -fsSL ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}`;
+      if (currentTool === 'curl') {
+        cmd = `curl -fsSL ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}`;
       } else {
-        cmd = `wget -qO- ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}`;
+        cmd = `wget -qO- ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}`;
       }
       const el = document.getElementById('editDeployCmdText');
       if (el) el.textContent = cmd;
@@ -3876,6 +3948,7 @@
       if (document.getElementById('deployCompProbe')) document.getElementById('deployCompProbe').checked = true;
       if (document.getElementById('deployCompSingbox')) document.getElementById('deployCompSingbox').checked = true;
       if (document.getElementById('deployCompRealm')) document.getElementById('deployCompRealm').checked = false;
+      renderDeploySudoButtons();
       updateDeployModalCmd('wget');
       openModal('modalServerDeploy');
     }
@@ -3897,6 +3970,8 @@
           : 'px-3 py-1 rounded-lg text-xs font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition';
       }
 
+      renderDeploySudoButtons();
+
       const compProbe = document.getElementById('deployCompProbe')?.checked ?? true;
       const compSingbox = document.getElementById('deployCompSingbox')?.checked ?? true;
       const compRealm = document.getElementById('deployCompRealm')?.checked ?? false;
@@ -3910,12 +3985,13 @@
       const proto = window.location.protocol;
       const ep = `${proto}//${host}`;
       const token = s.token || '';
+      const bashExec = getDeployUseSudo() ? 'sudo bash' : 'bash';
 
       let cmd = '';
       if (currentTool === 'curl') {
-        cmd = `curl -fsSL ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+        cmd = `curl -fsSL ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       } else {
-        cmd = `wget -qO- ${ep}/install-node.sh | sudo bash -s -- -e ${ep} -t ${token}${flags}`;
+        cmd = `wget -qO- ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       }
       document.getElementById('deployModalCmdText').textContent = cmd;
     }
