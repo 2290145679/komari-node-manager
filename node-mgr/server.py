@@ -4949,11 +4949,6 @@ rules:
             pub_key = body.get("public_key", "")
             priv_key = body.get("private_key", "")
             short_id = body.get("short_id", "")
-            
-            if protocol == "vless_reality" and (not pub_key or not priv_key):
-                priv, pub = get_reality_keypair()
-                priv_key, pub_key = priv, pub
-                short_id = get_short_id()
 
             # Realm Relay configuration
             is_relay = 1 if body.get("is_relay") else 0
@@ -4961,6 +4956,32 @@ rules:
             relay_server_name = str(body.get("relay_server_name") or "").strip()
             relay_server_ip = str(body.get("relay_server_ip") or "").strip()
             relay_port = int(body.get("relay_port") or port)
+
+            # Inherit existing credentials if landing server already has a node on this port
+            if is_relay and server_uuid and port:
+                try:
+                    conn_land = sqlite3.connect(NODES_DB)
+                    c_land = conn_land.cursor()
+                    c_land.execute("SELECT uuid_or_passwd, public_key, private_key, short_id, sni, flow FROM nodes WHERE server_uuid = ? AND port = ? LIMIT 1", (server_uuid, port))
+                    land_row = c_land.fetchone()
+                    conn_land.close()
+                    if land_row and land_row[0] and land_row[1] and land_row[2]:
+                        u = land_row[0]
+                        pub_key = land_row[1]
+                        priv_key = land_row[2]
+                        if land_row[3]:
+                            short_id = land_row[3]
+                        if land_row[4]:
+                            sni = land_row[4]
+                        if land_row[5]:
+                            flow = land_row[5]
+                except Exception as e:
+                    print(f"Error inheriting landing credentials: {e}")
+
+            if protocol == "vless_reality" and (not pub_key or not priv_key):
+                priv, pub = get_reality_keypair()
+                priv_key, pub_key = priv, pub
+                short_id = get_short_id()
 
             if is_relay and relay_server_uuid and (not relay_server_ip or not relay_server_name) and os.path.exists(KOMARI_DB):
                 try:

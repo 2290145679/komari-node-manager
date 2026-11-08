@@ -3908,8 +3908,9 @@
       if (!node) return;
       let link = node.raw_link || '';
       if (!link) {
-        // Build link via backend or prompt
-        link = `vless://${node.uuid_or_passwd}@${node.server_ip}:${node.port}?encryption=none&security=reality&sni=${node.sni || 'bing.com'}&pbk=${node.public_key || ''}&sid=${node.short_id || ''}&type=tcp#${encodeURIComponent(node.name)}`;
+        const ip = (node.is_relay && node.relay_server_ip) ? node.relay_server_ip : node.server_ip;
+        const port = (node.is_relay && node.relay_port) ? node.relay_port : node.port;
+        link = `vless://${node.uuid_or_passwd}@${ip}:${port}?encryption=none&flow=${node.flow || 'xtls-rprx-vision'}&security=reality&sni=${node.sni || 'addons.mozilla.org'}&fp=chrome&pbk=${node.public_key || ''}&sid=${node.short_id || ''}&type=tcp#${encodeURIComponent(node.name)}`;
       }
       copyText(link, '节点链接已成功复制到剪贴板！');
     }
