@@ -108,6 +108,12 @@
 </head>
 <body class="bg-[#F8FAFC] dark:bg-[#0B0F19] text-slate-800 dark:text-slate-100 min-h-screen font-sans antialiased selection:bg-purple-500 selection:text-white pb-28 md:pb-8">
 
+  <!-- Decoy inputs to trap aggressive browser credential autofill and protect search inputs -->
+  <div style="opacity:0;position:absolute;top:0;left:0;height:0;width:0;z-index:-1;overflow:hidden;pointer-events:none;" aria-hidden="true" tabindex="-1">
+    <input type="text" name="fake_username_remember_prevent" tabindex="-1" autocomplete="username">
+    <input type="password" name="fake_password_remember_prevent" tabindex="-1" autocomplete="current-password">
+  </div>
+
   <!-- ============================================================== -->
   <!-- 1. LOGIN OVERLAY (Rendered if 401 Unauthorized)                 -->
   <!-- ============================================================== -->
@@ -367,15 +373,15 @@
             <span>一键导入客户端 / 扫码</span>
           </button>
           <div class="flex gap-2">
-            <button onclick="manualPingAllNodes()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
+            <button type="button" onclick="manualPingAllNodes()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-blue-500"></i>
               <span>测速</span>
             </button>
-            <button onclick="openImportNodeModal()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
+            <button type="button" onclick="openImportNodeModal()" class="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-zinc-800 transition flex items-center justify-center gap-1.5 btn-tap">
               <i data-lucide="download" class="w-3.5 h-3.5 text-amber-500"></i>
               <span>导入</span>
             </button>
-            <button onclick="openCreateNodeModal()" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-purple-600 hover:bg-purple-700 shadow-sm flex items-center justify-center gap-1.5 btn-tap">
+            <button type="button" onclick="openCreateNodeModal()" class="flex-1 sm:flex-initial px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white bg-purple-600 hover:bg-purple-700 shadow-sm flex items-center justify-center gap-1.5 btn-tap">
               <i data-lucide="plus" class="w-4 h-4"></i>
               <span>自建</span>
             </button>
@@ -431,14 +437,14 @@
             <span class="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-bold" id="nodesCountBadge">0 个</span>
           </h2>
           <div class="flex items-center gap-2 flex-wrap">
-            <button onclick="pingAllNodes()" id="pingAllNodesBtn" class="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1.5">
+            <button type="button" onclick="pingAllNodes()" id="pingAllNodesBtn" class="px-3 py-1.5 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1.5">
               <i data-lucide="zap" class="w-3.5 h-3.5"></i>
               <span>并发测速全部</span>
             </button>
             <div class="relative flex items-center">
               <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none"></i>
-              <input type="search" id="nodeSearchInput" name="node_search_filter_query_prevent_autofill" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
-              <button id="clearNodeSearchBtn" onclick="clearNodeSearch()" class="hidden absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none" title="清空搜索">✕</button>
+              <input type="search" id="nodeSearchInput" name="node_filter_keyword_no_autofill" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" onblur="if(!this.value) this.setAttribute('readonly', 'readonly')" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+              <button type="button" id="clearNodeSearchBtn" onclick="clearNodeSearch()" class="hidden absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none" title="清空搜索">✕</button>
             </div>
           </div>
         </div>
@@ -1984,6 +1990,13 @@
         const panel = el.querySelector('.sheet-panel');
         if (panel) panel.style.transform = '';
       }
+      if (id === 'modalCreateNode' || id === 'modalEditNode') {
+        const searchEl = document.getElementById('nodeSearchInput');
+        if (searchEl && (searchEl.value.toLowerCase() === 'admin' || searchEl.value.toLowerCase() === 'root')) {
+          searchEl.value = '';
+        }
+        renderNodesList();
+      }
     }
     function toggleMoreSheet() {
       const el = document.getElementById('sheetMore');
@@ -2007,6 +2020,13 @@
     function openClientImportModal() { openModal('modalClientImport'); generateUniversalQr(); }
     function openCreateUserModal() { openModal('modalCreateUser'); }
     function openCreateNodeModal() {
+      // Defensively purge any search box pollution
+      const searchEl = document.getElementById('nodeSearchInput');
+      if (searchEl && (searchEl.value.toLowerCase() === 'admin' || searchEl.value.toLowerCase() === 'root')) {
+        searchEl.value = '';
+      }
+      renderNodesList();
+
       const chk = document.getElementById('createNodeEnableRelay');
       if (chk) chk.checked = false;
       const rPort = document.getElementById('createNodeRelayPort');
@@ -2408,7 +2428,13 @@
     function renderNodesList() {
       const container = document.getElementById('nodesListContainer');
       if (!container) return;
-      const q = (document.getElementById('nodeSearchInput')?.value || '').trim().toLowerCase();
+      let q = (document.getElementById('nodeSearchInput')?.value || '').trim().toLowerCase();
+      // Anti-autofill trap: ignore and clear browser credential leaks like 'admin' / 'root'
+      if (q === 'admin' || q === 'root') {
+        const searchInputEl = document.getElementById('nodeSearchInput');
+        if (searchInputEl) searchInputEl.value = '';
+        q = '';
+      }
       const clearBtn = document.getElementById('clearNodeSearchBtn');
       if (clearBtn) clearBtn.classList.toggle('hidden', !q);
 
