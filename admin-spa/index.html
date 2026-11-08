@@ -3839,6 +3839,23 @@
         return;
       }
 
+      const editTargetNode = state.nodes.find(n => n.id === id);
+      if (editTargetNode && editTargetNode.is_relay) {
+        const effectiveRelayPort = relay_port || port;
+        const rUuid = editTargetNode.relay_server_uuid;
+        const rName = editTargetNode.relay_server_name || '中转机';
+        const conflictNative = state.nodes.find(n => n.server_uuid === rUuid && n.port === effectiveRelayPort && !n.is_relay);
+        if (conflictNative) {
+          showToast(`端口冲突！中转机【${rName}】上的 Sing-box 节点【${conflictNative.name}】已占用端口 ${effectiveRelayPort}。请在【中转机开放端口】中填入不同的独立端口（如 11102 / 20082）！`, 'warn');
+          return;
+        }
+        const conflictRelay = state.nodes.find(n => n.id !== id && n.relay_server_uuid === rUuid && (n.relay_port || n.port) === effectiveRelayPort);
+        if (conflictRelay) {
+          showToast(`端口冲突！中转机【${rName}】上的另一中转节点【${conflictRelay.name}】已占用端口 ${effectiveRelayPort}。请修改为其他独立端口！`, 'warn');
+          return;
+        }
+      }
+
       const btn = document.getElementById('btnSubmitEditNode');
       if (btn) btn.disabled = true;
 
@@ -3855,6 +3872,7 @@
             sni: sni,
             public_key: public_key,
             short_id: short_id,
+            is_relay: editTargetNode && editTargetNode.is_relay ? 1 : 0,
             relay_port: relay_port
           })
         }).then(r => r.json());
@@ -4084,6 +4102,21 @@
       }
 
       const port = parseInt(document.getElementById('createNodePort').value) || 20082;
+
+      // Anti-collision check: Ensure relay port does not conflict with existing native Sing-box node or another relay node on relay server
+      if (isRelay) {
+        const effectiveRelayPort = relayPort || port;
+        const conflictNative = state.nodes.find(n => n.server_uuid === relayServerUuid && n.port === effectiveRelayPort && !n.is_relay);
+        if (conflictNative) {
+          showToast(`端口冲突！中转机【${relayServerName}】上的 Sing-box 节点【${conflictNative.name}】已占用端口 ${effectiveRelayPort}。请在【中转机开放端口】中填入不同的独立端口（如 11102 / 20082）！`, 'warn');
+          return;
+        }
+        const conflictRelay = state.nodes.find(n => n.relay_server_uuid === relayServerUuid && (n.relay_port || n.port) === effectiveRelayPort);
+        if (conflictRelay) {
+          showToast(`端口冲突！中转机【${relayServerName}】上已存在使用端口 ${effectiveRelayPort} 的中转节点【${conflictRelay.name}】。请填入不同的中转机端口！`, 'warn');
+          return;
+        }
+      }
       const defaultNodeName = isRelay 
         ? `${relayServerName || '中转'} ➔ ${finalServerName || '落地'} (Reality)`
         : `${finalServerName || '自建'} - Reality`;

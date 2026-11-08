@@ -2307,15 +2307,16 @@ while true; do
       if [ "$REALM_MD5" != "$OLD_REALM_MD5" ]; then
         echo "$REALM_RES" > /etc/realm/config.toml
         echo "$REALM_MD5" > /etc/realm/config.md5
-        R_PORTS=$(grep -oE 'listen[[:space:]]*=[[:space:]]*"[^"]*:[0-9]+"' /etc/realm/config.toml | grep -oE '[0-9]+' | sort -u)
+        R_PORTS=$(grep -oE ':[0-9]+"' /etc/realm/config.toml | tr -d ':"' | sort -u)
         for rp in $R_PORTS; do
           iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
           iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
         done
         if command -v systemctl >/dev/null 2>&1; then
-          systemctl restart realm.service >/dev/null 2>&1 || true
+          systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
         elif command -v rc-service >/dev/null 2>&1; then
-          rc-service realm restart >/dev/null 2>&1 || true
+          rc-service realm zap >/dev/null 2>&1 || true
+          rc-service realm restart >/dev/null 2>&1 || rc-service realm start >/dev/null 2>&1 || true
         fi
         echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
       fi
@@ -2430,7 +2431,7 @@ EOF
     if [ -n "$INIT_REALM" ] && echo "$INIT_REALM" | grep -q '\[network\]'; then
       echo "$INIT_REALM" > /etc/realm/config.toml
       echo "$INIT_REALM" | md5sum | awk '{print $1}' > /etc/realm/config.md5
-      R_PORTS=$(grep -oE 'listen[[:space:]]*=[[:space:]]*"[^"]*:[0-9]+"' /etc/realm/config.toml | grep -oE '[0-9]+' | sort -u)
+      R_PORTS=$(grep -oE ':[0-9]+"' /etc/realm/config.toml | tr -d ':"' | sort -u)
       for rp in $R_PORTS; do
         iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
         iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
@@ -5121,10 +5122,10 @@ rules:
                         public_key = ?,
                         short_id = ?,
                         is_relay = ?,
-                        relay_server_uuid = ?,
-                        relay_server_name = ?,
-                        relay_server_ip = ?,
-                        relay_port = case when ? > 0 then ? else port end
+                        relay_server_uuid = coalesce(nullif(?, ''), relay_server_uuid),
+                        relay_server_name = coalesce(nullif(?, ''), relay_server_name),
+                        relay_server_ip = coalesce(nullif(?, ''), relay_server_ip),
+                        relay_port = case when ? > 0 then ? else relay_port end
                     WHERE id = ?
                 """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id,
                       is_relay_val, relay_server_uuid, relay_server_name, relay_server_ip, relay_port, relay_port, node_id))
@@ -5137,9 +5138,10 @@ rules:
                         uuid_or_passwd = coalesce(nullif(?, ''), uuid_or_passwd),
                         sni = ?,
                         public_key = ?,
-                        short_id = ?
+                        short_id = ?,
+                        relay_port = case when ? > 0 then ? else relay_port end
                     WHERE id = ?
-                """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id, node_id))
+                """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id, relay_port, relay_port, node_id))
             conn.commit()
             conn.close()
             self._send_json({"ok": True, "message": "节点配置已更新"})
