@@ -443,7 +443,7 @@
             </button>
             <div class="relative flex items-center">
               <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none"></i>
-              <input type="search" id="nodeSearchInput" name="node_filter_keyword_no_autofill" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" onblur="if(!this.value) this.setAttribute('readonly', 'readonly')" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+              <input type="search" id="nodeSearchInput" name="node_filter_keyword_no_autofill" autocomplete="one-time-code" readonly onfocus="this.removeAttribute('readonly')" onblur="if(!this.value) this.setAttribute('readonly', 'readonly')" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
               <button type="button" id="clearNodeSearchBtn" onclick="clearNodeSearch()" class="hidden absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none" title="清空搜索">✕</button>
             </div>
           </div>
@@ -1050,6 +1050,24 @@
               <input type="number" id="editServerWeight" value="0" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none">
             </div>
           </div>
+        </div>
+
+        <!-- Section 1.5: Realm 端口中转能力配置 -->
+        <div class="p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+              <i data-lucide="shuffle" class="w-4 h-4"></i>
+              <span>Realm 端口中转组件能力</span>
+            </span>
+            <span id="editServerRealmStatusBadge" class="text-[10px] px-2 py-0.5 rounded-full font-bold"></span>
+          </div>
+          <label class="flex items-start gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="editServerHasRealm" class="w-4 h-4 rounded text-indigo-600 focus:ring-0 cursor-pointer mt-0.5">
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-800 dark:text-slate-100">已安装 / 启用 Realm 端口转发组件</div>
+              <div class="text-[11px] text-slate-400 mt-0.5 leading-tight">启用后，在创建自建中转落地节点时，本服务器将作为候选【中转线路机】供用户选择。</div>
+            </div>
+          </label>
         </div>
 
         <!-- Section 2: 费用与账单周期 -->
@@ -1686,9 +1704,19 @@
 
       <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器 (线路/入口机)</label>
-          <select id="createNodeServerSelect" onchange="updateCreateNodeIpHint()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          <label id="createNodeServerSelectTitle" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器 (线路/入口机)</label>
+          <select id="createNodeServerSelect" onchange="onCreateNodeServerSelectChange()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
           <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
+          <!-- Alert if no realm servers -->
+          <div id="createNodeNoRealmAlert" class="hidden mt-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs space-y-1">
+            <div class="font-bold flex items-center gap-1.5">
+              <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
+              <span>当前暂无安装 Realm 的中转线路机</span>
+            </div>
+            <p class="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
+              选择【线路-落地方案】的前提是中转线路机必须安装并运行 Realm 转发组件。当前暂未检测到安装了 Realm 的服务器。请先在服务器管理中勾选 Realm 进行部署，或在服务器配置中开启 Realm 组件。
+            </p>
+          </div>
         </div>
 
         <!-- Realm 中转落地配置 -->
@@ -1698,7 +1726,7 @@
               <input type="checkbox" id="createNodeEnableRelay" onchange="toggleCreateNodeRelayFields()" class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 dark:border-zinc-700 cursor-pointer">
               <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ 启用 Realm 端口中转落地模式 (海外出口机)</span>
             </label>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-medium">默认直连</span>
+            <span id="createNodeRelayBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-medium">默认直连</span>
           </div>
 
           <div id="createNodeRelayFields" class="hidden pt-2.5 border-t border-indigo-100/80 dark:border-indigo-900/30 space-y-3">
@@ -2248,6 +2276,12 @@
               ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300">Sing-box 离线</span>` 
               : `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-400">未装核心</span>`);
 
+        const realmBadge = s.realm_online
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300">Realm 转发</span>`
+          : (s.realm_installed || s.has_realm
+              ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">Realm 就绪</span>`
+              : '');
+
         const cpu = (s.cpu_usage || 0).toFixed(1);
         const ram = (s.ram_pct || 0).toFixed(1);
         const disk = (s.disk_pct || 0).toFixed(1);
@@ -2311,7 +2345,10 @@
                 </div>
                 <div class="flex flex-col items-end gap-1 shrink-0">
                   ${statusBadge}
-                  ${coreBadge}
+                  <div class="flex items-center gap-1 flex-wrap justify-end">
+                    ${coreBadge}
+                    ${realmBadge}
+                  </div>
                 </div>
               </div>
 
@@ -2429,10 +2466,23 @@
     function renderNodesList() {
       const container = document.getElementById('nodesListContainer');
       if (!container) return;
-      let q = (document.getElementById('nodeSearchInput')?.value || '').trim().toLowerCase();
+      const searchInputEl = document.getElementById('nodeSearchInput');
+      if (searchInputEl && !searchInputEl.__has_anti_autofill) {
+        searchInputEl.__has_anti_autofill = true;
+        const purgeLeak = () => {
+          const v = (searchInputEl.value || '').trim().toLowerCase();
+          if (v === 'admin' || v === 'root' || v === 'administrator') {
+            searchInputEl.value = '';
+            renderNodesList();
+          }
+        };
+        searchInputEl.addEventListener('change', purgeLeak);
+        searchInputEl.addEventListener('blur', purgeLeak);
+      }
+
+      let q = (searchInputEl?.value || '').trim().toLowerCase();
       // Anti-autofill trap: ignore and clear browser credential leaks like 'admin' / 'root'
-      if (q === 'admin' || q === 'root') {
-        const searchInputEl = document.getElementById('nodeSearchInput');
+      if (q === 'admin' || q === 'root' || q === 'administrator') {
         if (searchInputEl) searchInputEl.value = '';
         q = '';
       }
@@ -3208,6 +3258,23 @@
       document.getElementById('editServerPublicRemark').value = s.public_remark || '';
       document.getElementById('editServerRemark').value = s.remark || '';
 
+      // Realm component toggle & badge
+      const realmChk = document.getElementById('editServerHasRealm');
+      if (realmChk) realmChk.checked = !!(s.has_realm || s.realm_installed || s.realm_online);
+      const realmBadgeEl = document.getElementById('editServerRealmStatusBadge');
+      if (realmBadgeEl) {
+        if (s.realm_online) {
+          realmBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300';
+          realmBadgeEl.textContent = 'Realm 在线';
+        } else if (s.has_realm || s.realm_installed) {
+          realmBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40';
+          realmBadgeEl.textContent = 'Realm 就绪';
+        } else {
+          realmBadgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-zinc-800 text-slate-400';
+          realmBadgeEl.textContent = '未装 Realm';
+        }
+      }
+
       openModal('modalEditServer');
     }
 
@@ -3235,6 +3302,7 @@
         auto_renewal: document.getElementById('editServerAutoRenewal').checked ? 1 : 0,
         traffic_limit,
         traffic_limit_type: document.getElementById('editServerTrafficType').value,
+        has_realm: document.getElementById('editServerHasRealm')?.checked ? 1 : 0,
         hidden: document.getElementById('editServerHidden').checked ? 1 : 0,
         public_remark: document.getElementById('editServerPublicRemark').value.trim(),
         remark: document.getElementById('editServerRemark').value.trim()
@@ -3832,20 +3900,86 @@
     }
 
     function populateServerSelectForNode() {
+      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
       const s = document.getElementById('createNodeServerSelect');
       const landingSel = document.getElementById('createNodeLandingServerSelect');
-      if (s) {
-        s.innerHTML = state.servers.map(srv => `
-          <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
-        `).join('');
+      const noRealmAlert = document.getElementById('createNodeNoRealmAlert');
+      const titleEl = document.getElementById('createNodeServerSelectTitle');
+      const badgeEl = document.getElementById('createNodeRelayBadge');
+
+      if (!s || !landingSel) return;
+
+      const prevSelectedS = s.value;
+      const prevSelectedLanding = landingSel.value;
+
+      if (isRelay) {
+        if (titleEl) titleEl.textContent = '✈️ 中转线路机 (入口机，须安装 Realm 转发组件)';
+        if (badgeEl) {
+          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-bold';
+          badgeEl.textContent = '中转落地模式';
+        }
+
+        // Only servers with Realm can be selected as 线路机
+        const realmServers = state.servers.filter(srv => srv.has_realm || srv.realm_installed || srv.realm_online);
+        if (realmServers.length === 0) {
+          s.innerHTML = '<option value="" disabled selected>⚠️ 当前暂无安装 Realm 的中转机 (请先部署)</option>';
+          if (noRealmAlert) noRealmAlert.classList.remove('hidden');
+        } else {
+          if (noRealmAlert) noRealmAlert.classList.add('hidden');
+          s.innerHTML = realmServers.map(srv => {
+            const tag = srv.realm_online ? '⚡[Realm 在线]' : '✓[已安装 Realm]';
+            return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
+          }).join('');
+          if (prevSelectedS && realmServers.some(srv => srv.uuid === prevSelectedS)) {
+            s.value = prevSelectedS;
+          }
+        }
+
+        // Target Landing VPS: other servers, ideally with Singbox
+        const currentRelayUuid = s.value;
+        const landingCandidates = state.servers.filter(srv => srv.uuid !== currentRelayUuid);
+        landingSel.innerHTML = landingCandidates.map(srv => {
+          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
+          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
+        }).join('');
+        if (prevSelectedLanding && landingCandidates.some(srv => srv.uuid === prevSelectedLanding)) {
+          landingSel.value = prevSelectedLanding;
+        }
+      } else {
+        if (titleEl) titleEl.textContent = '所属服务器 (直连节点，在此服务器直接运行 Sing-box)';
+        if (badgeEl) {
+          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-medium';
+          badgeEl.textContent = '默认直连';
+        }
+        if (noRealmAlert) noRealmAlert.classList.add('hidden');
+
+        s.innerHTML = state.servers.map(srv => {
+          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
+          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
+        }).join('');
+        if (prevSelectedS && state.servers.some(srv => srv.uuid === prevSelectedS)) {
+          s.value = prevSelectedS;
+        }
       }
-      if (landingSel) {
-        landingSel.innerHTML = state.servers.map(srv => `
-          <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
-        `).join('');
-        if (state.servers.length > 1 && s && s.value) {
-          const other = state.servers.find(srv => srv.uuid !== s.value);
-          if (other) landingSel.value = other.uuid;
+
+      updateCreateNodeIpHint();
+      initLucide();
+    }
+
+    function onCreateNodeServerSelectChange() {
+      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
+      if (isRelay) {
+        const s = document.getElementById('createNodeServerSelect');
+        const landingSel = document.getElementById('createNodeLandingServerSelect');
+        const currentRelayUuid = s.value;
+        const prevSelectedLanding = landingSel.value;
+        const landingCandidates = state.servers.filter(srv => srv.uuid !== currentRelayUuid);
+        landingSel.innerHTML = landingCandidates.map(srv => {
+          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
+          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
+        }).join('');
+        if (prevSelectedLanding && landingCandidates.some(srv => srv.uuid === prevSelectedLanding)) {
+          landingSel.value = prevSelectedLanding;
         }
       }
       updateCreateNodeIpHint();
@@ -3857,6 +3991,7 @@
       if (fields) {
         fields.classList.toggle('hidden', !enabled);
       }
+      populateServerSelectForNode();
       initLucide();
     }
 
@@ -3903,6 +4038,16 @@
       let relayPort = 0;
 
       if (isRelay) {
+        if (!srvUuid) {
+          showToast('请选择已安装 Realm 的中转线路机', 'warn');
+          return;
+        }
+        const srvObj = state.servers.find(s => s.uuid === srvUuid);
+        if (srvObj && !srvObj.has_realm && !srvObj.realm_installed && !srvObj.realm_online) {
+          showToast(`服务器【${srvObj.name}】未安装 Realm 转发组件，无法作为中转线路机`, 'error');
+          return;
+        }
+
         const landingSel = document.getElementById('createNodeLandingServerSelect');
         const landingUuid = landingSel ? landingSel.value : '';
         const landingSrv = state.servers.find(s => s.uuid === landingUuid);

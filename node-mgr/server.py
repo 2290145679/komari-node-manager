@@ -397,6 +397,19 @@ def init_db():
         )
     ''')
     c.execute('''
+        CREATE TABLE IF NOT EXISTS realm_heartbeats (
+            token TEXT PRIMARY KEY,
+            last_seen INTEGER
+        )
+    ''')
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS server_realm_configs (
+            uuid TEXT PRIMARY KEY,
+            has_realm INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    c.execute('''
         CREATE TABLE IF NOT EXISTS server_traffic_baselines (
             uuid TEXT PRIMARY KEY,
             baseline_up INTEGER DEFAULT 0,
@@ -1017,6 +1030,14 @@ def get_servers_with_stats():
     c_n = conn_n.cursor()
     c_n.execute("SELECT token, last_seen FROM agent_heartbeats")
     heartbeats = dict(c_n.fetchall())
+    c_n.execute("CREATE TABLE IF NOT EXISTS realm_heartbeats (token TEXT PRIMARY KEY, last_seen INTEGER)")
+    c_n.execute("SELECT token, last_seen FROM realm_heartbeats")
+    realm_heartbeats = dict(c_n.fetchall())
+    c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c_n.execute("SELECT uuid, has_realm FROM server_realm_configs")
+    realm_configs = dict(c_n.fetchall())
+    c_n.execute("SELECT DISTINCT relay_server_uuid FROM nodes WHERE is_relay = 1")
+    active_relay_uuids = set(r[0] for r in c_n.fetchall() if r[0])
     c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
     baselines = {r[0]: (r[1], r[2]) for r in c_n.fetchall()}
     conn_n.close()
@@ -1120,6 +1141,12 @@ def get_servers_with_stats():
         last_seen = heartbeats.get(token, 0)
         is_online = (now - last_seen) <= 35 if last_seen > 0 else False
 
+        r_last_seen = realm_heartbeats.get(token, 0)
+        is_realm_online = (now - r_last_seen) <= 60 if r_last_seen > 0 else False
+        is_realm_configured = bool(realm_configs.get(uuid_val, 0))
+        is_relay_assigned = uuid_val in active_relay_uuids
+        has_realm = is_realm_online or (r_last_seen > 0) or is_realm_configured or is_relay_assigned
+
         rec = recent_metrics.get(uuid_val)
         is_probe_online = bool(rec and len(rec) > 0)
         is_server_online = is_probe_online or is_online
@@ -1183,6 +1210,10 @@ def get_servers_with_stats():
             "singbox_online": is_online,
             "server_online": is_server_online,
             "singbox_installed": last_seen > 0,
+            "realm_online": is_realm_online,
+            "realm_installed": (r_last_seen > 0) or is_realm_configured or is_relay_assigned,
+            "has_realm": has_realm,
+            "realm_last_seen": r_last_seen,
             "last_seen": last_seen,
             "last_seen_ago": (now - last_seen) if last_seen > 0 else None,
             "traffic_up": delta_up,
@@ -2170,7 +2201,7 @@ $DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/h
 fi
 
 # 5. Install Node-Sync Agent Daemon
-if [ "$INSTALL_SINGBOX" -eq 1 ]; then
+if [ "$INSTALL_SINGBOX" -eq 1 ] || [ "$INSTALL_REALM" -eq 1 ]; then
   echo "[5/5] Installing Node Configuration Sync Daemon..."
   if [ "$INIT_SYSTEM" = "openrc" ]; then
     rc-service komari-pro-node-sync stop >/dev/null 2>&1 || true
@@ -2325,7 +2356,7 @@ else
   cat << EOF > /etc/systemd/system/komari-pro-node-sync.service
 [Unit]
 Description=Komari Node Configuration Sync Service
-After=network.target sing-box.service
+After=network.target
 
 [Service]
 Type=simple
@@ -2376,6 +2407,19 @@ EOF
     tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm
     chmod +x /usr/local/bin/realm
     rm -f /tmp/realm.tar.gz
+
+    # Fetch and apply initial Realm rules immediately
+    echo "Fetching initial Realm forwarding configuration..."
+    INIT_REALM=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
+    if [ -n "$INIT_REALM" ] && echo "$INIT_REALM" | grep -q '\[network\]'; then
+      echo "$INIT_REALM" > /etc/realm/config.toml
+      echo "$INIT_REALM" | md5sum | awk '{print $1}' > /etc/realm/config.md5
+      R_PORTS=$(grep -oE 'listen[[:space:]]*=[[:space:]]*"[^"]*:[0-9]+"' /etc/realm/config.toml | grep -oE '[0-9]+' | sort -u)
+      for rp in $R_PORTS; do
+        iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+        iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+      done
+    fi
 
     if [ "$INIT_SYSTEM" = "openrc" ]; then
       cat << 'EOF' > /etc/init.d/realm
@@ -3966,6 +4010,18 @@ rules:
             if not token:
                 self._send_text("# error: missing token\n", 400)
                 return
+
+            # Record Realm heartbeat
+            try:
+                conn_hb = sqlite3.connect(NODES_DB)
+                c_hb = conn_hb.cursor()
+                c_hb.execute("CREATE TABLE IF NOT EXISTS realm_heartbeats (token TEXT PRIMARY KEY, last_seen INTEGER)")
+                c_hb.execute("INSERT OR REPLACE INTO realm_heartbeats (token, last_seen) VALUES (?, ?)", (token, int(time.time())))
+                conn_hb.commit()
+                conn_hb.close()
+            except Exception:
+                pass
+
             servers = get_servers()
             matched = None
             for s in servers:
@@ -4462,6 +4518,15 @@ rules:
                 c_n.execute("UPDATE nodes SET server_name = ? WHERE server_uuid = ?", (body["name"], suuid))
                 conn_n.commit()
                 conn_n.close()
+
+            if "has_realm" in body:
+                has_realm_val = 1 if body["has_realm"] else 0
+                conn_r = sqlite3.connect(NODES_DB)
+                c_r = conn_r.cursor()
+                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", (suuid, has_realm_val))
+                conn_r.commit()
+                conn_r.close()
 
             self._send_json({"ok": True})
             return
