@@ -1930,6 +1930,7 @@ TOKEN=""
 MASTER_URL="https://{DOMAIN}"
 INSTALL_PROBE=1
 INSTALL_SINGBOX=1
+INSTALL_REALM=0
 ENABLE_BBR=1
 
 EXTRA_ARGS=()
@@ -1949,6 +1950,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --skip-singbox)
       INSTALL_SINGBOX=0
+      shift
+      ;;
+    --with-realm|--install-realm)
+      INSTALL_REALM=1
       shift
       ;;
     --skip-bbr)
@@ -2278,6 +2283,79 @@ EOF
   systemctl enable komari-pro-node-sync.service >/dev/null 2>&1 || true
   systemctl restart komari-pro-node-sync.service
 fi
+fi
+
+# 6. Install Realm High-Performance Port Forwarder
+if [ "$INSTALL_REALM" -eq 1 ]; then
+  echo ""
+  echo "[6/6] Installing Realm high-performance port forwarder..."
+  ARCH=$(uname -m)
+  case $ARCH in
+    x86_64) REALM_ARCH="x86_64" ;;
+    aarch64|arm64) REALM_ARCH="aarch64" ;;
+    *) echo "[Warn] Unsupported arch for Realm: $ARCH, skipping Realm installation"; REALM_ARCH="" ;;
+  esac
+
+  if [ -n "$REALM_ARCH" ]; then
+    mkdir -p /etc/realm /usr/local/bin
+    if [ ! -f /etc/realm/config.toml ]; then
+      cat << 'EOF' > /etc/realm/config.toml
+[log]
+level = "warn"
+
+[network]
+no_tcp = false
+use_udp = true
+EOF
+    fi
+
+    echo "Downloading Realm binary (realm-${REALM_ARCH}-unknown-linux-musl.tar.gz)..."
+    REALM_URL="https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}-unknown-linux-musl.tar.gz"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL "$REALM_URL" -o /tmp/realm.tar.gz
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO /tmp/realm.tar.gz "$REALM_URL"
+    fi
+    tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm
+    chmod +x /usr/local/bin/realm
+    rm -f /tmp/realm.tar.gz
+
+    if [ "$INIT_SYSTEM" = "openrc" ]; then
+      cat << 'EOF' > /etc/init.d/realm
+#!/sbin/openrc-run
+name="Realm Forwarder"
+description="Realm Port Forwarding Service"
+command="/usr/local/bin/realm"
+command_args="-c /etc/realm/config.toml"
+pidfile="/run/realm.pid"
+supervisor=supervise-daemon
+depend() { need net; after network; }
+EOF
+      chmod +x /etc/init.d/realm
+      rc-update add realm default >/dev/null 2>&1 || true
+      rc-service realm restart >/dev/null 2>&1 || rc-service realm start >/dev/null 2>&1 || true
+    else
+      cat << 'EOF' > /etc/systemd/system/realm.service
+[Unit]
+Description=Realm Port Forwarding Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/realm -c /etc/realm/config.toml
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+      systemctl daemon-reload
+      systemctl enable realm.service >/dev/null 2>&1 || true
+      systemctl restart realm.service || true
+    fi
+    echo "[Success] Realm port forwarding service successfully installed and running!"
+  fi
 fi
 
 echo ""
