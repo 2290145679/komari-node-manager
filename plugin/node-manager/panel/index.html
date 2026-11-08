@@ -435,7 +435,11 @@
               <i data-lucide="zap" class="w-3.5 h-3.5"></i>
               <span>并发测速全部</span>
             </button>
-            <input type="text" id="nodeSearchInput" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <div class="relative flex items-center">
+              <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none"></i>
+              <input type="search" id="nodeSearchInput" name="node_search_filter_query_prevent_autofill" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" oninput="renderNodesList()" placeholder="搜索节点名称 / IP / 协议..." class="pl-8 pr-7 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+              <button id="clearNodeSearchBtn" onclick="clearNodeSearch()" class="hidden absolute right-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold leading-none" title="清空搜索">✕</button>
+            </div>
           </div>
         </div>
         <div id="nodesListContainer" class="grid grid-cols-1 xl:grid-cols-2 min-[2200px]:grid-cols-3 gap-3.5">
@@ -1636,6 +1640,24 @@
           </div>
         </div>
 
+        <!-- Realm 中转状态展示与编辑 -->
+        <div id="editNodeRelayBox" class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ Realm 端口中转状态</span>
+            <span id="editNodeRelayBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 font-medium">直连模式</span>
+          </div>
+          <div id="editNodeRelayInfo" class="hidden text-[11px] space-y-1.5 pt-1.5 border-t border-indigo-100/60 dark:border-indigo-900/30">
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400">中转线路机:</span>
+              <span id="editNodeRelayServer" class="font-semibold text-slate-700 dark:text-slate-200">-</span>
+            </div>
+            <div class="flex justify-between items-center">
+              <span class="text-slate-400">中转监听端口:</span>
+              <span id="editNodeRelayPort" class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">-</span>
+            </div>
+          </div>
+        </div>
+
         <button onclick="submitEditNode()" id="btnSubmitEditNode" class="w-full py-3 rounded-2xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap flex items-center justify-center gap-1.5">
           <i data-lucide="check" class="w-4 h-4"></i>
           <span>保存修改</span>
@@ -1657,9 +1679,45 @@
 
       <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器</label>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器 (线路/入口机)</label>
           <select id="createNodeServerSelect" onchange="updateCreateNodeIpHint()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
           <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
+        </div>
+
+        <!-- Realm 中转落地配置 -->
+        <div class="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-pink-50/30 dark:from-indigo-950/20 dark:via-purple-950/20 dark:to-pink-950/10 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+          <div class="flex items-center justify-between">
+            <label for="createNodeEnableRelay" class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" id="createNodeEnableRelay" onchange="toggleCreateNodeRelayFields()" class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 dark:border-zinc-700 cursor-pointer">
+              <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ 启用 Realm 端口中转落地模式 (海外出口机)</span>
+            </label>
+            <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-medium">默认直连</span>
+          </div>
+
+          <div id="createNodeRelayFields" class="hidden pt-2.5 border-t border-indigo-100/80 dark:border-indigo-900/30 space-y-3">
+            <div>
+              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">🎯 目标海外落地服务器 (Landing VPS)</label>
+              <select id="createNodeLandingServerSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none"></select>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">负责运行 Sing-box 核心解密并出网（支持原生IP/流媒体解锁）。</p>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转监听端口 (可选)</label>
+                <input type="number" id="createNodeRelayPort" placeholder="留空则与节点端口一致" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
+              </div>
+              <div class="flex flex-col justify-end">
+                <div class="text-[11px] text-indigo-600 dark:text-indigo-400 leading-tight">
+                  中转线路机上的 Realm 将自动监听该端口并高速转发至落地机。
+                </div>
+              </div>
+            </div>
+
+            <div class="p-2.5 rounded-xl bg-white/70 dark:bg-zinc-800/60 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed flex items-start gap-1.5 border border-indigo-100/50 dark:border-indigo-900/20">
+              <i data-lucide="info" class="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5"></i>
+              <span><strong>转发拓扑：</strong>客户端 ➔ 入口线路机 (Realm) ➔ 海外落地机 (Sing-box) ➔ 目标互联网。国内客户端享受中转机低延迟直连，出口展现落地机纯净IP。</span>
+            </div>
+          </div>
         </div>
         <div>
           <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">协议类型</label>
@@ -1879,6 +1937,14 @@
         }
       }
 
+      if (tabId === 'nodes') {
+        const searchEl = document.getElementById('nodeSearchInput');
+        if (searchEl && (searchEl.value.toLowerCase() === 'admin' || searchEl.value.toLowerCase() === 'root')) {
+          searchEl.value = '';
+          renderNodesList();
+        }
+      }
+
       window.scrollTo({ top: 0, behavior: 'smooth' });
       initLucide();
     }
@@ -1940,7 +2006,15 @@
     }
     function openClientImportModal() { openModal('modalClientImport'); generateUniversalQr(); }
     function openCreateUserModal() { openModal('modalCreateUser'); }
-    function openCreateNodeModal() { populateServerSelectForNode(); openModal('modalCreateNode'); }
+    function openCreateNodeModal() {
+      const chk = document.getElementById('createNodeEnableRelay');
+      if (chk) chk.checked = false;
+      const rPort = document.getElementById('createNodeRelayPort');
+      if (rPort) rPort.value = '';
+      toggleCreateNodeRelayFields();
+      populateServerSelectForNode();
+      openModal('modalCreateNode');
+    }
     function openImportNodeModal() { openModal('modalImportNode'); }
 
     // Close modal when tapping backdrop outside sheet/dialog
@@ -2298,12 +2372,25 @@
         const res = await fetch('/api/node-mgr/nodes').then(r => r.json());
         if (res.ok && res.nodes) {
           state.nodes = res.nodes;
+          // Clear autofilled username like 'admin' or 'root' if browser aggressively filled search
+          const searchEl = document.getElementById('nodeSearchInput');
+          if (searchEl && (searchEl.value.toLowerCase() === 'admin' || searchEl.value.toLowerCase() === 'root')) {
+            searchEl.value = '';
+          }
           updateNodeStats(res.nodes);
           renderNodesList();
           document.getElementById('badgeNodeCount').textContent = res.nodes.length;
         }
       } catch (e) {
         console.error('Load nodes error:', e);
+      }
+    }
+
+    function clearNodeSearch() {
+      const el = document.getElementById('nodeSearchInput');
+      if (el) {
+        el.value = '';
+        renderNodesList();
       }
     }
 
@@ -2322,11 +2409,15 @@
       const container = document.getElementById('nodesListContainer');
       if (!container) return;
       const q = (document.getElementById('nodeSearchInput')?.value || '').trim().toLowerCase();
+      const clearBtn = document.getElementById('clearNodeSearchBtn');
+      if (clearBtn) clearBtn.classList.toggle('hidden', !q);
 
       const filtered = state.nodes.filter(n => {
         if (!q) return true;
         return (n.name && n.name.toLowerCase().includes(q)) ||
                (n.server_ip && n.server_ip.toLowerCase().includes(q)) ||
+               (n.relay_server_ip && n.relay_server_ip.toLowerCase().includes(q)) ||
+               (n.relay_server_name && n.relay_server_name.toLowerCase().includes(q)) ||
                (n.protocol && n.protocol.toLowerCase().includes(q));
       });
 
@@ -2383,14 +2474,22 @@
 
             <!-- Row 2: Metadata Info Pills (Server, IP:Port, SNI, IPv6) -->
             <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 font-medium">
-                <i data-lucide="server" class="w-3 h-3 text-slate-400"></i>
-                <span>${escapeHtml(n.server_name || '自建')}</span>
-              </span>
-              <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 font-mono">
-                <i data-lucide="network" class="w-3 h-3 text-slate-400"></i>
-                <span>${n.server_ip || '127.0.0.1'}:${n.port || '-'}</span>
-              </span>
+              ${n.is_relay ? `
+                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-500/10 via-purple-500/15 to-pink-500/10 border border-indigo-200/80 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold">
+                  <i data-lucide="plane-takeoff" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
+                  <span>中转: ${escapeHtml(n.relay_server_name || '线路机')} (${n.relay_server_ip || '-'}:${n.relay_port || n.port}) ➔ 落地: ${escapeHtml(n.server_name || '落地机')}</span>
+                </span>
+                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">Realm 中转</span>
+              ` : `
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 font-medium">
+                  <i data-lucide="server" class="w-3 h-3 text-slate-400"></i>
+                  <span>${escapeHtml(n.server_name || '自建')}</span>
+                </span>
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 font-mono">
+                  <i data-lucide="network" class="w-3 h-3 text-slate-400"></i>
+                  <span>${n.server_ip || '127.0.0.1'}:${n.port || '-'}</span>
+                </span>
+              `}
               ${n.sni ? `
                 <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-mono text-[10px]">
                   <i data-lucide="shield" class="w-3 h-3 text-purple-400"></i>
@@ -3589,6 +3688,26 @@
         sidInput.value = '';
       }
 
+      const relayBox = document.getElementById('editNodeRelayInfo');
+      const relayBadge = document.getElementById('editNodeRelayBadge');
+      if (node.is_relay) {
+        if (relayBox) relayBox.classList.remove('hidden');
+        if (relayBadge) {
+          relayBadge.textContent = 'Realm 中转落地';
+          relayBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 font-bold';
+        }
+        const srvEl = document.getElementById('editNodeRelayServer');
+        if (srvEl) srvEl.textContent = `${node.relay_server_name || '中转机'} (${node.relay_server_ip || '-'})`;
+        const portEl = document.getElementById('editNodeRelayPort');
+        if (portEl) portEl.textContent = node.relay_port || node.port;
+      } else {
+        if (relayBox) relayBox.classList.add('hidden');
+        if (relayBadge) {
+          relayBadge.textContent = '单机直连模式';
+          relayBadge.className = 'text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-medium';
+        }
+      }
+
       openModal('modalEditNode');
     }
 
@@ -3684,11 +3803,31 @@
 
     function populateServerSelectForNode() {
       const s = document.getElementById('createNodeServerSelect');
-      if (!s) return;
-      s.innerHTML = state.servers.map(srv => `
-        <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
-      `).join('');
+      const landingSel = document.getElementById('createNodeLandingServerSelect');
+      if (s) {
+        s.innerHTML = state.servers.map(srv => `
+          <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
+        `).join('');
+      }
+      if (landingSel) {
+        landingSel.innerHTML = state.servers.map(srv => `
+          <option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'})</option>
+        `).join('');
+        if (state.servers.length > 1 && s && s.value) {
+          const other = state.servers.find(srv => srv.uuid !== s.value);
+          if (other) landingSel.value = other.uuid;
+        }
+      }
       updateCreateNodeIpHint();
+    }
+
+    function toggleCreateNodeRelayFields() {
+      const enabled = document.getElementById('createNodeEnableRelay')?.checked;
+      const fields = document.getElementById('createNodeRelayFields');
+      if (fields) {
+        fields.classList.toggle('hidden', !enabled);
+      }
+      initLucide();
     }
 
     function updateCreateNodeIpHint() {
@@ -3724,15 +3863,62 @@
       const serverName = srv ? srv.name : (opt ? opt.getAttribute('data-name') : '');
       const serverIp = srv ? (srv.ipv4 || srv.ipv6 || '') : (opt ? opt.getAttribute('data-ip') : '');
 
+      const isRelay = document.getElementById('createNodeEnableRelay')?.checked ? 1 : 0;
+      let finalServerUuid = srvUuid;
+      let finalServerName = serverName;
+      let finalServerIp = serverIp;
+      let relayServerUuid = '';
+      let relayServerName = '';
+      let relayServerIp = '';
+      let relayPort = 0;
+
+      if (isRelay) {
+        const landingSel = document.getElementById('createNodeLandingServerSelect');
+        const landingUuid = landingSel ? landingSel.value : '';
+        const landingSrv = state.servers.find(s => s.uuid === landingUuid);
+        const landingOpt = landingSel ? landingSel.selectedOptions[0] : null;
+
+        if (!landingUuid) {
+          showToast('启用中转模式时，必须选择目标海外落地机', 'warn');
+          return;
+        }
+        if (landingUuid === srvUuid) {
+          showToast('中转线路机与目标海外落地机不能是同一台服务器', 'warn');
+          return;
+        }
+
+        // Sing-box decrypts and exits on Landing VPS!
+        finalServerUuid = landingUuid;
+        finalServerName = landingSrv ? landingSrv.name : (landingOpt ? landingOpt.getAttribute('data-name') : '');
+        finalServerIp = landingSrv ? (landingSrv.ipv4 || landingSrv.ipv6 || '') : (landingOpt ? landingOpt.getAttribute('data-ip') : '');
+
+        // Realm port forwarder runs on Relay VPS!
+        relayServerUuid = srvUuid;
+        relayServerName = serverName;
+        relayServerIp = serverIp;
+        const rPortVal = document.getElementById('createNodeRelayPort')?.value;
+        relayPort = rPortVal ? parseInt(rPortVal) : 0;
+      }
+
+      const port = parseInt(document.getElementById('createNodePort').value) || 20082;
+      const defaultNodeName = isRelay 
+        ? `${relayServerName || '中转'} ➔ ${finalServerName || '落地'} (Reality)`
+        : `${finalServerName || '自建'} - Reality`;
+
       const payload = {
-        server_uuid: srvUuid,
-        server_name: serverName,
-        server_ip: serverIp,
+        server_uuid: finalServerUuid,
+        server_name: finalServerName,
+        server_ip: finalServerIp,
         protocol: document.getElementById('createNodeProtocol').value,
-        name: document.getElementById('createNodeName').value.trim() || `${serverName || '自建'} - Reality`,
-        port: parseInt(document.getElementById('createNodePort').value) || 20082,
+        name: document.getElementById('createNodeName').value.trim() || defaultNodeName,
+        port: port,
         sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
-        enabled: 1
+        enabled: 1,
+        is_relay: isRelay,
+        relay_server_uuid: relayServerUuid,
+        relay_server_name: relayServerName,
+        relay_server_ip: relayServerIp,
+        relay_port: relayPort || port
       };
 
       try {
@@ -3742,7 +3928,7 @@
           body: JSON.stringify(payload)
         }).then(r => r.json());
         if (res.ok) {
-          showToast('🎉 自建节点创建成功！核心配置已自动下发。', 'success');
+          showToast(isRelay ? '🎉 中转落地节点创建成功！Realm 转发与 Sing-box 配置已同步。' : '🎉 自建节点创建成功！核心配置已自动下发。', 'success');
           closeModal('modalCreateNode');
           loadNodes();
         } else {

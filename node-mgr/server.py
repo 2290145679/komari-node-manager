@@ -330,6 +330,16 @@ def init_db():
         c.execute("ALTER TABLE nodes ADD COLUMN raw_link TEXT DEFAULT ''")
     if 'is_external' not in cols:
         c.execute("ALTER TABLE nodes ADD COLUMN is_external INTEGER DEFAULT 0")
+    if 'is_relay' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN is_relay INTEGER DEFAULT 0")
+    if 'relay_server_uuid' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN relay_server_uuid TEXT DEFAULT ''")
+    if 'relay_server_name' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN relay_server_name TEXT DEFAULT ''")
+    if 'relay_server_ip' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN relay_server_ip TEXT DEFAULT ''")
+    if 'relay_port' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN relay_port INTEGER DEFAULT 0")
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -1198,8 +1208,13 @@ def build_node_share_link(node):
         return node["raw_link"]
 
     proto = node.get("protocol")
-    ip = node.get("server_ip") or DOMAIN
-    port = node.get("port")
+    is_relay = node.get("is_relay")
+    if is_relay and node.get("relay_server_ip"):
+        ip = node["relay_server_ip"]
+        port = node.get("relay_port") or node.get("port")
+    else:
+        ip = node.get("server_ip") or DOMAIN
+        port = node.get("port")
     name = node.get("name") or "Node"
     quoted_name = urllib.parse.quote(name)
     u = node.get("uuid_or_passwd")
@@ -1246,8 +1261,13 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
     for n in nodes:
         proto = n.get("protocol")
         name = n.get("name")
-        ip = n.get("server_ip")
-        port = n.get("port")
+        is_relay = n.get("is_relay")
+        if is_relay and n.get("relay_server_ip"):
+            ip = n["relay_server_ip"]
+            port = n.get("relay_port") or n.get("port")
+        else:
+            ip = n.get("server_ip")
+            port = n.get("port")
         u = n.get("uuid_or_passwd")
         sni = n.get("sni") or "addons.mozilla.org"
 
@@ -1503,8 +1523,13 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
     for n in nodes:
         proto = n.get("protocol")
         name = n.get("name") or f"Node-{n.get('id')}"
-        ip = n.get("server_ip")
-        port = n.get("port")
+        is_relay = n.get("is_relay")
+        if is_relay and n.get("relay_server_ip"):
+            ip = n["relay_server_ip"]
+            port = n.get("relay_port") or n.get("port")
+        else:
+            ip = n.get("server_ip")
+            port = n.get("port")
         u = n.get("uuid_or_passwd")
         sni = n.get("sni") or "addons.mozilla.org"
 
@@ -2216,6 +2241,30 @@ while true; do
         echo "[NodeSync] Sing-box restarted successfully!"
       else
         echo "[NodeSync] Invalid config from master, skipping."
+      fi
+    fi
+  fi
+
+  # Sync Realm port forward rules if realm is installed
+  if [ -x /usr/local/bin/realm ] || [ -f /etc/realm/config.toml ]; then
+    REALM_RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
+    if [ -n "$REALM_RES" ] && echo "$REALM_RES" | grep -q '\[network\]'; then
+      REALM_MD5=$(echo "$REALM_RES" | md5sum | awk '{print $1}')
+      OLD_REALM_MD5=$(cat /etc/realm/config.md5 2>/dev/null || true)
+      if [ "$REALM_MD5" != "$OLD_REALM_MD5" ]; then
+        echo "$REALM_RES" > /etc/realm/config.toml
+        echo "$REALM_MD5" > /etc/realm/config.md5
+        R_PORTS=$(grep -oE 'listen[[:space:]]*=[[:space:]]*"[^"]*:[0-9]+"' /etc/realm/config.toml | grep -oE '[0-9]+' | sort -u)
+        for rp in $R_PORTS; do
+          iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+          iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+        done
+        if command -v systemctl >/dev/null 2>&1; then
+          systemctl restart realm.service >/dev/null 2>&1 || true
+        elif command -v rc-service >/dev/null 2>&1; then
+          rc-service realm restart >/dev/null 2>&1 || true
+        fi
+        echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
       fi
     fi
   fi
@@ -3424,6 +3473,12 @@ rules:
                         n["server_ip"] = srv.get("ipv4") or srv.get("ipv6") or ""
                     if not n.get("server_name"):
                         n["server_name"] = srv.get("name") or ""
+                    if n.get("is_relay") and n.get("relay_server_uuid") in servers_map:
+                        rsrv = servers_map[n["relay_server_uuid"]]
+                        if not n.get("relay_server_ip"):
+                            n["relay_server_ip"] = rsrv.get("ipv4") or rsrv.get("ipv6") or ""
+                        if not n.get("relay_server_name"):
+                            n["relay_server_name"] = rsrv.get("name") or ""
                     valid_nodes.append(n)
             nodes = valid_nodes
 
@@ -3895,6 +3950,48 @@ rules:
             self.send_header("Content-Length", str(len(json_bytes)))
             self.end_headers()
             self.wfile.write(json_bytes)
+            return
+
+        # Realm config sync endpoint for relay servers
+        if path == "/api/agent/realm-config" or path == "/api/node-mgr/agent/realm-config":
+            token = query.get("token", [""])[0]
+            if not token:
+                self._send_text("# error: missing token\n", 400)
+                return
+            servers = get_servers()
+            matched = None
+            for s in servers:
+                if s["token"] == token or s["uuid"] == token:
+                    matched = s
+                    break
+
+            suuid = matched["uuid"] if matched else token
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, name, port, server_ip, relay_port FROM nodes WHERE relay_server_uuid = ? AND is_relay = 1 AND enabled = 1", (suuid,))
+            rows = c.fetchall()
+            conn.close()
+
+            toml_lines = [
+                "[log]",
+                'level = "warn"',
+                "",
+                "[network]",
+                "no_tcp = false",
+                "use_udp = true",
+                ""
+            ]
+            for r in rows:
+                nid, nname, port, target_ip, rport = r
+                lport = rport or port
+                if target_ip and lport and port:
+                    toml_lines.append(f"# {nname}")
+                    toml_lines.append("[[endpoints]]")
+                    toml_lines.append(f'listen = "0.0.0.0:{lport}"')
+                    toml_lines.append(f'remote = "{target_ip}:{port}"')
+                    toml_lines.append("")
+
+            self._send_text("\n".join(toml_lines), 200, "text/plain; charset=utf-8")
             return
 
         # Agent config sync endpoint
@@ -4751,14 +4848,38 @@ rules:
                 priv, pub = get_reality_keypair()
                 priv_key, pub_key = priv, pub
                 short_id = get_short_id()
+
+            # Realm Relay configuration
+            is_relay = 1 if body.get("is_relay") else 0
+            relay_server_uuid = str(body.get("relay_server_uuid") or "").strip()
+            relay_server_name = str(body.get("relay_server_name") or "").strip()
+            relay_server_ip = str(body.get("relay_server_ip") or "").strip()
+            relay_port = int(body.get("relay_port") or port)
+
+            if is_relay and relay_server_uuid and (not relay_server_ip or not relay_server_name) and os.path.exists(KOMARI_DB):
+                try:
+                    conn_k = sqlite3.connect(KOMARI_DB)
+                    c_k = conn_k.cursor()
+                    c_k.execute("SELECT name, ipv4, ipv6 FROM clients WHERE uuid = ?", (relay_server_uuid,))
+                    crow = c_k.fetchone()
+                    conn_k.close()
+                    if crow:
+                        if not relay_server_name:
+                            relay_server_name = crow[0] or ""
+                        if not relay_server_ip:
+                            relay_server_ip = crow[1] or crow[2] or ""
+                except Exception as e:
+                    print(f"Error resolving relay client info: {e}")
                 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             c.execute('''
                 INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
-                                  uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1)
-            ''', (server_uuid, server_name, server_ip, name, protocol, port, u, sni, pub_key, priv_key, short_id, flow, ws_path))
+                                  uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled,
+                                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1, ?, ?, ?, ?, ?)
+            ''', (server_uuid, server_name, server_ip, name, protocol, port, u, sni, pub_key, priv_key, short_id, flow, ws_path,
+                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port))
             node_id = c.lastrowid
             conn.commit()
             conn.close()
@@ -4861,17 +4982,59 @@ rules:
             public_key = str(body.get("public_key") or "").strip()
             short_id = str(body.get("short_id") or "").strip()
 
-            c.execute("""
-                UPDATE nodes SET
-                    name = coalesce(nullif(?, ''), name),
-                    server_ip = coalesce(nullif(?, ''), server_ip),
-                    port = case when ? > 0 then ? else port end,
-                    uuid_or_passwd = coalesce(nullif(?, ''), uuid_or_passwd),
-                    sni = ?,
-                    public_key = ?,
-                    short_id = ?
-                WHERE id = ?
-            """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id, node_id))
+            is_relay = body.get("is_relay")
+            relay_server_uuid = str(body.get("relay_server_uuid") or "").strip()
+            relay_server_name = str(body.get("relay_server_name") or "").strip()
+            relay_server_ip = str(body.get("relay_server_ip") or "").strip()
+            relay_port = int(body.get("relay_port") or 0)
+
+            # Auto-resolve relay server if uuid provided
+            if is_relay and relay_server_uuid and (not relay_server_ip or not relay_server_name) and os.path.exists(KOMARI_DB):
+                try:
+                    conn_k = sqlite3.connect(KOMARI_DB)
+                    c_k = conn_k.cursor()
+                    c_k.execute("SELECT name, ipv4, ipv6 FROM clients WHERE uuid = ?", (relay_server_uuid,))
+                    crow = c_k.fetchone()
+                    conn_k.close()
+                    if crow:
+                        if not relay_server_name:
+                            relay_server_name = crow[0] or ""
+                        if not relay_server_ip:
+                            relay_server_ip = crow[1] or crow[2] or ""
+                except Exception as e:
+                    pass
+
+            if is_relay is not None:
+                is_relay_val = 1 if is_relay else 0
+                c.execute("""
+                    UPDATE nodes SET
+                        name = coalesce(nullif(?, ''), name),
+                        server_ip = coalesce(nullif(?, ''), server_ip),
+                        port = case when ? > 0 then ? else port end,
+                        uuid_or_passwd = coalesce(nullif(?, ''), uuid_or_passwd),
+                        sni = ?,
+                        public_key = ?,
+                        short_id = ?,
+                        is_relay = ?,
+                        relay_server_uuid = ?,
+                        relay_server_name = ?,
+                        relay_server_ip = ?,
+                        relay_port = case when ? > 0 then ? else port end
+                    WHERE id = ?
+                """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id,
+                      is_relay_val, relay_server_uuid, relay_server_name, relay_server_ip, relay_port, relay_port, node_id))
+            else:
+                c.execute("""
+                    UPDATE nodes SET
+                        name = coalesce(nullif(?, ''), name),
+                        server_ip = coalesce(nullif(?, ''), server_ip),
+                        port = case when ? > 0 then ? else port end,
+                        uuid_or_passwd = coalesce(nullif(?, ''), uuid_or_passwd),
+                        sni = ?,
+                        public_key = ?,
+                        short_id = ?
+                    WHERE id = ?
+                """, (name, server_ip, port, port, uuid_or_passwd, sni, public_key, short_id, node_id))
             conn.commit()
             conn.close()
             self._send_json({"ok": True, "message": "节点配置已更新"})

@@ -16,7 +16,12 @@ CREATE TABLE IF NOT EXISTS nodes (
     enabled INTEGER DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     raw_link TEXT DEFAULT '',
-    is_external INTEGER DEFAULT 0
+    is_external INTEGER DEFAULT 0,
+    is_relay INTEGER DEFAULT 0,
+    relay_server_uuid TEXT DEFAULT '',
+    relay_server_name TEXT DEFAULT '',
+    relay_server_ip TEXT DEFAULT '',
+    relay_port INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
