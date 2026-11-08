@@ -1616,11 +1616,11 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">连接地址 (IP / 域名) *</label>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">连接地址 (落地机公网IP / 域名) *</label>
             <input type="text" id="editNodeServerIp" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
           </div>
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">端口 *</label>
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">落地机端口 (Sing-box 核心) *</label>
             <input type="number" id="editNodePort" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
           </div>
         </div>
@@ -1647,20 +1647,21 @@
         </div>
 
         <!-- Realm 中转状态展示与编辑 -->
-        <div id="editNodeRelayBox" class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2">
+        <div id="editNodeRelayBox" class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 space-y-2.5">
           <div class="flex items-center justify-between">
-            <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ Realm 端口中转状态</span>
+            <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ Realm 端口中转设置</span>
             <span id="editNodeRelayBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 font-medium">直连模式</span>
           </div>
-          <div id="editNodeRelayInfo" class="hidden text-[11px] space-y-1.5 pt-1.5 border-t border-indigo-100/60 dark:border-indigo-900/30">
+          <div id="editNodeRelayInfo" class="hidden text-[11px] space-y-2 pt-2 border-t border-indigo-100/60 dark:border-indigo-900/30">
             <div class="flex justify-between items-center">
               <span class="text-slate-400">中转线路机:</span>
               <span id="editNodeRelayServer" class="font-semibold text-slate-700 dark:text-slate-200">-</span>
             </div>
-            <div class="flex justify-between items-center">
-              <span class="text-slate-400">中转监听端口:</span>
-              <span id="editNodeRelayPort" class="font-mono font-semibold text-indigo-600 dark:text-indigo-400">-</span>
+            <div>
+              <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转机开放端口 (客户端直连连接该端口)</label>
+              <input type="number" id="editNodeRelayPort" placeholder="留空则与落地端口相同" class="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none font-mono">
             </div>
+            <p class="text-[10px] text-slate-400 leading-normal">说明：上面的【落地机端口】为海外落地机 (Biglobe) 上 Sing-box 监听的端口；本项为中转机 (HKcloudx) 上 Realm 开放给客户端直连的端口，两者完全可以不同。</p>
           </div>
         </div>
 
@@ -1709,8 +1710,8 @@
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转监听端口 (可选)</label>
-                <input type="number" id="createNodeRelayPort" placeholder="留空则与节点端口一致" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
+                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转机开放端口 (客户端连接此端口)</label>
+                <input type="number" id="createNodeRelayPort" placeholder="留空则与落地端口一致" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
               </div>
               <div class="flex flex-col justify-end">
                 <div class="text-[11px] text-indigo-600 dark:text-indigo-400 leading-tight">
@@ -1741,8 +1742,8 @@
             <input type="text" id="createNodeName" placeholder="例如: 日本软银 - 01" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">监听端口</label>
-            <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">落地机端口 (Sing-box核心，NAT机填映射端口)</label>
+            <input type="number" id="createNodePort" placeholder="例如: 11101" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
         </div>
         <div>
@@ -3725,7 +3726,7 @@
         const srvEl = document.getElementById('editNodeRelayServer');
         if (srvEl) srvEl.textContent = `${node.relay_server_name || '中转机'} (${node.relay_server_ip || '-'})`;
         const portEl = document.getElementById('editNodeRelayPort');
-        if (portEl) portEl.textContent = node.relay_port || node.port;
+        if (portEl) portEl.value = node.relay_port || node.port;
       } else {
         if (relayBox) relayBox.classList.add('hidden');
         if (relayBadge) {
@@ -3746,6 +3747,8 @@
       const sni = document.getElementById('editNodeSni').value.trim();
       const public_key = document.getElementById('editNodePublicKey').value.trim();
       const short_id = document.getElementById('editNodeShortId').value.trim();
+      const relayPortInput = document.getElementById('editNodeRelayPort');
+      const relay_port = relayPortInput ? (parseInt(relayPortInput.value) || 0) : 0;
 
       if (!name) {
         showToast('节点名称不能为空', 'error');
@@ -3775,7 +3778,8 @@
             uuid_or_passwd: uuid_or_passwd,
             sni: sni,
             public_key: public_key,
-            short_id: short_id
+            short_id: short_id,
+            relay_port: relay_port
           })
         }).then(r => r.json());
 
