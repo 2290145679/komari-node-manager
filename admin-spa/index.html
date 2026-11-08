@@ -2381,14 +2381,48 @@
       }
 
       container.innerHTML = state.servers.map(s => {
-        const isOnline = s.server_online || s.probe_online;
+        const isOnline = !!(s.server_online || s.probe_online);
+        const cardOfflineClass = !isOnline 
+          ? 'border-2 !border-rose-500/90 dark:!border-rose-500/90 shadow-[0_0_22px_rgba(244,63,94,0.22)] dark:shadow-[0_0_28px_rgba(244,63,94,0.3)] bg-gradient-to-br from-rose-50/40 via-white to-rose-50/20 dark:from-rose-950/25 dark:via-zinc-900 dark:to-rose-950/15 ring-2 ring-rose-500/20' 
+          : '';
+        const topDangerBar = !isOnline 
+          ? `<div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 animate-pulse"></div>` 
+          : '';
+
         const statusBadge = isOnline 
           ? `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300">
                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span> 在线
              </span>`
-          : `<span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300">
-               <span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span> 离线
+          : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-black bg-rose-500 text-white shadow-md shadow-rose-500/30 animate-pulse">
+               <span class="w-2 h-2 rounded-full bg-white"></span>
+               <span>⚠️ 主机离线</span>
              </span>`;
+
+        const offlineNameTag = !isOnline 
+          ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 shrink-0">离线失联</span>` 
+          : '';
+
+        let offlineAlertBanner = '';
+        if (!isOnline) {
+          let offlineTimeDesc = '失联已超判定时间';
+          if (s.last_seen_ago && s.last_seen_ago > 0) {
+            const m = Math.floor(s.last_seen_ago / 60);
+            const h = Math.floor(m / 60);
+            const d = Math.floor(h / 24);
+            if (d > 0) offlineTimeDesc = `已离线 ${d} 天 ${h % 24} 小时`;
+            else if (h > 0) offlineTimeDesc = `已离线 ${h} 小时 ${m % 60} 分`;
+            else offlineTimeDesc = `已离线 ${m} 分钟`;
+          }
+          offlineAlertBanner = `
+            <div class="mt-2.5 p-2 rounded-xl bg-rose-100/70 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/80 flex items-center justify-between text-[11px] text-rose-800 dark:text-rose-200">
+              <div class="flex items-center gap-1.5 font-bold">
+                <i data-lucide="wifi-off" class="w-3.5 h-3.5 text-rose-600 shrink-0"></i>
+                <span>探针失联 · 数据已停止上报</span>
+              </div>
+              <span class="font-mono text-rose-600 dark:text-rose-400 font-bold">${offlineTimeDesc}</span>
+            </div>
+          `;
+        }
 
         const coreBadge = s.singbox_online
           ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300">Sing-box 在线</span>`
@@ -2457,12 +2491,14 @@
         }
 
         return `
-          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3.5">
+          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3.5 relative overflow-hidden transition-all duration-300 ${cardOfflineClass}">
+            ${topDangerBar}
             <div>
               <div class="flex items-start justify-between gap-2">
                 <div class="min-w-0">
                   <div class="flex items-center gap-2">
                     <h3 class="font-black text-sm sm:text-base text-slate-800 dark:text-slate-100 truncate">${escapeHtml(s.name || 'Server')}</h3>
+                    ${offlineNameTag}
                     ${s.group ? `<span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-purple-50 text-purple-700 dark:bg-purple-950/30 dark:text-purple-300">${escapeHtml(s.group)}</span>` : ''}
                   </div>
                   <div class="text-[11px] font-mono text-slate-400 mt-0.5 truncate">${s.ipv4 || s.ipv6 || '无IP'} · ${s.os || 'Linux'}</div>
@@ -2477,6 +2513,9 @@
                 </div>
               </div>
 
+              <!-- Offline Alert Banner if disconnected -->
+              ${offlineAlertBanner}
+
               <!-- Price & Expiry row -->
               <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
                 ${priceTag}
@@ -2485,7 +2524,7 @@
             </div>
 
             <!-- Resource Progress Bars -->
-            <div class="space-y-2 pt-1 text-xs">
+            <div class="space-y-2 pt-1 text-xs ${!isOnline ? 'opacity-50 grayscale-[35%]' : ''}">
               <div>
                 <div class="flex justify-between text-[11px] text-slate-500 mb-1">
                   <span>CPU 负载</span>
@@ -2521,12 +2560,19 @@
 
             <!-- Realtime Speed & Actions Toolbar -->
             <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
-              <!-- Network Speed Badge (Guaranteed single line, tabular numbers) -->
-              <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-zinc-800/70 border border-slate-100 dark:border-zinc-800 text-[11px] font-mono whitespace-nowrap shrink-0">
-                <span class="text-blue-600 dark:text-blue-400 font-semibold tabular-nums">↓ ${formatSpeed(s.in_rate || 0)}</span>
-                <span class="text-slate-300 dark:text-zinc-600">·</span>
-                <span class="text-purple-600 dark:text-purple-400 font-semibold tabular-nums">↑ ${formatSpeed(s.out_rate || 0)}</span>
-              </div>
+              <!-- Network Speed Badge -->
+              ${isOnline ? `
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 dark:bg-zinc-800/70 border border-slate-100 dark:border-zinc-800 text-[11px] font-mono whitespace-nowrap shrink-0">
+                  <span class="text-blue-600 dark:text-blue-400 font-semibold tabular-nums">↓ ${formatSpeed(s.in_rate || 0)}</span>
+                  <span class="text-slate-300 dark:text-zinc-600">·</span>
+                  <span class="text-purple-600 dark:text-purple-400 font-semibold tabular-nums">↑ ${formatSpeed(s.out_rate || 0)}</span>
+                </div>
+              ` : `
+                <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-[11px] font-mono whitespace-nowrap shrink-0 text-rose-600 dark:text-rose-400 font-bold">
+                  <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-rose-500"></i>
+                  <span>连接已中断 (0 B/s)</span>
+                </div>
+              `}
 
               <!-- Action Buttons (Guaranteed single line with whitespace-nowrap) -->
               <div class="flex items-center gap-1.5 shrink-0 ml-auto">
