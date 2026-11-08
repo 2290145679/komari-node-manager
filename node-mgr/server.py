@@ -745,6 +745,14 @@ def sync_ping_tasks_all_clients():
                 updated_count += 1
         if updated_count > 0:
             conn_k.commit()
+            # Trigger background restart of komari so Go in-memory scheduler loads newly added servers
+            def _async_reload_komari():
+                time.sleep(1)
+                try:
+                    subprocess.run("sudo systemctl restart komari", shell=True)
+                except Exception as ex:
+                    print(f"Error restarting komari service: {ex}")
+            threading.Thread(target=_async_reload_komari, daemon=True).start()
         conn_k.close()
         return updated_count
     except Exception as e:
