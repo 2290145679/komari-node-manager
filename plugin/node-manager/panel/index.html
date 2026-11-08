@@ -1075,6 +1075,24 @@
           </div>
         </div>
 
+        <!-- Section 1.6: 节点网络定位与落地机角色配置 -->
+        <div class="p-3.5 rounded-2xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-100 dark:border-purple-900/30 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-purple-700 dark:text-purple-400 flex items-center gap-1.5">
+              <i data-lucide="radio" class="w-4 h-4"></i>
+              <span>节点网络角色标记 (落地出口机)</span>
+            </span>
+            <span id="editServerLandingBadge" class="text-[10px] px-2 py-0.5 rounded-full font-bold"></span>
+          </div>
+          <label class="flex items-start gap-2.5 cursor-pointer select-none">
+            <input type="checkbox" id="editServerIsLanding" class="w-4 h-4 rounded text-purple-600 focus:ring-0 cursor-pointer mt-0.5">
+            <div class="min-w-0">
+              <div class="font-bold text-xs text-slate-800 dark:text-slate-100">🎯 标记为出口落地机 (Landing VPS)</div>
+              <div class="text-[11px] text-slate-400 mt-0.5 leading-tight">启用后，在创建【中转-落地】节点时，本服务器将作为专属候选海外落地机展示，避免服务器过多导致选择列表繁杂。</div>
+            </div>
+          </label>
+        </div>
+
         <!-- Section 2: 费用与账单周期 -->
         <div class="p-3.5 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 space-y-3">
           <div class="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
@@ -1832,6 +1850,8 @@
         </button>
       </div>
 
+      <div id="serverPickerTabs" class="hidden items-center gap-2 pt-2 pb-0.5 shrink-0"></div>
+
       <div id="serverPickerList" class="overflow-y-auto py-3 space-y-2 flex-1">
         <!-- 动态渲染在线服务器卡片 -->
       </div>
@@ -2334,6 +2354,10 @@
               ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/40">Realm 就绪</span>`
               : '');
 
+        const landingBadge = s.is_landing
+          ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/40">🎯 落地机</span>`
+          : '';
+
         const cpu = (s.cpu_usage || 0).toFixed(1);
         const ram = (s.ram_pct || 0).toFixed(1);
         const disk = (s.disk_pct || 0).toFixed(1);
@@ -2400,6 +2424,7 @@
                   <div class="flex items-center gap-1 flex-wrap justify-end">
                     ${coreBadge}
                     ${realmBadge}
+                    ${landingBadge}
                   </div>
                 </div>
               </div>
@@ -2457,6 +2482,10 @@
 
               <!-- Action Buttons (Guaranteed single line with whitespace-nowrap) -->
               <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+                <button onclick="quickToggleServerLanding('${s.uuid}', ${!s.is_landing})" class="px-2.5 py-1.5 rounded-xl text-xs font-bold ${s.is_landing ? 'text-pink-700 bg-pink-100 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800/40' : 'text-slate-500 bg-slate-50 dark:bg-zinc-800/80 hover:text-purple-600'} transition btn-tap flex items-center gap-1 whitespace-nowrap" title="${s.is_landing ? '点击取消落地机标记' : '点击标记为出口落地机'}">
+                  <i data-lucide="radio" class="w-3.5 h-3.5 ${s.is_landing ? 'text-pink-600' : 'text-slate-400'}"></i>
+                  <span>${s.is_landing ? '落地机' : '设为落地'}</span>
+                </button>
                 <button onclick="openServerDeployModal('${s.uuid}')" class="px-2.5 py-1.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap flex items-center gap-1 whitespace-nowrap" title="查看专属一键对接指令">
                   <i data-lucide="terminal" class="w-3.5 h-3.5"></i>
                   <span>部署指令</span>
@@ -3329,7 +3358,37 @@
         }
       }
 
+      // Landing machine role toggle & badge
+      const isLanding = !!s.is_landing;
+      const landingChk = document.getElementById('editServerIsLanding');
+      if (landingChk) landingChk.checked = isLanding;
+      const landingBadgeEl = document.getElementById('editServerLandingBadge');
+      if (landingBadgeEl) {
+        landingBadgeEl.className = isLanding 
+          ? 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-pink-100 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300'
+          : 'text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 dark:bg-zinc-800 text-slate-400';
+        landingBadgeEl.textContent = isLanding ? '🎯 落地机' : '常规节点';
+      }
+
       openModal('modalEditServer');
+    }
+
+    async function quickToggleServerLanding(uuid, isLanding) {
+      try {
+        const res = await fetch('/api/node-mgr/servers/edit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid, is_landing: isLanding ? 1 : 0 })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast(isLanding ? '🎉 已标记为出口落地机！创建中转节点时可优先快速选择。' : '已取消落地机标记', 'success');
+          loadServers(true);
+        } else {
+          showToast(res.error || '更新失败', 'error');
+        }
+      } catch (e) {
+        showToast('更新失败: ' + e.message, 'error');
+      }
     }
 
     async function submitSaveServerEdit() {
@@ -3357,6 +3416,7 @@
         traffic_limit,
         traffic_limit_type: document.getElementById('editServerTrafficType').value,
         has_realm: document.getElementById('editServerHasRealm')?.checked ? 1 : 0,
+        is_landing: document.getElementById('editServerIsLanding')?.checked ? 1 : 0,
         custom_ip: document.getElementById('editServerCustomIp')?.value.trim() || '',
         hidden: document.getElementById('editServerHidden').checked ? 1 : 0,
         public_remark: document.getElementById('editServerPublicRemark').value.trim(),
@@ -3975,6 +4035,11 @@
 
     let currentPickerTarget = 'main'; // 'main' or 'landing'
 
+    function setLandingPickerFilter(onlyMarked) {
+      state.pickerLandingOnlyMarked = onlyMarked;
+      openServerPicker('landing');
+    }
+
     function openServerPicker(target) {
       currentPickerTarget = target;
       const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
@@ -3982,11 +4047,17 @@
       const subTitleEl = document.getElementById('serverPickerSubtitle');
       const iconEl = document.getElementById('serverPickerIcon');
       const listEl = document.getElementById('serverPickerList');
+      const tabsEl = document.getElementById('serverPickerTabs');
 
       let candidates = [];
       let selectedUuid = '';
 
       if (target === 'main') {
+        if (tabsEl) {
+          tabsEl.classList.add('hidden');
+          tabsEl.classList.remove('flex');
+          tabsEl.innerHTML = '';
+        }
         selectedUuid = document.getElementById('createNodeServerSelect')?.value || '';
         if (isRelay) {
           titleEl.textContent = '选择中转线路机';
@@ -4004,10 +4075,40 @@
       } else {
         selectedUuid = document.getElementById('createNodeLandingServerSelect')?.value || '';
         titleEl.textContent = '选择目标海外落地机';
-        subTitleEl.textContent = '仅展示 Sing-box 核心在线的目标服务器';
         iconEl.innerHTML = '<i data-lucide="radio" class="w-4 h-4 text-indigo-600 dark:text-indigo-300"></i>';
         const currentRelayUuid = document.getElementById('createNodeServerSelect')?.value;
-        candidates = state.servers.filter(srv => srv.singbox_online && srv.uuid !== currentRelayUuid);
+        const allCandidates = state.servers.filter(srv => srv.singbox_online && srv.uuid !== currentRelayUuid);
+        const markedLanding = allCandidates.filter(srv => srv.is_landing);
+
+        const hasMarked = markedLanding.length > 0;
+        const showOnlyMarked = (state.pickerLandingOnlyMarked !== false) && hasMarked;
+
+        if (hasMarked) {
+          if (tabsEl) {
+            tabsEl.classList.remove('hidden');
+            tabsEl.classList.add('flex');
+            tabsEl.innerHTML = `
+              <button type="button" onclick="setLandingPickerFilter(true)" class="px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 btn-tap ${showOnlyMarked ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}">
+                <span>🎯 专属落地机 (${markedLanding.length})</span>
+              </button>
+              <button type="button" onclick="setLandingPickerFilter(false)" class="px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 btn-tap ${!showOnlyMarked ? 'bg-purple-600 text-white shadow-sm' : 'bg-slate-100 dark:bg-zinc-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}">
+                <span>全部在线 (${allCandidates.length})</span>
+              </button>
+            `;
+          }
+          candidates = showOnlyMarked ? markedLanding : allCandidates;
+          subTitleEl.textContent = showOnlyMarked 
+            ? `已筛选已标记为落地机的服务器 (共 ${markedLanding.length} 台)`
+            : `展示全部 Sing-box 在线目标服务器 (共 ${allCandidates.length} 台)`;
+        } else {
+          if (tabsEl) {
+            tabsEl.classList.add('hidden');
+            tabsEl.classList.remove('flex');
+            tabsEl.innerHTML = '';
+          }
+          candidates = allCandidates;
+          subTitleEl.textContent = '仅展示 Sing-box 在线的目标服务器 (可去服务器管理中设为落地机)';
+        }
       }
 
       if (candidates.length === 0) {
@@ -4021,17 +4122,23 @@
       } else {
         listEl.innerHTML = candidates.map(srv => {
           const isSelected = srv.uuid === selectedUuid;
+          const landingTag = srv.is_landing 
+            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/40 shrink-0">🎯 落地机</span>` 
+            : '';
           return `
             <div onclick="selectServerFromPicker('${srv.uuid}')" class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between btn-tap ${isSelected ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 shadow-sm' : 'border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-800 dark:text-slate-200'}">
-              <div class="flex items-center gap-3">
+              <div class="flex items-center gap-3 min-w-0">
                 <div class="w-9 h-9 rounded-xl ${isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200/80 dark:bg-zinc-700/80 text-slate-600 dark:text-slate-300'} flex items-center justify-center font-bold text-xs shrink-0">
                   <i data-lucide="server" class="w-4 h-4"></i>
                 </div>
-                <div class="font-bold text-sm tracking-tight">${escapeHtml(srv.name)}</div>
+                <div class="font-bold text-sm tracking-tight truncate">${escapeHtml(srv.name)}</div>
               </div>
-              ${isSelected 
-                ? '<div class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>' 
-                : '<div class="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-zinc-600 shrink-0"></div>'}
+              <div class="flex items-center gap-2 shrink-0">
+                ${landingTag}
+                ${isSelected 
+                  ? '<div class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>' 
+                  : '<div class="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-zinc-600 shrink-0"></div>'}
+              </div>
             </div>
           `;
         }).join('');
@@ -4119,10 +4226,12 @@
         }
 
         const landingServers = state.servers.filter(srv => srv.singbox_online && srv.uuid !== input.value);
-        if (landingServers.length > 0) {
+        const markedLanding = landingServers.filter(srv => srv.is_landing);
+        const preferredLandingServers = markedLanding.length > 0 ? markedLanding : landingServers;
+        if (preferredLandingServers.length > 0) {
           if (!landingInput.value || !landingServers.some(srv => srv.uuid === landingInput.value)) {
-            landingInput.value = landingServers[0].uuid;
-            if (landingDisplay) landingDisplay.textContent = landingServers[0].name;
+            landingInput.value = preferredLandingServers[0].uuid;
+            if (landingDisplay) landingDisplay.textContent = preferredLandingServers[0].name;
           } else {
             const curLanding = landingServers.find(srv => srv.uuid === landingInput.value);
             if (curLanding && landingDisplay) landingDisplay.textContent = curLanding.name;

@@ -407,11 +407,16 @@ def init_db():
             uuid TEXT PRIMARY KEY,
             has_realm INTEGER DEFAULT 0,
             custom_ip TEXT DEFAULT '',
+            is_landing INTEGER DEFAULT 0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     try:
         c.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ip TEXT DEFAULT ''")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE server_realm_configs ADD COLUMN is_landing INTEGER DEFAULT 0")
     except Exception:
         pass
     c.execute('''
@@ -1038,13 +1043,17 @@ def get_servers_with_stats():
     c_n.execute("CREATE TABLE IF NOT EXISTS realm_heartbeats (token TEXT PRIMARY KEY, last_seen INTEGER)")
     c_n.execute("SELECT token, last_seen FROM realm_heartbeats")
     realm_heartbeats = dict(c_n.fetchall())
-    c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     try:
         c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ip TEXT DEFAULT ''")
     except Exception:
         pass
-    c_n.execute("SELECT uuid, has_realm, custom_ip FROM server_realm_configs")
-    realm_configs = {r[0]: (r[1], r[2] if len(r) > 2 else '') for r in c_n.fetchall()}
+    try:
+        c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN is_landing INTEGER DEFAULT 0")
+    except Exception:
+        pass
+    c_n.execute("SELECT uuid, has_realm, custom_ip, is_landing FROM server_realm_configs")
+    realm_configs = {r[0]: (r[1], r[2] if len(r) > 2 else '', r[3] if len(r) > 3 else 0) for r in c_n.fetchall()}
     c_n.execute("SELECT DISTINCT relay_server_uuid FROM nodes WHERE is_relay = 1")
     active_relay_uuids = set(r[0] for r in c_n.fetchall() if r[0])
     c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
@@ -1152,9 +1161,10 @@ def get_servers_with_stats():
 
         r_last_seen = realm_heartbeats.get(token, 0)
         is_realm_online = (now - r_last_seen) <= 60 if r_last_seen > 0 else False
-        r_conf = realm_configs.get(uuid_val, (0, ''))
+        r_conf = realm_configs.get(uuid_val, (0, '', 0))
         is_realm_configured = bool(r_conf[0]) if isinstance(r_conf, (list, tuple)) else bool(r_conf)
         custom_ip = str(r_conf[1] if isinstance(r_conf, (list, tuple)) and len(r_conf) > 1 else '').strip()
+        is_landing = bool(r_conf[2]) if isinstance(r_conf, (list, tuple)) and len(r_conf) > 2 else False
         if custom_ip:
             ip4 = custom_ip
         is_relay_assigned = uuid_val in active_relay_uuids
@@ -1227,6 +1237,7 @@ def get_servers_with_stats():
             "realm_installed": (r_last_seen > 0) or is_realm_configured or is_relay_assigned,
             "has_realm": has_realm,
             "custom_ip": custom_ip,
+            "is_landing": is_landing,
             "realm_last_seen": r_last_seen,
             "last_seen": last_seen,
             "last_seen_ago": (now - last_seen) if last_seen > 0 else None,
@@ -4543,21 +4554,27 @@ rules:
                 conn_n.commit()
                 conn_n.close()
 
-            if "has_realm" in body or "custom_ip" in body:
+            if "has_realm" in body or "custom_ip" in body or "is_landing" in body:
                 conn_r = sqlite3.connect(NODES_DB)
                 c_r = conn_r.cursor()
-                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
                 try:
                     c_r.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ip TEXT DEFAULT ''")
                 except Exception:
                     pass
-                c_r.execute("SELECT has_realm, custom_ip FROM server_realm_configs WHERE uuid = ?", (suuid,))
+                try:
+                    c_r.execute("ALTER TABLE server_realm_configs ADD COLUMN is_landing INTEGER DEFAULT 0")
+                except Exception:
+                    pass
+                c_r.execute("SELECT has_realm, custom_ip, is_landing FROM server_realm_configs WHERE uuid = ?", (suuid,))
                 row_r = c_r.fetchone()
                 cur_hr = row_r[0] if row_r else 0
-                cur_cip = row_r[1] if row_r else ''
+                cur_cip = row_r[1] if row_r and len(row_r) > 1 else ''
+                cur_land = row_r[2] if row_r and len(row_r) > 2 else 0
                 new_hr = (1 if body["has_realm"] else 0) if "has_realm" in body else cur_hr
                 new_cip = str(body["custom_ip"]).strip() if "custom_ip" in body else cur_cip
-                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)", (suuid, new_hr, new_cip))
+                new_land = (1 if body["is_landing"] else 0) if "is_landing" in body else cur_land
+                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", (suuid, new_hr, new_cip, new_land))
                 conn_r.commit()
                 conn_r.close()
 
