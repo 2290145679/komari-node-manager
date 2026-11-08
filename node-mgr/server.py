@@ -3035,6 +3035,81 @@ def run_notification_engine():
             print("Notification Engine tick error:", e)
         time.sleep(30)
 
+def delete_server_fully(server_uuid):
+    """
+    Completely and cleanly deletes a server and its associated resources:
+    1. Removes all child records in KOMARI_DB (offline_notifications, task_results)
+    2. Removes the server from KOMARI_DB clients table
+    3. Cleans up ping_tasks client lists
+    4. Deletes associated nodes, baselines, and realm configs from NODES_DB
+    5. Cleans up agent/realm heartbeats
+    6. Re-routes any routing rules referencing the deleted nodes to PROXY
+    """
+    server_token = ""
+    # 1. Fetch server token & delete from KOMARI_DB
+    if os.path.exists(KOMARI_DB):
+        try:
+            conn_k = sqlite3.connect(KOMARI_DB)
+            c_k = conn_k.cursor()
+            c_k.execute("SELECT token FROM clients WHERE uuid = ?", (server_uuid,))
+            row = c_k.fetchone()
+            if row:
+                server_token = row[0]
+            c_k.execute("DELETE FROM offline_notifications WHERE client = ?", (server_uuid,))
+            c_k.execute("DELETE FROM task_results WHERE client = ?", (server_uuid,))
+            c_k.execute("DELETE FROM clients WHERE uuid = ?", (server_uuid,))
+            conn_k.commit()
+
+            # Clean dead UUID from ping_tasks
+            c_k.execute("SELECT id, clients FROM ping_tasks")
+            ptasks = c_k.fetchall()
+            for tid, cjson in ptasks:
+                try:
+                    clist = json.loads(cjson) if cjson else []
+                    if server_uuid in clist:
+                        clist = [u for u in clist if u != server_uuid]
+                        c_k.execute("UPDATE ping_tasks SET clients = ? WHERE id = ?", (json.dumps(clist), tid))
+                except Exception:
+                    pass
+            conn_k.commit()
+            conn_k.close()
+        except Exception as e:
+            print(f"[Error] Failed to remove server {server_uuid} from KOMARI_DB: {e}")
+
+    # 2. Delete from NODES_DB
+    deleted_names = []
+    if os.path.exists(NODES_DB):
+        try:
+            conn_n = sqlite3.connect(NODES_DB)
+            c_n = conn_n.cursor()
+            c_n.execute("SELECT name FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            deleted_names = [r[0] for r in c_n.fetchall()]
+            c_n.execute("DELETE FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            c_n.execute("DELETE FROM server_traffic_baselines WHERE uuid = ?", (server_uuid,))
+            try:
+                c_n.execute("DELETE FROM server_realm_configs WHERE uuid = ?", (server_uuid,))
+            except Exception:
+                pass
+            if server_token:
+                try:
+                    c_n.execute("DELETE FROM agent_heartbeats WHERE token = ?", (server_token,))
+                    c_n.execute("DELETE FROM realm_heartbeats WHERE token = ?", (server_token,))
+                except Exception:
+                    pass
+            conn_n.commit()
+            conn_n.close()
+        except Exception as e:
+            print(f"[Error] Failed to remove server {server_uuid} from NODES_DB: {e}")
+
+    # 3. Clean up routing rules for deleted nodes
+    for nname in deleted_names:
+        try:
+            redirect_rules_for_node(nname, "PROXY")
+        except Exception:
+            pass
+
+    return len(deleted_names)
+
 class NodeMgrHandler(BaseHTTPRequestHandler):
     def _send_json(self, data, status=200, extra_headers=None):
         self.send_response(status)
@@ -4656,6 +4731,15 @@ rules:
             self._send_json({"ok": True})
             return
 
+        if path in ["/api/servers/delete", "/api/node-mgr/servers/delete"]:
+            suuid = body.get("uuid") or body.get("id")
+            if not suuid:
+                self._send_json({"ok": False, "error": "缺少服务器 UUID"}, 400)
+                return
+            deleted_nodes_count = delete_server_fully(suuid)
+            self._send_json({"ok": True, "deleted_nodes": deleted_nodes_count, "message": "服务器已彻底删除"})
+            return
+
         if path in ["/api/ping-tasks/save", "/api/node-mgr/ping-tasks/save"]:
             tid = body.get("id")
             name = str(body.get("name", "")).strip()
@@ -5269,17 +5353,8 @@ rules:
 
         if path.startswith("/api/servers/") or path.startswith("/api/node-mgr/servers/"):
             server_uuid = path.rstrip("/").split("/")[-1]
-            conn = sqlite3.connect(NODES_DB)
-            c = conn.cursor()
-            c.execute("SELECT name FROM nodes WHERE server_uuid = ?", (server_uuid,))
-            deleted_names = [r[0] for r in c.fetchall()]
-            c.execute("DELETE FROM nodes WHERE server_uuid = ?", (server_uuid,))
-            c.execute("DELETE FROM server_traffic_baselines WHERE uuid = ?", (server_uuid,))
-            conn.commit()
-            conn.close()
-            for nname in deleted_names:
-                redirect_rules_for_node(nname, "PROXY")
-            self._send_json({"ok": True, "deleted_nodes": len(deleted_names)})
+            deleted_nodes_count = delete_server_fully(server_uuid)
+            self._send_json({"ok": True, "deleted_nodes": deleted_nodes_count, "message": "服务器已彻底删除"})
             return
         if path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/"):
             node_id = path.rstrip("/").split("/")[-1]
