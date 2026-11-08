@@ -2394,6 +2394,8 @@ level = "warn"
 [network]
 no_tcp = false
 use_udp = true
+
+endpoints = []
 EOF
     fi
 
@@ -4049,6 +4051,9 @@ rules:
                 "use_udp = true",
                 ""
             ]
+            if not rows:
+                toml_lines.append("endpoints = []")
+                toml_lines.append("")
             for r in rows:
                 nid, nname, port, target_ip, rport = r
                 lport = rport or port
