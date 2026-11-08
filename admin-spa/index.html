@@ -3284,22 +3284,6 @@
         showToast('保存失败: ' + e.message, 'error');
       }
     }
-        const res = await fetch('/api/node-mgr/ping-tasks/save', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        }).then(r => r.json());
-        if (res.ok) {
-          showToast('🎉 延迟测速任务已成功保存！', 'success');
-          closeModal('modalPingTask');
-          loadPingTasks();
-        } else {
-          showToast(res.error || '保存失败', 'error');
-        }
-      } catch(e) {
-        showToast('保存失败: ' + e.message, 'error');
-      }
-    }
 
     async function deletePingTask(id, name) {
       if (!confirm(`确定要删除延迟测速任务【${name}】吗？`)) return;
