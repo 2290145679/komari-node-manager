@@ -514,14 +514,14 @@ def init_db():
         pass
 
     default_rules = [
-        ("traffic_threshold", "流量消耗预警", "core", "单节点或全网流量达到 80%/90%/100% 阈值提醒；每月1号清零提醒", 1, json.dumps({"thresholds": [80, 90, 100], "cycle_reset_notify": True})),
-        ("singbox_status", "Sing-box 离线 / 恢复通知", "core", "Sing-box 核心进程异常挂掉或重启恢复上线时即时告警", 1, json.dumps({"offline_timeout": 60})),
-        ("server_status", "服务器系统离线 / 恢复通知", "core", "探针失联超过 2 分钟时触发宕机报警，恢复时发送上线通知及离线时长", 1, json.dumps({"offline_timeout": 120})),
-        ("server_expiration", "服务器到期续费提醒", "core", "按到期时间提前 30/15/7/3/1 天阶梯预警，防止机器被回收", 1, json.dumps({"remind_days": [30, 15, 7, 3, 1]})),
-        ("traffic_surge", "突发大流量激增 / 盗刷告警", "monitor", "10分钟突发流量 > 5GB 或流速持续 > 100Mbps 异常大流量拦截预警", 1, json.dumps({"burst_mbps": 100, "cooldown_sec": 3600})),
-        ("resource_exhaustion", "物理硬件资源枯竭告警", "monitor", "CPU / 内存 / 磁盘使用率持续超过 90% 时预警，防止 OOM 崩溃或日志爆盘", 1, json.dumps({"cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "cooldown_sec": 1800})),
-        ("network_block", "TCP 阻断 / GFW 被墙离线监测", "monitor", "通过真实 TCP/TLS 握手定期实测各节点端口连通性，当端口无法连通 (疑似被墙) 时即时告警，恢复时推送解除通知", 1, json.dumps({"fail_threshold": 2, "notify_on_recovery": True})),
-        ("cert_reality_check", "Reality 伪装域名 / 证书失效预警", "monitor", "Reality 伪装 SNI 域名握手异常或 SSL 证书到期前 7 天预警", 1, json.dumps({"remind_days": 7, "cooldown_sec": 86400})),
+        ("traffic_threshold", "流量消耗预警", "core", "单节点或全网流量达到设定阶梯百分比预警；每月1号重置提醒", 1, json.dumps({"thresholds": [80, 90, 100], "cycle_reset_notify": True})),
+        ("singbox_status", "Sing-box 离线 / 恢复通知", "core", "Sing-box 核心进程异常挂掉或重启恢复上线时即时告警", 1, json.dumps({"offline_timeout": 60, "notify_recovery": True})),
+        ("server_status", "服务器系统离线 / 恢复通知", "core", "探针心跳超时失联时触发宕机报警，恢复时发送上线通知及离线时长", 1, json.dumps({"offline_timeout": 120, "notify_recovery": True})),
+        ("server_expiration", "服务器到期续费提醒", "core", "按到期时间提前阶梯预警，防止机器被服务商回收", 1, json.dumps({"remind_days": [30, 15, 7, 3, 1]})),
+        ("traffic_surge", "突发大流量激增 / 盗刷告警", "monitor", "单机流速瞬间突发或短时间内产生巨额流量消耗，防范盗刷与跑量预警", 1, json.dumps({"burst_mbps": 100, "burst_gb": 5, "window_min": 10, "cooldown_sec": 3600})),
+        ("resource_exhaustion", "物理硬件资源枯竭告警", "monitor", "CPU / 内存 / 磁盘使用率持续超过设定阈值时预警，防止 OOM 崩溃或日志爆盘", 1, json.dumps({"cpu_pct": 90, "mem_pct": 90, "disk_pct": 90, "cooldown_sec": 1800})),
+        ("network_block", "TCP 阻断 / GFW 被墙离线监测", "monitor", "通过真实 TCP/TLS 握手定期实测各节点端口连通性，当端口连续失败疑似被墙时即时告警", 1, json.dumps({"fail_threshold": 2, "notify_on_recovery": True})),
+        ("cert_reality_check", "Reality 伪装域名 / 证书失效预警", "monitor", "Reality 伪装 SNI 域名握手异常或 SSL 证书到期前预警", 1, json.dumps({"remind_days": 7, "cooldown_sec": 86400})),
         ("admin_login", "管理面板安全登录提醒", "security", "管理员账号从新设备 / 异地 IP 登录时即时推送安全日志", 1, json.dumps({"notify_all_login": True})),
         ("daily_report", "每日定时运维简报", "report", "每天固定时间推送全网运行状态、在线率、当日总消耗与即将到期概览", 1, json.dumps({"report_time": "09:00"}))
     ]
@@ -530,6 +530,28 @@ def init_db():
             INSERT OR IGNORE INTO notification_rules (rule_key, name, category, description, enabled, config)
             VALUES (?, ?, ?, ?, ?, ?)
         """, (r_key, r_name, r_cat, r_desc, r_en, r_cfg))
+
+    # Migration: Update traffic_surge config defaults if missing burst_gb or window_min
+    try:
+        c.execute("UPDATE notification_rules SET description = '单机流速瞬间突发或短时间内产生巨额流量消耗，防范盗刷与跑量预警' WHERE rule_key = 'traffic_surge'")
+        c.execute("SELECT config FROM notification_rules WHERE rule_key = 'traffic_surge'")
+        r_surge = c.fetchone()
+        if r_surge:
+            c_dict = json.loads(r_surge[0])
+            mod = False
+            if "burst_gb" not in c_dict:
+                c_dict["burst_gb"] = 5
+                mod = True
+            if "window_min" not in c_dict:
+                c_dict["window_min"] = 10
+                mod = True
+            if "cooldown_sec" not in c_dict:
+                c_dict["cooldown_sec"] = 3600
+                mod = True
+            if mod:
+                c.execute("UPDATE notification_rules SET config = ? WHERE rule_key = 'traffic_surge'", (json.dumps(c_dict),))
+    except Exception:
+        pass
 
     # Update title and description for network_block to reflect TCP block detection
     c.execute("""
@@ -2678,8 +2700,11 @@ def check_and_notify_events():
         ip = s.get("ipv4") or s.get("ipv6") or "未知 IP"
 
         # Host Agent Online / Offline (rule: server_status)
+        cfg_srv_st = enabled_rules.get("server_status", {})
+        host_timeout = int(cfg_srv_st.get("offline_timeout", 120))
+        notify_host_rec = bool(cfg_srv_st.get("notify_recovery", True))
         last_rec_time = parse_iso_or_ts(s.get("updated_at"))
-        host_online = (now - last_rec_time) <= 120 if last_rec_time > 0 else True
+        host_online = (now - last_rec_time) <= host_timeout if last_rec_time > 0 else True
 
         if "server_status" in enabled_rules:
             last_host_st = get_state(f"host_st:{uuid_val}")
@@ -2688,27 +2713,31 @@ def check_and_notify_events():
             elif last_host_st == "online" and not host_online:
                 set_state(f"host_st:{uuid_val}", "offline")
                 set_state(f"host_off_time:{uuid_val}", str(now))
+                timeout_desc = f"{host_timeout // 60} 分钟" if host_timeout >= 60 else f"{host_timeout} 秒"
                 dispatch_notification(
                     title="🔴 服务器系统离线告警",
-                    message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已失联超过 2 分钟！主机可能已宕机、断网或被服务商关机。",
+                    message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已失联超过 {timeout_desc}！主机可能已宕机、断网或被服务商关机。",
                     level="danger",
                     rule_key="server_status"
                 )
             elif last_host_st == "offline" and host_online:
                 set_state(f"host_st:{uuid_val}", "online")
-                off_time = int(get_state(f"host_off_time:{uuid_val}", str(now)))
-                dur_s = max(0, now - off_time)
-                dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
-                dispatch_notification(
-                    title="🟢 服务器探针恢复上线",
-                    message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已恢复正常响应。\n<b>本次离线持续时长</b>: {dur_txt}",
-                    level="success",
-                    rule_key="server_status"
-                )
+                if notify_host_rec:
+                    off_time = int(get_state(f"host_off_time:{uuid_val}", str(now)))
+                    dur_s = max(0, now - off_time)
+                    dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
+                    dispatch_notification(
+                        title="🟢 服务器探针恢复上线",
+                        message=f"<b>服务器名称</b>: <code>{s_name}</code>\n<b>IP 地址</b>: <code>{ip}</code>\n<b>状态</b>: 探针心跳已恢复正常响应。\n<b>本次离线持续时长</b>: {dur_txt}",
+                        level="success",
+                        rule_key="server_status"
+                    )
 
         # Sing-box Core Online / Offline (rule: singbox_status)
         sb_online = s.get("singbox_online", False)
         if host_online and s.get("singbox_installed", False) and "singbox_status" in enabled_rules:
+            cfg_sb = enabled_rules["singbox_status"] or {}
+            notify_sb_rec = bool(cfg_sb.get("notify_recovery", True))
             last_sb_st = get_state(f"sb_st:{uuid_val}")
             if not last_sb_st:
                 set_state(f"sb_st:{uuid_val}", "online" if sb_online else "offline")
@@ -2722,48 +2751,87 @@ def check_and_notify_events():
                 )
             elif last_sb_st == "offline" and sb_online:
                 set_state(f"sb_st:{uuid_val}", "online")
-                dispatch_notification(
-                    title="🟢 Sing-box 核心已恢复运行",
-                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。",
-                    level="success",
-                    rule_key="singbox_status"
-                )
+                if notify_sb_rec:
+                    dispatch_notification(
+                        title="🟢 Sing-box 核心已恢复运行",
+                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。",
+                        level="success",
+                        rule_key="singbox_status"
+                    )
 
         # Traffic Burst Surge (rule: traffic_surge)
         if "traffic_surge" in enabled_rules:
             in_rate = s.get("in_rate", 0)
             out_rate = s.get("out_rate", 0)
             cur_mbps = (in_rate + out_rate) * 8 / 1_000_000
-            burst_limit = enabled_rules["traffic_surge"].get("burst_mbps", 100)
-            if cur_mbps >= burst_limit:
-                last_surge = int(get_state(f"surge_sent:{uuid_val}", "0"))
-                if now - last_surge > 3600:
+            cfg_surge = enabled_rules["traffic_surge"] or {}
+            burst_limit = float(cfg_surge.get("burst_mbps", 100))
+            burst_gb = float(cfg_surge.get("burst_gb", 5))
+            window_min = int(cfg_surge.get("window_min", 10))
+            cooldown_sec = int(cfg_surge.get("cooldown_sec", 3600))
+            last_surge = int(get_state(f"surge_sent:{uuid_val}", "0"))
+
+            # 1. 实时吞吐流速激增判定
+            if burst_limit > 0 and cur_mbps >= burst_limit:
+                if now - last_surge > cooldown_sec:
                     set_state(f"surge_sent:{uuid_val}", str(now))
                     dispatch_notification(
                         title="⚡ 突发大流量激增告警",
-                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>实时吞吐</b>: ↓ {format_bytes(in_rate)}/s · ↑ {format_bytes(out_rate)}/s\n<b>实时速率</b>: <b>{cur_mbps:.1f} Mbps</b> (突破 {burst_limit} Mbps 阈值)\n<b>提示</b>: 检测到短时间内吞吐暴涨，请排查是否有异常大文件下载或订阅被盗刷！",
+                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>实时吞吐</b>: ↓ {format_bytes(in_rate)}/s · ↑ {format_bytes(out_rate)}/s\n<b>实时速率</b>: <b>{cur_mbps:.1f} Mbps</b> (突破设定的 {burst_limit:.0f} Mbps 阈值)\n<b>提示</b>: 检测到短时间内吞吐暴涨，请排查是否有异常大文件下载或订阅被盗刷！",
                         level="warning",
                         rule_key="traffic_surge"
                     )
+
+            # 2. 统计时间窗口内突发消耗 (防盗刷/跑量监测) 判定
+            if burst_gb > 0:
+                cur_raw_traffic = s.get("raw_total") or s.get("traffic_total") or 0
+                snap_key = f"surge_snap:{uuid_val}"
+                snap_str = get_state(snap_key, "")
+                if not snap_str:
+                    set_state(snap_key, json.dumps({"ts": now, "raw": cur_raw_traffic}))
+                else:
+                    try:
+                        snap_obj = json.loads(snap_str)
+                        snap_ts = snap_obj.get("ts", now)
+                        snap_raw = snap_obj.get("raw", cur_raw_traffic)
+                        time_passed = max(1, now - snap_ts)
+                        traffic_delta = max(0, cur_raw_traffic - snap_raw)
+
+                        if traffic_delta >= burst_gb * (1024 ** 3):
+                            if now - last_surge > cooldown_sec:
+                                set_state(f"surge_sent:{uuid_val}", str(now))
+                                window_desc = f"{int(time_passed // 60)} 分钟" if time_passed >= 60 else f"{time_passed} 秒"
+                                dispatch_notification(
+                                    title="🚨 突发巨额流量盗刷预警",
+                                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>突发累计消耗</b>: <b>{format_bytes(traffic_delta)}</b> (在 {window_desc} 内消耗超过 {burst_gb} GB)\n<b>提示</b>: 短时间爆发异常巨额流量，极可能出现订阅链接泄露盗刷或高并发爬虫，请尽快检查节点连接！",
+                                    level="danger",
+                                    rule_key="traffic_surge"
+                                )
+                            set_state(snap_key, json.dumps({"ts": now, "raw": cur_raw_traffic}))
+                        elif time_passed >= window_min * 60:
+                            set_state(snap_key, json.dumps({"ts": now, "raw": cur_raw_traffic}))
+                    except Exception:
+                        set_state(snap_key, json.dumps({"ts": now, "raw": cur_raw_traffic}))
 
         # Resource Exhaustion (rule: resource_exhaustion)
         if "resource_exhaustion" in enabled_rules:
             cpu_val = s.get("cpu_usage", 0)
             ram_val = s.get("ram_pct", 0)
             disk_val = s.get("disk_pct", 0)
-            cfg_res = enabled_rules["resource_exhaustion"]
-            c_limit = cfg_res.get("cpu_pct", 90)
-            m_limit = cfg_res.get("mem_pct", 90)
-            d_limit = cfg_res.get("disk_pct", 90)
+            cfg_res = enabled_rules["resource_exhaustion"] or {}
+            c_limit = float(cfg_res.get("cpu_pct", 90))
+            m_limit = float(cfg_res.get("mem_pct", 90))
+            d_limit = float(cfg_res.get("disk_pct", 90))
+            cooldown_sec = int(cfg_res.get("cooldown_sec", 1800))
 
             res_alerts = []
-            if cpu_val >= c_limit: res_alerts.append(f"CPU 使用率已达 {cpu_val:.1f}%")
-            if ram_val >= m_limit: res_alerts.append(f"内存使用率已达 {ram_val:.1f}% (极易导致 OOM Killer 强杀核心)")
-            if disk_val >= d_limit: res_alerts.append(f"磁盘空间占用已达 {disk_val:.1f}% (剩余空间不足 10%)")
+            if c_limit > 0 and cpu_val >= c_limit: res_alerts.append(f"CPU 使用率已达 {cpu_val:.1f}% (设定阈值: {c_limit}%)")
+            if m_limit > 0 and ram_val >= m_limit: res_alerts.append(f"内存使用率已达 {ram_val:.1f}% (设定阈值: {m_limit}%)")
+            if d_limit > 0 and disk_val >= d_limit: res_alerts.append(f"磁盘空间占用已达 {disk_val:.1f}% (设定阈值: {d_limit}%)")
 
             if res_alerts:
                 last_res_sent = int(get_state(f"res_sent:{uuid_val}", "0"))
-                if now - last_res_sent > 1800:
+                if now - last_res_sent > cooldown_sec:
                     set_state(f"res_sent:{uuid_val}", str(now))
                     dispatch_notification(
                         title="⚠️ 硬件资源枯竭预警",
@@ -2884,6 +2952,7 @@ def check_and_notify_events():
     if "network_block" in enabled_rules:
         rule_cfg = enabled_rules.get("network_block") or {}
         fail_threshold = int(rule_cfg.get("fail_threshold", 2))
+        notify_recovery = bool(rule_cfg.get("notify_on_recovery", True))
         try:
             c_n.execute("SELECT id, name, server_name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
             nodes_to_check = c_n.fetchall()
@@ -2925,24 +2994,25 @@ def check_and_notify_events():
                         set_state(f"node_tcp_fail:{nid}", "0")
                         if last_tcp_st == "blocked":
                             set_state(f"node_tcp_st:{nid}", "ok")
-                            block_start = int(get_state(f"node_tcp_block_time:{nid}", str(now)))
-                            dur_s = max(0, now - block_start)
-                            dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
-                            lat = res.get("latency_ms", 0)
-                            dispatch_notification(
-                                title="🟢 节点 TCP 阻断已恢复解除",
-                                message=(
-                                    f"<b>节点名称</b>: <code>{nname}</code>\n"
-                                    f"<b>归属主机</b>: <code>{sname}</code>\n"
-                                    f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
-                                    f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
-                                    f"<b>恢复状态</b>: <b>TCP 握手成功</b> (延时: <code>{lat} ms</code>)\n"
-                                    f"<b>阻断持续时长</b>: {dur_txt}\n"
-                                    f"<i>该节点已恢复正常访问与转发能力。</i>"
-                                ),
-                                level="success",
-                                rule_key="network_block"
-                            )
+                            if notify_recovery:
+                                block_start = int(get_state(f"node_tcp_block_time:{nid}", str(now)))
+                                dur_s = max(0, now - block_start)
+                                dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
+                                lat = res.get("latency_ms", 0)
+                                dispatch_notification(
+                                    title="🟢 节点 TCP 阻断已恢复解除",
+                                    message=(
+                                        f"<b>节点名称</b>: <code>{nname}</code>\n"
+                                        f"<b>归属主机</b>: <code>{sname}</code>\n"
+                                        f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
+                                        f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
+                                        f"<b>恢复状态</b>: <b>TCP 握手成功</b> (延时: <code>{lat} ms</code>)\n"
+                                        f"<b>阻断持续时长</b>: {dur_txt}\n"
+                                        f"<i>该节点已恢复正常访问与转发能力。</i>"
+                                    ),
+                                    level="success",
+                                    rule_key="network_block"
+                                )
                         elif not last_tcp_st:
                             set_state(f"node_tcp_st:{nid}", "ok")
         except Exception as e:
@@ -4184,23 +4254,23 @@ rules:
             self._send_json({"ok": True})
             return
 
-        if path in ["/api/notifications/rules/toggle", "/api/node-mgr/notifications/rules/toggle"]:
+        if path in [
+            "/api/notifications/rules",
+            "/api/node-mgr/notifications/rules",
+            "/api/notifications/rules/toggle",
+            "/api/node-mgr/notifications/rules/toggle",
+            "/api/notifications/rules/config",
+            "/api/node-mgr/notifications/rules/config"
+        ]:
             rule_key = body.get("rule_key")
-            enabled = 1 if body.get("enabled", True) else 0
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("UPDATE notification_rules SET enabled=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (enabled, rule_key))
-            conn.commit()
-            conn.close()
-            self._send_json({"ok": True})
-            return
-
-        if path in ["/api/notifications/rules/config", "/api/node-mgr/notifications/rules/config"]:
-            rule_key = body.get("rule_key")
-            cfg = json.dumps(body.get("config", {}))
-            conn = sqlite3.connect(NODES_DB)
-            c = conn.cursor()
-            c.execute("UPDATE notification_rules SET config=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (cfg, rule_key))
+            if "enabled" in body:
+                enabled = 1 if body.get("enabled", True) else 0
+                c.execute("UPDATE notification_rules SET enabled=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (enabled, rule_key))
+            if "config" in body:
+                cfg = json.dumps(body.get("config", {}))
+                c.execute("UPDATE notification_rules SET config=?, updated_at=CURRENT_TIMESTAMP WHERE rule_key=?", (cfg, rule_key))
             conn.commit()
             conn.close()
             self._send_json({"ok": True})
