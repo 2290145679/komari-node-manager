@@ -1710,16 +1710,27 @@
       <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
         <div>
           <label id="createNodeServerSelectTitle" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器 (线路/入口机)</label>
-          <select id="createNodeServerSelect" onchange="onCreateNodeServerSelectChange()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+          <button type="button" id="btnPickRelayServer" onclick="openServerPicker('main')" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-300 dark:hover:border-purple-700/60 transition-all flex items-center justify-between text-left group shadow-sm btn-tap">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0">
+                <i data-lucide="server" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <span id="createNodeServerSelectName" class="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate block">请选择服务器</span>
+              </div>
+            </div>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-hover:text-purple-500 transition-colors shrink-0"></i>
+          </button>
+          <input type="hidden" id="createNodeServerSelect" value="">
           <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
           <!-- Alert if no realm servers -->
           <div id="createNodeNoRealmAlert" class="hidden mt-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs space-y-1">
             <div class="font-bold flex items-center gap-1.5">
               <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
-              <span>当前暂无安装 Realm 的中转线路机</span>
+              <span>当前暂无在线并支持 Realm 的中转线路机</span>
             </div>
             <p class="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-              选择【线路-落地方案】的前提是中转线路机必须安装并运行 Realm 转发组件。当前暂未检测到安装了 Realm 的服务器。请先在服务器管理中勾选 Realm 进行部署，或在服务器配置中开启 Realm 组件。
+              选择【线路-落地方案】的前提是中转机已部署 Realm 转发服务且在线。请先在一键安装脚本中加入 <code>--with-realm</code> 参数或在服务器管理中启用。
             </p>
           </div>
         </div>
@@ -1737,7 +1748,18 @@
           <div id="createNodeRelayFields" class="hidden pt-2.5 border-t border-indigo-100/80 dark:border-indigo-900/30 space-y-3">
             <div>
               <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">🎯 目标海外落地服务器 (Landing VPS)</label>
-              <select id="createNodeLandingServerSelect" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none"></select>
+              <button type="button" id="btnPickLandingServer" onclick="openServerPicker('landing')" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 hover:border-indigo-300 dark:hover:border-indigo-700/60 transition-all flex items-center justify-between text-left group shadow-sm btn-tap">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <div class="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                    <i data-lucide="radio" class="w-4 h-4"></i>
+                  </div>
+                  <div class="min-w-0">
+                    <span id="createNodeLandingServerSelectName" class="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate block">请选择目标落地服务器</span>
+                  </div>
+                </div>
+                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0"></i>
+              </button>
+              <input type="hidden" id="createNodeLandingServerSelect" value="">
               <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">负责运行 Sing-box 核心解密并出网（支持原生IP/流媒体解锁）。</p>
             </div>
 
@@ -1787,6 +1809,31 @@
         <button onclick="submitCreateNativeNode()" class="w-full py-3 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap">
           一键生成并部署自建节点
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 统一主题服务器选择抽屉 (Macaron Bento Style) -->
+  <div id="modalServerPicker" class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[75vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <div id="serverPickerIcon" class="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0">
+            <i data-lucide="server" class="w-4 h-4"></i>
+          </div>
+          <div>
+            <h4 id="serverPickerTitle" class="text-sm font-bold text-slate-800 dark:text-slate-100">选择服务器</h4>
+            <p id="serverPickerSubtitle" class="text-[11px] text-slate-400">仅展示在线可用服务器</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modalServerPicker')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div id="serverPickerList" class="overflow-y-auto py-3 space-y-2 flex-1">
+        <!-- 动态渲染在线服务器卡片 -->
       </div>
     </div>
   </div>
@@ -3926,18 +3973,125 @@
       }
     }
 
+    let currentPickerTarget = 'main'; // 'main' or 'landing'
+
+    function openServerPicker(target) {
+      currentPickerTarget = target;
+      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
+      const titleEl = document.getElementById('serverPickerTitle');
+      const subTitleEl = document.getElementById('serverPickerSubtitle');
+      const iconEl = document.getElementById('serverPickerIcon');
+      const listEl = document.getElementById('serverPickerList');
+
+      let candidates = [];
+      let selectedUuid = '';
+
+      if (target === 'main') {
+        selectedUuid = document.getElementById('createNodeServerSelect')?.value || '';
+        if (isRelay) {
+          titleEl.textContent = '选择中转线路机';
+          subTitleEl.textContent = '仅展示已在线并就绪 Realm 转发的服务器';
+          iconEl.innerHTML = '<i data-lucide="git-branch" class="w-4 h-4 text-purple-600 dark:text-purple-300"></i>';
+          candidates = state.servers.filter(srv => 
+            (srv.realm_online || srv.realm_installed || srv.has_realm) && (srv.server_online || srv.probe_online)
+          );
+        } else {
+          titleEl.textContent = '选择所属服务器';
+          subTitleEl.textContent = '仅展示 Sing-box 核心在线的服务器';
+          iconEl.innerHTML = '<i data-lucide="server" class="w-4 h-4 text-purple-600 dark:text-purple-300"></i>';
+          candidates = state.servers.filter(srv => srv.singbox_online);
+        }
+      } else {
+        selectedUuid = document.getElementById('createNodeLandingServerSelect')?.value || '';
+        titleEl.textContent = '选择目标海外落地机';
+        subTitleEl.textContent = '仅展示 Sing-box 核心在线的目标服务器';
+        iconEl.innerHTML = '<i data-lucide="radio" class="w-4 h-4 text-indigo-600 dark:text-indigo-300"></i>';
+        const currentRelayUuid = document.getElementById('createNodeServerSelect')?.value;
+        candidates = state.servers.filter(srv => srv.singbox_online && srv.uuid !== currentRelayUuid);
+      }
+
+      if (candidates.length === 0) {
+        listEl.innerHTML = `
+          <div class="py-10 text-center space-y-2">
+            <div class="text-3xl">📭</div>
+            <div class="text-sm font-bold text-slate-700 dark:text-slate-300">暂无在线可用的服务器</div>
+            <p class="text-xs text-slate-400">未检测到符合条件的在线服务器，请确保探针与相关核心服务处于运行状态</p>
+          </div>
+        `;
+      } else {
+        listEl.innerHTML = candidates.map(srv => {
+          const isSelected = srv.uuid === selectedUuid;
+          return `
+            <div onclick="selectServerFromPicker('${srv.uuid}')" class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between btn-tap ${isSelected ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 shadow-sm' : 'border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-800 dark:text-slate-200'}">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-xl ${isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200/80 dark:bg-zinc-700/80 text-slate-600 dark:text-slate-300'} flex items-center justify-center font-bold text-xs shrink-0">
+                  <i data-lucide="server" class="w-4 h-4"></i>
+                </div>
+                <div class="font-bold text-sm tracking-tight">${escapeHtml(srv.name)}</div>
+              </div>
+              ${isSelected 
+                ? '<div class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>' 
+                : '<div class="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-zinc-600 shrink-0"></div>'}
+            </div>
+          `;
+        }).join('');
+      }
+
+      initLucide();
+      openModal('modalServerPicker');
+    }
+
+    function selectServerFromPicker(uuid) {
+      const srv = state.servers.find(s => s.uuid === uuid);
+      if (!srv) return;
+
+      if (currentPickerTarget === 'main') {
+        const input = document.getElementById('createNodeServerSelect');
+        const display = document.getElementById('createNodeServerSelectName');
+        if (input) input.value = uuid;
+        if (display) display.textContent = srv.name;
+
+        // If relay mode, check if landing needs reset
+        const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
+        if (isRelay) {
+          const landingInput = document.getElementById('createNodeLandingServerSelect');
+          if (landingInput && landingInput.value === uuid) {
+            landingInput.value = '';
+            const landingDisplay = document.getElementById('createNodeLandingServerSelectName');
+            if (landingDisplay) landingDisplay.textContent = '请选择目标落地服务器';
+          }
+        }
+        updateCreateNodeIpHint();
+      } else {
+        const input = document.getElementById('createNodeLandingServerSelect');
+        const display = document.getElementById('createNodeLandingServerSelectName');
+        if (input) input.value = uuid;
+        if (display) display.textContent = srv.name;
+
+        // Auto-match port if landing server already has a node
+        const landingNode = state.nodes.find(n => n.server_uuid === uuid && !n.is_relay);
+        if (landingNode && landingNode.port) {
+          const portInput = document.getElementById('createNodePort');
+          if (portInput && (!portInput.value || portInput.value == 20082)) {
+            portInput.value = landingNode.port;
+          }
+        }
+      }
+
+      closeModal('modalServerPicker');
+    }
+
     function populateServerSelectForNode() {
       const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
-      const s = document.getElementById('createNodeServerSelect');
-      const landingSel = document.getElementById('createNodeLandingServerSelect');
+      const input = document.getElementById('createNodeServerSelect');
+      const display = document.getElementById('createNodeServerSelectName');
+      const landingInput = document.getElementById('createNodeLandingServerSelect');
+      const landingDisplay = document.getElementById('createNodeLandingServerSelectName');
       const noRealmAlert = document.getElementById('createNodeNoRealmAlert');
       const titleEl = document.getElementById('createNodeServerSelectTitle');
       const badgeEl = document.getElementById('createNodeRelayBadge');
 
-      if (!s || !landingSel) return;
-
-      const prevSelectedS = s.value;
-      const prevSelectedLanding = landingSel.value;
+      if (!input || !display) return;
 
       if (isRelay) {
         if (titleEl) titleEl.textContent = '✈️ 中转线路机 (入口机，须安装 Realm 转发组件)';
@@ -3946,31 +4100,36 @@
           badgeEl.textContent = '中转落地模式';
         }
 
-        // Only servers with Realm can be selected as 线路机
-        const realmServers = state.servers.filter(srv => srv.has_realm || srv.realm_installed || srv.realm_online);
+        const realmServers = state.servers.filter(srv => 
+          (srv.realm_online || srv.realm_installed || srv.has_realm) && (srv.server_online || srv.probe_online)
+        );
         if (realmServers.length === 0) {
-          s.innerHTML = '<option value="" disabled selected>⚠️ 当前暂无安装 Realm 的中转机 (请先部署)</option>';
+          input.value = '';
+          display.textContent = '⚠️ 暂无在线的 Realm 中转机';
           if (noRealmAlert) noRealmAlert.classList.remove('hidden');
         } else {
           if (noRealmAlert) noRealmAlert.classList.add('hidden');
-          s.innerHTML = realmServers.map(srv => {
-            const tag = srv.realm_online ? '⚡[Realm 在线]' : '✓[已安装 Realm]';
-            return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
-          }).join('');
-          if (prevSelectedS && realmServers.some(srv => srv.uuid === prevSelectedS)) {
-            s.value = prevSelectedS;
+          if (!input.value || !realmServers.some(srv => srv.uuid === input.value)) {
+            input.value = realmServers[0].uuid;
+            display.textContent = realmServers[0].name;
+          } else {
+            const current = realmServers.find(srv => srv.uuid === input.value);
+            if (current) display.textContent = current.name;
           }
         }
 
-        // Target Landing VPS: other servers, ideally with Singbox
-        const currentRelayUuid = s.value;
-        const landingCandidates = state.servers.filter(srv => srv.uuid !== currentRelayUuid);
-        landingSel.innerHTML = landingCandidates.map(srv => {
-          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
-          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
-        }).join('');
-        if (prevSelectedLanding && landingCandidates.some(srv => srv.uuid === prevSelectedLanding)) {
-          landingSel.value = prevSelectedLanding;
+        const landingServers = state.servers.filter(srv => srv.singbox_online && srv.uuid !== input.value);
+        if (landingServers.length > 0) {
+          if (!landingInput.value || !landingServers.some(srv => srv.uuid === landingInput.value)) {
+            landingInput.value = landingServers[0].uuid;
+            if (landingDisplay) landingDisplay.textContent = landingServers[0].name;
+          } else {
+            const curLanding = landingServers.find(srv => srv.uuid === landingInput.value);
+            if (curLanding && landingDisplay) landingDisplay.textContent = curLanding.name;
+          }
+        } else {
+          landingInput.value = '';
+          if (landingDisplay) landingDisplay.textContent = '请选择目标落地服务器';
         }
       } else {
         if (titleEl) titleEl.textContent = '所属服务器 (直连节点，在此服务器直接运行 Sing-box)';
@@ -3980,36 +4139,24 @@
         }
         if (noRealmAlert) noRealmAlert.classList.add('hidden');
 
-        s.innerHTML = state.servers.map(srv => {
-          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
-          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
-        }).join('');
-        if (prevSelectedS && state.servers.some(srv => srv.uuid === prevSelectedS)) {
-          s.value = prevSelectedS;
+        // Only servers where Sing-box is online!
+        const onlineServers = state.servers.filter(srv => srv.singbox_online);
+        if (onlineServers.length > 0) {
+          if (!input.value || !onlineServers.some(srv => srv.uuid === input.value)) {
+            input.value = onlineServers[0].uuid;
+            display.textContent = onlineServers[0].name;
+          } else {
+            const cur = onlineServers.find(srv => srv.uuid === input.value);
+            if (cur) display.textContent = cur.name;
+          }
+        } else {
+          input.value = '';
+          display.textContent = '⚠️ 暂无 Sing-box 在线的服务器';
         }
       }
 
       updateCreateNodeIpHint();
       initLucide();
-    }
-
-    function onCreateNodeServerSelectChange() {
-      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
-      if (isRelay) {
-        const s = document.getElementById('createNodeServerSelect');
-        const landingSel = document.getElementById('createNodeLandingServerSelect');
-        const currentRelayUuid = s.value;
-        const prevSelectedLanding = landingSel.value;
-        const landingCandidates = state.servers.filter(srv => srv.uuid !== currentRelayUuid);
-        landingSel.innerHTML = landingCandidates.map(srv => {
-          const tag = srv.singbox_online ? '🌐[Sing-box 在线]' : (srv.singbox_installed ? '✓[已装核心]' : '');
-          return `<option value="${srv.uuid}" data-name="${escapeHtml(srv.name)}" data-ip="${escapeHtml(srv.ipv4 || srv.ipv6 || '')}">${escapeHtml(srv.name)} (${srv.ipv4 || srv.ipv6 || '未探测到IP'}) ${tag}</option>`;
-        }).join('');
-        if (prevSelectedLanding && landingCandidates.some(srv => srv.uuid === prevSelectedLanding)) {
-          landingSel.value = prevSelectedLanding;
-        }
-      }
-      updateCreateNodeIpHint();
     }
 
     function toggleCreateNodeRelayFields() {
@@ -4026,8 +4173,8 @@
       const s = document.getElementById('createNodeServerSelect');
       const hint = document.getElementById('createNodeIpHint');
       if (!s || !hint) return;
-      const opt = s.selectedOptions[0];
-      const ip = opt ? opt.getAttribute('data-ip') : '';
+      const srv = state.servers.find(srv => srv.uuid === s.value);
+      const ip = srv ? (srv.custom_ip || srv.ipv4 || srv.ipv6 || '') : '';
       if (ip) {
         hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-semibold"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 已自动获取服务器IP: <span class="font-mono bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded text-[11px]">${escapeHtml(ip)}</span></span>`;
       } else {
@@ -4051,9 +4198,8 @@
       const sel = document.getElementById('createNodeServerSelect');
       const srvUuid = sel ? sel.value : '';
       const srv = state.servers.find(s => s.uuid === srvUuid);
-      const opt = sel ? sel.selectedOptions[0] : null;
-      const serverName = srv ? srv.name : (opt ? opt.getAttribute('data-name') : '');
-      const serverIp = srv ? (srv.ipv4 || srv.ipv6 || '') : (opt ? opt.getAttribute('data-ip') : '');
+      const serverName = srv ? srv.name : '';
+      const serverIp = srv ? (srv.custom_ip || srv.ipv4 || srv.ipv6 || '') : '';
 
       const isRelay = document.getElementById('createNodeEnableRelay')?.checked ? 1 : 0;
       let finalServerUuid = srvUuid;
@@ -4078,7 +4224,6 @@
         const landingSel = document.getElementById('createNodeLandingServerSelect');
         const landingUuid = landingSel ? landingSel.value : '';
         const landingSrv = state.servers.find(s => s.uuid === landingUuid);
-        const landingOpt = landingSel ? landingSel.selectedOptions[0] : null;
 
         if (!landingUuid) {
           showToast('启用中转模式时，必须选择目标海外落地机', 'warn');
@@ -4091,8 +4236,8 @@
 
         // Sing-box decrypts and exits on Landing VPS!
         finalServerUuid = landingUuid;
-        finalServerName = landingSrv ? landingSrv.name : (landingOpt ? landingOpt.getAttribute('data-name') : '');
-        finalServerIp = landingSrv ? (landingSrv.ipv4 || landingSrv.ipv6 || '') : (landingOpt ? landingOpt.getAttribute('data-ip') : '');
+        finalServerName = landingSrv ? landingSrv.name : '';
+        finalServerIp = landingSrv ? (landingSrv.custom_ip || landingSrv.ipv4 || landingSrv.ipv6 || '') : '';
 
         // Realm port forwarder runs on Relay VPS!
         relayServerUuid = srvUuid;
