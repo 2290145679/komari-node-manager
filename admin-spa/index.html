@@ -1068,6 +1068,11 @@
               <div class="text-[11px] text-slate-400 mt-0.5 leading-tight">启用后，在创建自建中转落地节点时，本服务器将作为候选【中转线路机】供用户选择。</div>
             </div>
           </label>
+          <div class="pt-2 border-t border-indigo-100/80 dark:border-indigo-900/40">
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">自定义公网入站 IP / 域名 (针对 NAT机 / WARP出口机)</label>
+            <input type="text" id="editServerCustomIp" placeholder="例如: 167.254.242.31 (留空则使用探针自动上报的IP)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none font-mono text-xs">
+            <p class="text-[10px] text-slate-400 mt-1 leading-normal">说明：如果该机器开启了 Cloudflare WARP 导致探针检测为 104.28.x.x 出口IP，或者属于 NAT 共享IP VPS，请填入商家分配的真实外网入站 IP 或 DDNS。系统创建节点与 Realm 转发时将自动优先使用此地址。</p>
+          </div>
         </div>
 
         <!-- Section 2: 费用与账单周期 -->
@@ -3261,6 +3266,8 @@
       // Realm component toggle & badge
       const realmChk = document.getElementById('editServerHasRealm');
       if (realmChk) realmChk.checked = !!(s.has_realm || s.realm_installed || s.realm_online);
+      const customIpInput = document.getElementById('editServerCustomIp');
+      if (customIpInput) customIpInput.value = s.custom_ip || '';
       const realmBadgeEl = document.getElementById('editServerRealmStatusBadge');
       if (realmBadgeEl) {
         if (s.realm_online) {
@@ -3303,6 +3310,7 @@
         traffic_limit,
         traffic_limit_type: document.getElementById('editServerTrafficType').value,
         has_realm: document.getElementById('editServerHasRealm')?.checked ? 1 : 0,
+        custom_ip: document.getElementById('editServerCustomIp')?.value.trim() || '',
         hidden: document.getElementById('editServerHidden').checked ? 1 : 0,
         public_remark: document.getElementById('editServerPublicRemark').value.trim(),
         remark: document.getElementById('editServerRemark').value.trim()
