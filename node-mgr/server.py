@@ -1055,14 +1055,23 @@ def get_servers_with_stats():
     except Exception as e:
         pass
 
-    # Auto-cleanup orphan nodes whose server was deleted from Komari
+    # Auto-cleanup orphan nodes whose server was deleted from Komari (including relay/landing machines)
     try:
         valid_uuids = set(r["uuid"] for r in clients)
         conn_clean = sqlite3.connect(NODES_DB)
         c_clean = conn_clean.cursor()
-        c_clean.execute("SELECT id, server_uuid, name FROM nodes WHERE is_external = 0 AND server_uuid != 'external'")
+        c_clean.execute("SELECT id, server_uuid, name, is_relay, relay_server_uuid FROM nodes WHERE is_external = 0 AND server_uuid != 'external'")
         all_self_nodes = c_clean.fetchall()
-        orphan_nodes = [r for r in all_self_nodes if r[1] not in valid_uuids]
+        orphan_nodes = []
+        for r in all_self_nodes:
+            nid, suuid, nname, is_r, r_suuid = r[0], r[1], r[2], r[3], r[4]
+            # 1. Main host (landing/server) no longer exists in Komari
+            if suuid not in valid_uuids:
+                orphan_nodes.append((nid, suuid, nname))
+            # 2. Relay node whose relay machine no longer exists in Komari
+            elif is_r and r_suuid and r_suuid not in valid_uuids:
+                orphan_nodes.append((nid, r_suuid, nname))
+
         if orphan_nodes:
             orphan_ids = [r[0] for r in orphan_nodes]
             c_clean.execute(f"DELETE FROM nodes WHERE id IN ({','.join('?' * len(orphan_ids))})", orphan_ids)
@@ -3091,15 +3100,15 @@ def delete_server_fully(server_uuid):
         except Exception as e:
             print(f"[Error] Failed to remove server {server_uuid} from KOMARI_DB: {e}")
 
-    # 2. Delete from NODES_DB
+    # 2. Delete from NODES_DB (deleting both target/landing nodes AND relay nodes referencing this server)
     deleted_names = []
     if os.path.exists(NODES_DB):
         try:
             conn_n = sqlite3.connect(NODES_DB)
             c_n = conn_n.cursor()
-            c_n.execute("SELECT name FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            c_n.execute("SELECT name FROM nodes WHERE server_uuid = ? OR (is_relay = 1 AND relay_server_uuid = ?)", (server_uuid, server_uuid))
             deleted_names = [r[0] for r in c_n.fetchall()]
-            c_n.execute("DELETE FROM nodes WHERE server_uuid = ?", (server_uuid,))
+            c_n.execute("DELETE FROM nodes WHERE server_uuid = ? OR (is_relay = 1 AND relay_server_uuid = ?)", (server_uuid, server_uuid))
             c_n.execute("DELETE FROM server_traffic_baselines WHERE uuid = ?", (server_uuid,))
             try:
                 c_n.execute("DELETE FROM server_realm_configs WHERE uuid = ?", (server_uuid,))
@@ -3183,6 +3192,7 @@ def get_user_portal_payload(token):
     conn.close()
 
     servers_data = get_cached_servers_with_stats()
+    all_server_uuids = set(s["uuid"] for s in servers_data.get("servers", []))
     online_server_uuids = set(
         s["uuid"] for s in servers_data.get("servers", [])
         if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
@@ -3190,10 +3200,20 @@ def get_user_portal_payload(token):
 
     user_nodes = []
     for n in raw_nodes:
+        if not n.get("is_external") and n.get("server_uuid") != "external":
+            if n.get("server_uuid") not in all_server_uuids:
+                continue
+            if n.get("is_relay") and n.get("relay_server_uuid") and n.get("relay_server_uuid") not in all_server_uuids:
+                continue
+
         n_copy = dict(n)
         if not n.get("is_external") and n.get("server_uuid") != "external" and u_uuid:
             n_copy["uuid_or_passwd"] = u_uuid
-        is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids)
+        is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or (
+            n.get("server_uuid") in online_server_uuids and (
+                not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+            )
+        ))
         user_nodes.append({
             "id": n.get("id"),
             "name": n.get("name"),
@@ -3485,7 +3505,11 @@ rules:
             )
             nodes = [
                 n for n in all_nodes
-                if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids
+                if n.get("is_external") or n.get("server_uuid") == "external" or (
+                    n.get("server_uuid") in online_server_uuids and (
+                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+                    )
+                )
             ]
 
             rules_cfg = get_subscription_rules()
@@ -3535,7 +3559,11 @@ rules:
             )
             nodes = [
                 n for n in all_nodes
-                if n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids
+                if n.get("is_external") or n.get("server_uuid") == "external" or (
+                    n.get("server_uuid") in online_server_uuids and (
+                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+                    )
+                )
             ]
 
             rules_cfg = get_subscription_rules()
@@ -3826,7 +3854,10 @@ rules:
                         n["server_ip"] = srv.get("ipv4") or srv.get("ipv6") or ""
                     if not n.get("server_name"):
                         n["server_name"] = srv.get("name") or ""
-                    if n.get("is_relay") and n.get("relay_server_uuid") in servers_map:
+                    if n.get("is_relay") and n.get("relay_server_uuid"):
+                        if n.get("relay_server_uuid") not in servers_map:
+                            # Relay server was deleted, omit orphan relay node
+                            continue
                         rsrv = servers_map[n["relay_server_uuid"]]
                         if not n.get("relay_server_ip"):
                             n["relay_server_ip"] = rsrv.get("ipv4") or rsrv.get("ipv6") or ""
