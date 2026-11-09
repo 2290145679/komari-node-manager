@@ -258,23 +258,26 @@ def get_theme_market_catalog():
 
 _cached_active_uuids = None
 _cached_active_uuids_time = 0
+_cached_active_users = None
+_cached_active_users_time = 0
 
-def get_active_user_uuids(force_refresh=False):
-    global _cached_active_uuids, _cached_active_uuids_time
+def get_active_users(force_refresh=False):
+    global _cached_active_users, _cached_active_users_time
     now = time.time()
-    if not force_refresh and _cached_active_uuids is not None and (now - _cached_active_uuids_time < 5):
-        return _cached_active_uuids
-    uuids = []
+    if not force_refresh and _cached_active_users is not None and (now - _cached_active_users_time < 5):
+        return _cached_active_users
+    users = []
     try:
         conn = sqlite3.connect(NODES_DB)
         c = conn.cursor()
-        c.execute("SELECT user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE enabled = 1")
+        c.execute("SELECT id, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE enabled = 1")
         today_str = datetime.now().strftime("%Y-%m-%d")
         for row in c.fetchall():
-            u_uuid = row[0]
-            limit_b = int(row[1] or 0) if len(row) > 1 and row[1] is not None else 0
-            used_b = int(row[2] or 0) if len(row) > 2 and row[2] is not None else 0
-            exp = str(row[3] or "").strip() if len(row) > 3 and row[3] is not None else ""
+            sub_id = row[0]
+            u_uuid = str(row[1] or "").strip()
+            limit_b = int(row[2] or 0) if len(row) > 2 and row[2] is not None else 0
+            used_b = int(row[3] or 0) if len(row) > 3 and row[3] is not None else 0
+            exp = str(row[4] or "").strip() if len(row) > 4 and row[4] is not None else ""
 
             # Hard traffic quota cutoff
             if limit_b > 0 and used_b >= limit_b:
@@ -286,14 +289,27 @@ def get_active_user_uuids(force_refresh=False):
                 if today_str > exp_date:
                     continue
 
-            if u_uuid and str(u_uuid).strip() and str(u_uuid).strip() not in uuids:
-                uuids.append(str(u_uuid).strip())
+            if u_uuid:
+                users.append({
+                    "id": sub_id,
+                    "uuid": u_uuid,
+                    "limit_bytes": limit_b,
+                    "used_bytes": used_b
+                })
         conn.close()
-        _cached_active_uuids = uuids
-        _cached_active_uuids_time = now
+        _cached_active_users = users
+        _cached_active_users_time = now
     except Exception:
-        if _cached_active_uuids is not None:
-            return _cached_active_uuids
+        if _cached_active_users is not None:
+            return _cached_active_users
+    return users
+
+def get_active_user_uuids(force_refresh=False):
+    global _cached_active_uuids, _cached_active_uuids_time
+    users = get_active_users(force_refresh=force_refresh)
+    uuids = [u["uuid"] for u in users]
+    _cached_active_uuids = uuids
+    _cached_active_uuids_time = _cached_active_users_time
     return uuids
 
 def init_db():
@@ -1951,15 +1967,166 @@ def build_sing_box_client_profile(nodes, rules_cfg=None):
         }
     }
 
+_traffic_lock = threading.Lock()
+
+def record_user_traffic(traffic_dict):
+    """
+    traffic_dict: dict of { sub_id (int or str): delta_bytes (int) }
+    Updates subscriptions table with real-time consumed bytes, and enforces quota cutoffs.
+    """
+    if not traffic_dict:
+        return
+    with _traffic_lock:
+        try:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            quota_exceeded = False
+            for sub_id, delta in traffic_dict.items():
+                try:
+                    sid = int(sub_id)
+                    delta_b = int(delta or 0)
+                except (ValueError, TypeError):
+                    continue
+                if delta_b <= 0:
+                    continue
+                c.execute(
+                    "UPDATE subscriptions SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) + ? WHERE id = ?",
+                    (delta_b, sid)
+                )
+                c.execute("SELECT traffic_limit_bytes, traffic_used_bytes FROM subscriptions WHERE id = ?", (sid,))
+                row = c.fetchone()
+                if row and row[0] is not None and row[1] is not None:
+                    limit_b = int(row[0] or 0)
+                    used_b = int(row[1] or 0)
+                    if limit_b > 0 and used_b >= limit_b:
+                        quota_exceeded = True
+            conn.commit()
+            conn.close()
+
+            if quota_exceeded:
+                get_active_users(force_refresh=True)
+                terminate_clash_connections()
+        except Exception as e:
+            print(f"[Traffic] Failed to record traffic: {e}")
+
+def terminate_clash_connections():
+    try:
+        req = urllib.request.Request("http://127.0.0.1:9090/connections", method="DELETE")
+        urllib.request.urlopen(req, timeout=1)
+    except Exception:
+        pass
+
+class TrafficCollector:
+    def __init__(self, clash_api_url="http://127.0.0.1:9090"):
+        self.clash_api_url = clash_api_url
+        self.tracked_conns = {}  # conn_id: (upload, download, sub_id)
+        self.last_global_total = None
+        self.last_active_sub_id = None
+
+    def poll_once(self):
+        try:
+            req = urllib.request.Request(f"{self.clash_api_url}/connections")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                data = json.loads(resp.read().decode())
+        except Exception:
+            self.tracked_conns.clear()
+            self.last_global_total = None
+            return {}
+
+        dl_total = int(data.get("downloadTotal") or 0)
+        up_total = int(data.get("uploadTotal") or 0)
+        global_total = dl_total + up_total
+
+        connections = data.get("connections", [])
+        current_ids = set()
+        user_deltas = {}
+        sum_active_deltas = 0
+
+        for c in connections:
+            conn_id = c.get("id")
+            if not conn_id:
+                continue
+            current_ids.add(conn_id)
+
+            sub_id = None
+            for ch in c.get("chains", []):
+                s_ch = str(ch)
+                if s_ch.startswith("out-sub-"):
+                    try:
+                        sub_id = int(s_ch.replace("out-sub-", ""))
+                        break
+                    except ValueError:
+                        pass
+            if sub_id is None:
+                rule = str(c.get("rule") or "")
+                m = re.search(r'sub_(\d+)', rule)
+                if m:
+                    sub_id = int(m.group(1))
+
+            if sub_id is None:
+                continue
+
+            self.last_active_sub_id = sub_id
+            u = int(c.get("upload") or 0)
+            d = int(c.get("download") or 0)
+
+            if conn_id in self.tracked_conns:
+                last_u, last_d, _ = self.tracked_conns[conn_id]
+                delta_u = max(0, u - last_u)
+                delta_d = max(0, d - last_d)
+            else:
+                delta_u = u
+                delta_d = d
+
+            self.tracked_conns[conn_id] = (u, d, sub_id)
+            delta = delta_u + delta_d
+            if delta > 0:
+                user_deltas[sub_id] = user_deltas.get(sub_id, 0) + delta
+                sum_active_deltas += delta
+
+        # Clean closed connections
+        closed_ids = [cid for cid in self.tracked_conns if cid not in current_ids]
+        for cid in closed_ids:
+            del self.tracked_conns[cid]
+
+        # Attribute unaccounted bytes from short-lived connections
+        if self.last_global_total is not None and global_total >= self.last_global_total:
+            global_delta = global_total - self.last_global_total
+            if global_delta > sum_active_deltas:
+                unaccounted = global_delta - sum_active_deltas
+                target_sub = None
+                if len(user_deltas) == 1:
+                    target_sub = next(iter(user_deltas.keys()))
+                elif self.last_active_sub_id is not None:
+                    target_sub = self.last_active_sub_id
+
+                if target_sub is not None:
+                    user_deltas[target_sub] = user_deltas.get(target_sub, 0) + unaccounted
+
+        self.last_global_total = global_total
+        return user_deltas
+
+def run_traffic_collector():
+    collector = TrafficCollector(clash_api_url="http://127.0.0.1:9090")
+    while True:
+        try:
+            deltas = collector.poll_once()
+            if deltas:
+                record_user_traffic(deltas)
+        except Exception:
+            pass
+        time.sleep(2)
+
 def build_sing_box_config(nodes_for_server):
     inbounds = []
     seen_ports = set()
     cert_path = "/etc/sing-box/cert.pem"
     key_path = "/etc/sing-box/cert.key"
 
-    # Gather all active user_uuid from subscriptions to allow multi-user authorization
-    active_user_uuids = get_active_user_uuids()
-    
+    # Gather all active users from subscriptions to allow multi-user authorization
+    active_users = get_active_users()
+    user_outbound_tags = set()
+
     for n in nodes_for_server:
         if not n.get("enabled"):
             continue
@@ -1971,16 +2138,38 @@ def build_sing_box_config(nodes_for_server):
             continue
         seen_ports.add(port)
         tag = f"{proto}-{n.get('id')}"
-        u = n.get("uuid_or_passwd")
+        default_u = n.get("uuid_or_passwd")
         sni = n.get("sni") or "addons.mozilla.org"
 
-        all_uuids = [u] if u else []
-        for au in active_user_uuids:
-            if au not in all_uuids:
-                all_uuids.append(au)
+        users_list = []
+        active_uuids = set()
+        for u in active_users:
+            active_uuids.add(u["uuid"])
+            user_outbound_tags.add(u["id"])
+            if proto == "vless_reality":
+                users_list.append({"name": f"sub_{u['id']}", "uuid": u["uuid"], "flow": n.get("flow") or "xtls-rprx-vision"})
+            elif proto == "hysteria2":
+                users_list.append({"name": f"sub_{u['id']}", "password": u["uuid"]})
+            elif proto == "tuic":
+                users_list.append({"name": f"sub_{u['id']}", "uuid": u["uuid"], "password": u["uuid"]})
+            elif proto == "trojan":
+                users_list.append({"name": f"sub_{u['id']}", "password": u["uuid"]})
+            elif proto == "vmess_ws":
+                users_list.append({"name": f"sub_{u['id']}", "uuid": u["uuid"]})
+
+        if default_u and default_u not in active_uuids:
+            if proto == "vless_reality":
+                users_list.append({"name": "default", "uuid": default_u, "flow": n.get("flow") or "xtls-rprx-vision"})
+            elif proto == "hysteria2":
+                users_list.append({"name": "default", "password": default_u})
+            elif proto == "tuic":
+                users_list.append({"name": "default", "uuid": default_u, "password": default_u})
+            elif proto == "trojan":
+                users_list.append({"name": "default", "password": default_u})
+            elif proto == "vmess_ws":
+                users_list.append({"name": "default", "uuid": default_u})
         
         if proto == "vless_reality":
-            users_list = [{"uuid": su, "flow": n.get("flow") or "xtls-rprx-vision"} for su in all_uuids]
             inbounds.append({
                 "type": "vless",
                 "tag": tag,
@@ -2007,7 +2196,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"password": su} for su in all_uuids],
+                "users": users_list,
                 "tls": {
                     "enabled": True,
                     "certificate_path": cert_path,
@@ -2020,7 +2209,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"uuid": su, "password": su} for su in all_uuids],
+                "users": users_list,
                 "congestion_control": "bbr",
                 "tls": {
                     "enabled": True,
@@ -2034,7 +2223,7 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"password": su} for su in all_uuids],
+                "users": users_list,
                 "tls": {
                     "enabled": True,
                     "certificate_path": cert_path,
@@ -2047,18 +2236,34 @@ def build_sing_box_config(nodes_for_server):
                 "tag": tag,
                 "listen": "::",
                 "listen_port": port,
-                "users": [{"uuid": su} for su in all_uuids],
+                "users": users_list,
                 "transport": {
                     "type": "ws",
                     "path": n.get("ws_path") or "/vmess"
                 }
             })
-            
-    return {
+
+    outbounds = [{"type": "direct", "tag": f"out-sub-{uid}"} for uid in sorted(user_outbound_tags)]
+    outbounds.append({"type": "direct", "tag": "direct"})
+
+    route_rules = [{"auth_user": [f"sub_{uid}"], "outbound": f"out-sub-{uid}"} for uid in sorted(user_outbound_tags)]
+
+    config = {
         "log": {"level": "warn", "timestamp": True},
+        "experimental": {
+            "clash_api": {
+                "external_controller": "127.0.0.1:9090"
+            }
+        },
         "inbounds": inbounds,
-        "outbounds": [{"type": "direct", "tag": "direct"}]
+        "outbounds": outbounds
     }
+    if route_rules:
+        config["route"] = {
+            "rules": route_rules,
+            "final": "direct"
+        }
+    return config
 
 INSTALL_SCRIPT_TEMPLATE = '''#!/bin/bash
 set -e
@@ -2127,14 +2332,14 @@ echo "[Info] Detected init system: $INIT_SYSTEM"
 # 1. Install prerequisites
 echo "[1/5] Installing system dependencies..."
 if [ -x "$(command -v apt-get)" ]; then
-  apt-get update -qq && apt-get install -y -qq curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+  apt-get update -qq && apt-get install -y -qq curl wget tar openssl jq python3 ca-certificates >/dev/null 2>&1 || true
 elif [ -x "$(command -v yum)" ]; then
-  yum install -y curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+  yum install -y curl wget tar openssl jq python3 ca-certificates >/dev/null 2>&1 || true
 elif [ -x "$(command -v dnf)" ]; then
-  dnf install -y curl wget tar openssl jq ca-certificates >/dev/null 2>&1 || true
+  dnf install -y curl wget tar openssl jq python3 ca-certificates >/dev/null 2>&1 || true
 elif [ -x "$(command -v apk)" ]; then
   apk update >/dev/null 2>&1 || true
-  apk add --no-cache curl wget tar openssl jq bash ca-certificates gcompat >/dev/null 2>&1 || true
+  apk add --no-cache curl wget tar openssl jq python3 bash ca-certificates gcompat >/dev/null 2>&1 || true
 fi
 
 # 2. Enable TCP BBR Congestion Control
@@ -2384,7 +2589,104 @@ while true; do
       fi
     fi
   fi
-  sleep 10
+
+  # Report proxy traffic from sing-box clash_api
+  if curl -s -m 2 http://127.0.0.1:9090/connections >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+      python3 -c '
+import urllib.request, json, sys, os, re
+
+STATE_FILE = "/tmp/sb_traffic_state.json"
+try:
+    with open(STATE_FILE, "r") as f:
+        state = json.load(f)
+except Exception:
+    state = {"conns": {}, "global_total": 0, "last_sub": None}
+
+try:
+    req = urllib.request.Request("http://127.0.0.1:9090/connections")
+    with urllib.request.urlopen(req, timeout=2) as resp:
+        data = json.loads(resp.read().decode())
+except Exception:
+    sys.exit(0)
+
+dl_total = int(data.get("downloadTotal") or 0)
+up_total = int(data.get("uploadTotal") or 0)
+global_total = dl_total + up_total
+
+tracked = state.get("conns", {})
+current_ids = set()
+deltas = {}
+sum_deltas = 0
+last_sub = state.get("last_sub")
+
+for c in data.get("connections", []):
+    cid = c.get("id")
+    if not cid: continue
+    current_ids.add(cid)
+    sub_id = None
+    for ch in c.get("chains", []):
+        s_ch = str(ch)
+        if s_ch.startswith("out-sub-"):
+            sub_id = s_ch.replace("out-sub-", "")
+            break
+    if not sub_id:
+        rule = str(c.get("rule") or "")
+        m = re.search(r"sub_(\d+)", rule)
+        if m: sub_id = m.group(1)
+    if not sub_id: continue
+    last_sub = sub_id
+    u = int(c.get("upload") or 0)
+    d = int(c.get("download") or 0)
+    if cid in tracked:
+        lu, ld = tracked[cid][:2]
+        du = max(0, u - lu)
+        dd = max(0, d - ld)
+    else:
+        du = u
+        dd = d
+    tracked[cid] = [u, d, sub_id]
+    d_total = du + dd
+    if d_total > 0:
+        deltas[sub_id] = deltas.get(sub_id, 0) + d_total
+        sum_deltas += d_total
+
+closed = [cid for cid in tracked if cid not in current_ids]
+for cid in closed: del tracked[cid]
+
+last_global = state.get("global_total", 0)
+if last_global > 0 and global_total >= last_global:
+    g_delta = global_total - last_global
+    if g_delta > sum_deltas:
+        unacc = g_delta - sum_deltas
+        target = next(iter(deltas.keys())) if len(deltas) == 1 else last_sub
+        if target:
+            deltas[target] = deltas.get(target, 0) + unacc
+
+state["conns"] = tracked
+state["global_total"] = global_total
+state["last_sub"] = last_sub
+try:
+    with open(STATE_FILE, "w") as f: json.dump(state, f)
+except Exception: pass
+
+if deltas:
+    try:
+        master_url = sys.argv[1]
+        token = sys.argv[2]
+        post_data = json.dumps({"token": token, "traffic": deltas}).encode()
+        post_req = urllib.request.Request(
+            f"{master_url}/api/node-mgr/agent/report-traffic?token={token}",
+            data=post_data,
+            headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(post_req, timeout=5)
+    except Exception: pass
+' "$MASTER_URL" "$TOKEN" >/dev/null 2>&1 || true
+    fi
+  fi
+
+  sleep 5
 done
 EOF
 
@@ -4361,8 +4663,38 @@ rules:
     def do_POST(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+
+        # Node Agent Traffic Reporting Endpoint
+        if path in ["/api/agent/report-traffic", "/api/node-mgr/agent/report-traffic"]:
+            token = str(query.get("token", [""])[0] or body.get("token") or "")
+            if not token:
+                self._send_json({"error": "missing token"}, 400)
+                return
+
+            servers = get_servers()
+            matched = any(s.get("token") == token or s.get("uuid") == token for s in servers)
+            if not matched and token != "MASTER_SECRET":
+                try:
+                    conn_hb = sqlite3.connect(NODES_DB)
+                    c_hb = conn_hb.cursor()
+                    c_hb.execute("SELECT 1 FROM agent_heartbeats WHERE token = ? LIMIT 1", (token,))
+                    found = c_hb.fetchone()
+                    conn_hb.close()
+                    if not found:
+                        self._send_json({"error": "unauthorized token"}, 401)
+                        return
+                except Exception:
+                    pass
+
+            traffic_data = body.get("traffic") or {}
+            if traffic_data and isinstance(traffic_data, dict):
+                record_user_traffic(traffic_data)
+
+            self._send_json({"ok": True})
+            return
 
         # Public User Portal Login Endpoint
         if path in ["/api/user/login", "/api/node-mgr/user/login"]:
@@ -5525,6 +5857,7 @@ rules:
 
 if __name__ == "__main__":
     threading.Thread(target=run_notification_engine, daemon=True).start()
+    threading.Thread(target=run_traffic_collector, daemon=True).start()
     print(f"Starting Node Manager server on 127.0.0.1:{PORT} (ThreadingHTTPServer)...")
     server = ThreadingHTTPServer(("127.0.0.1", PORT), NodeMgrHandler)
     server.daemon_threads = True
