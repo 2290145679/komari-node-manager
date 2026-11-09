@@ -4946,11 +4946,15 @@ rules:
             username = str(body.get("username") or "").strip() or name
             password = str(body.get("password") or "").strip() or secrets.token_hex(4)
             remark = str(body.get("remark") or "").strip()
-            if not name:
-                name = username
             if not username:
                 self._send_json({"ok": False, "error": "用户名或账号不能为空"}, 400)
                 return
+            if not re.match(r'^[a-zA-Z0-9_]+$', username):
+                self._send_json({"ok": False, "error": "用户名只能由英文字母和数字组成（不支持中文及特殊符号）"}, 400)
+                return
+            if not name:
+                name = username
+
             traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
             limit_bytes = int(traffic_limit_gb * (1024**3)) if traffic_limit_gb > 0 else 0
             expire_time = str(body.get("expire_time") or "").strip()
@@ -4960,6 +4964,15 @@ rules:
             c = conn.cursor()
             c.execute("PRAGMA table_info(subscriptions)")
             cols = [r[1] for r in c.fetchall()]
+
+            # Check duplicate username
+            if 'username' in cols:
+                c.execute("SELECT id FROM subscriptions WHERE LOWER(username) = LOWER(?) LIMIT 1", (username,))
+                if c.fetchone():
+                    conn.close()
+                    self._send_json({"ok": False, "error": f"用户名 '{username}' 已存在，请更换"}, 400)
+                    return
+
             if 'username' in cols and 'password' in cols:
                 c.execute("INSERT INTO subscriptions (token, name, username, password, enabled, remark, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time) VALUES (?, ?, ?, ?, 1, ?, ?, ?, 0, ?)",
                           (new_tok, name, username, password, remark, new_uuid, limit_bytes, expire_time))
@@ -4998,6 +5011,15 @@ rules:
                 return
             name = str(body.get("name") or "").strip()
             username = str(body.get("username") or "").strip() or name
+            if not username:
+                self._send_json({"ok": False, "error": "用户名或账号不能为空"}, 400)
+                return
+            if not re.match(r'^[a-zA-Z0-9_]+$', username):
+                self._send_json({"ok": False, "error": "用户名只能由英文字母和数字组成（不支持中文及特殊符号）"}, 400)
+                return
+            if not name:
+                name = username
+
             password = str(body.get("password") or "").strip()
             remark = str(body.get("remark") or "").strip()
             traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
@@ -5010,6 +5032,14 @@ rules:
             c.execute("PRAGMA table_info(subscriptions)")
             cols = [r[1] for r in c.fetchall()]
             has_creds = ('username' in cols and 'password' in cols)
+
+            # Check duplicate username for other users
+            if has_creds:
+                c.execute("SELECT id FROM subscriptions WHERE LOWER(username) = LOWER(?) AND id != ? LIMIT 1", (username, uid))
+                if c.fetchone():
+                    conn.close()
+                    self._send_json({"ok": False, "error": f"用户名 '{username}' 已被其他用户占用"}, 400)
+                    return
 
             if has_creds:
                 if password:

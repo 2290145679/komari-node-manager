@@ -69,7 +69,7 @@
 
 2. 当前订阅用户账号 (Subscriptions):
    - 用户 ID 1: 用户名 'default', Token '644817146753fd6e805406444b893a3e', UUID 2f97687e-45e3-45ce-9231-85d11802efaf (无限制流量)
-   - 用户 ID 3: 用户名 '朋友A', 密码 'password123', Token 'cb35b9fc835f56d2158f8459ba6d44bf', UUID 0427a41f-8795-4023-80db-30bb1daadac0 (流量上限 1.00 GB)
+   - 用户 ID 3: 用户名 'user1' (原名朋友A), 密码 'password123', Token 'cb35b9fc835f56d2158f8459ba6d44bf', UUID 0427a41f-8795-4023-80db-30bb1daadac0 (流量上限 1.00 GB)
 
 --------------------------------------------------------------------------------
 三、最近完成的核心功能与问题修复记录 (Completed Features & Bugfixes)

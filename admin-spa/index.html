@@ -1600,13 +1600,13 @@
 
       <div class="py-4 space-y-3.5">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">显示名称 / 用户名 *</label>
-          <input type="text" id="newUserName" placeholder="例如: 朋友B / 团队办公" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 / 用户名 * (英文字母或数字)</label>
+          <input type="text" id="newUserUsername" placeholder="例如: user1, test2, vip01" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 *</label>
-            <input type="text" id="newUserUsername" placeholder="登录账号 (默认同名称)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">显示别名 (可选)</label>
+            <input type="text" id="newUserName" placeholder="留空默认同账号" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录密码 *</label>
@@ -1651,13 +1651,13 @@
       <div class="py-4 space-y-3.5 text-xs">
         <input type="hidden" id="editUserId">
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">显示名称 / 用户名</label>
-          <input type="text" id="editUserName" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 / 用户名 * (英文字母或数字)</label>
+          <input type="text" id="editUserUsername" placeholder="例如: user1, test2" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号</label>
-            <input type="text" id="editUserUsername" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">显示别名 (可选)</label>
+            <input type="text" id="editUserName" placeholder="留空默认同账号" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
           <div>
             <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">重置密码 (留空不改)</label>
@@ -5175,15 +5175,19 @@
     }
 
     async function submitCreateUser() {
-      const name = document.getElementById('newUserName').value.trim();
-      const username = (document.getElementById('newUserUsername')?.value || '').trim() || name;
+      const username = (document.getElementById('newUserUsername')?.value || '').trim();
+      const name = (document.getElementById('newUserName')?.value || '').trim() || username;
       const password = (document.getElementById('newUserPassword')?.value || '').trim();
       const remark = document.getElementById('newUserRemark').value.trim();
       const trafficLimitGb = parseFloat(document.getElementById('newUserTrafficLimit').value || '0') || 0;
       const expireTime = document.getElementById('newUserExpireTime').value.trim();
 
-      if (!name) {
-        showToast('用户名不能为空', 'warn');
+      if (!username) {
+        showToast('登录账号/用户名不能为空', 'warn');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        showToast('用户名只能由英文字母或数字组成（例如: user1, test2）', 'warn');
         return;
       }
       try {
@@ -5193,7 +5197,7 @@
           body: JSON.stringify({ name, username, password, remark, traffic_limit_gb: trafficLimitGb, expire_time: expireTime })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(`🎉 成功创建用户【${name}】！账号密码已就绪。`, 'success');
+          showToast(`🎉 成功创建用户【${username}】！账号密码已就绪。`, 'success');
           closeModal('modalCreateUser');
           document.getElementById('newUserName').value = '';
           if (document.getElementById('newUserUsername')) document.getElementById('newUserUsername').value = '';
@@ -5214,8 +5218,8 @@
       const u = state.users.find(x => x.id === id);
       if (!u) return;
       document.getElementById('editUserId').value = u.id;
-      document.getElementById('editUserName').value = u.name;
-      if (document.getElementById('editUserUsername')) document.getElementById('editUserUsername').value = u.username || u.name;
+      document.getElementById('editUserUsername').value = u.username || u.name;
+      document.getElementById('editUserName').value = u.name || u.username;
       if (document.getElementById('editUserPassword')) document.getElementById('editUserPassword').value = '';
       document.getElementById('editUserRemark').value = u.remark || '';
       document.getElementById('editUserTrafficLimit').value = u.traffic_limit_gb || 0;
@@ -5226,16 +5230,20 @@
 
     async function submitEditUser() {
       const id = parseInt(document.getElementById('editUserId').value);
-      const name = document.getElementById('editUserName').value.trim();
-      const username = (document.getElementById('editUserUsername')?.value || '').trim() || name;
+      const username = (document.getElementById('editUserUsername')?.value || '').trim();
+      const name = (document.getElementById('editUserName')?.value || '').trim() || username;
       const password = (document.getElementById('editUserPassword')?.value || '').trim();
       const remark = document.getElementById('editUserRemark').value.trim();
       const trafficLimitGb = parseFloat(document.getElementById('editUserTrafficLimit').value || '0') || 0;
       const trafficUsedGb = parseFloat(document.getElementById('editUserTrafficUsed').value || '0') || 0;
       const expireTime = document.getElementById('editUserExpireTime').value.trim();
 
-      if (!name) {
-        showToast('用户名不能为空', 'warn');
+      if (!username) {
+        showToast('登录账号/用户名不能为空', 'warn');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        showToast('用户名只能由英文字母或数字组成（例如: user1, test2）', 'warn');
         return;
       }
       try {
@@ -5245,7 +5253,7 @@
           body: JSON.stringify({ id, name, username, password, remark, traffic_limit_gb: trafficLimitGb, traffic_used_gb: trafficUsedGb, expire_time: expireTime })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(`✅ 用户【${name}】账号配置与限额已更新！`, 'success');
+          showToast(`✅ 用户【${username}】账号配置与限额已更新！`, 'success');
           closeModal('modalEditUser');
           loadUsers();
         } else {
@@ -5253,6 +5261,8 @@
         }
       } catch(e) {
         showToast('更新失败: ' + e.message, 'error');
+      }
+    }
       }
     }
 
