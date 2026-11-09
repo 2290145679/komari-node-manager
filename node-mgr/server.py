@@ -390,6 +390,21 @@ def init_db():
             c.execute("ALTER TABLE subscriptions ADD COLUMN expire_time TEXT DEFAULT ''")
         except Exception:
             pass
+    if 'username' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN username TEXT DEFAULT ''")
+        except Exception:
+            pass
+    if 'password' not in sub_cols:
+        try:
+            c.execute("ALTER TABLE subscriptions ADD COLUMN password TEXT DEFAULT ''")
+        except Exception:
+            pass
+    try:
+        c.execute("UPDATE subscriptions SET username = name WHERE (username IS NULL OR username = '') AND name IS NOT NULL AND name != ''")
+        c.execute("UPDATE subscriptions SET password = 'password123' WHERE (password IS NULL OR password = '')")
+    except Exception:
+        pass
     c.execute('''
         CREATE TABLE IF NOT EXISTS agent_heartbeats (
             token TEXT PRIMARY KEY,
@@ -3110,6 +3125,114 @@ def delete_server_fully(server_uuid):
 
     return len(deleted_names)
 
+def get_user_portal_payload(token):
+    conn = sqlite3.connect(NODES_DB)
+    c = conn.cursor()
+    c.execute("PRAGMA table_info(subscriptions)")
+    sub_cols = [r[1] for r in c.fetchall()]
+    has_user_cols = ('username' in sub_cols and 'password' in sub_cols)
+
+    if has_user_cols:
+        c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time, username, password FROM subscriptions WHERE token = ?", (token,))
+    else:
+        c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE token = ?", (token,))
+    sub_row = c.fetchone()
+    if not sub_row:
+        conn.close()
+        return None, None
+
+    uid, uname, tok, en, rmk, cat, u_uuid = (
+        sub_row[0], sub_row[1] or "专属用户", sub_row[2], bool(sub_row[3]), sub_row[4] or "",
+        str(sub_row[5]), sub_row[6] or ""
+    )
+    limit_b = int(sub_row[7] or 0) if len(sub_row) > 7 and sub_row[7] is not None else 0
+    used_b = int(sub_row[8] or 0) if len(sub_row) > 8 and sub_row[8] is not None else 0
+    exp = str(sub_row[9] or "").strip() if len(sub_row) > 9 and sub_row[9] is not None else ""
+    username = sub_row[10] if len(sub_row) > 10 and sub_row[10] else uname
+    password = sub_row[11] if len(sub_row) > 11 and sub_row[11] else "password123"
+
+    rem_b = max(0, limit_b - used_b) if limit_b > 0 else 0
+    pct = round((used_b / limit_b) * 100, 1) if limit_b > 0 else 0
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    is_exh = (limit_b > 0 and used_b >= limit_b)
+    is_exp = bool(exp and today_str > exp.split("T")[0])
+
+    days_left = None
+    if exp:
+        try:
+            days_left = (datetime.strptime(exp.split("T")[0], "%Y-%m-%d").date() - datetime.now().date()).days
+        except Exception:
+            pass
+
+    if not en:
+        st = "disabled"
+        st_text = "已暂停服务"
+    elif is_exh:
+        st = "exhausted"
+        st_text = "流量已耗尽"
+    elif is_exp:
+        st = "expired"
+        st_text = "订阅已过期"
+    else:
+        st = "normal"
+        st_text = "正常使用中"
+
+    c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+    cols = [d[0] for d in c.description]
+    raw_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+    conn.close()
+
+    servers_data = get_cached_servers_with_stats()
+    online_server_uuids = set(
+        s["uuid"] for s in servers_data.get("servers", [])
+        if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
+    )
+
+    user_nodes = []
+    for n in raw_nodes:
+        n_copy = dict(n)
+        if not n.get("is_external") and n.get("server_uuid") != "external" and u_uuid:
+            n_copy["uuid_or_passwd"] = u_uuid
+        is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids)
+        user_nodes.append({
+            "id": n.get("id"),
+            "name": n.get("name"),
+            "protocol": n.get("protocol"),
+            "server_ip": n.get("server_ip"),
+            "port": n.get("port"),
+            "online": is_on,
+            "share_link": build_node_share_link(n_copy)
+        })
+
+    user_info = {
+        "id": uid,
+        "name": uname,
+        "username": username,
+        "password": password,
+        "token": tok,
+        "enabled": en,
+        "remark": rmk,
+        "created_at": cat,
+        "user_uuid": u_uuid,
+        "traffic_limit_bytes": limit_b,
+        "traffic_limit_gb": round(limit_b / (1024**3), 2) if limit_b > 0 else 0,
+        "traffic_limit_formatted": format_bytes(limit_b) if limit_b > 0 else "无限制",
+        "traffic_used_bytes": used_b,
+        "traffic_used_gb": round(used_b / (1024**3), 2),
+        "traffic_used_formatted": format_bytes(used_b),
+        "traffic_remaining_bytes": rem_b,
+        "traffic_remaining_formatted": format_bytes(rem_b) if limit_b > 0 else "无限制",
+        "traffic_percent": min(100.0, pct),
+        "expire_time": exp,
+        "expire_remaining_days": days_left,
+        "status": st,
+        "status_text": st_text,
+        "sub_url": f"https://{DOMAIN}/sub/{tok}",
+        "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1",
+        "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1"
+    }
+    return user_info, user_nodes
+
 class NodeMgrHandler(BaseHTTPRequestHandler):
     def _send_json(self, data, status=200, extra_headers=None):
         self.send_response(status)
@@ -3932,102 +4055,10 @@ rules:
             if not token:
                 self._send_json({"ok": False, "error": "缺少订阅 Token 参数"}, 400)
                 return
-            conn = sqlite3.connect(NODES_DB)
-            c = conn.cursor()
-            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions WHERE token = ?", (token,))
-            sub_row = c.fetchone()
-            if not sub_row:
-                conn.close()
-                self._send_json({"ok": False, "error": "无效的订阅 Token (用户不存在)"}, 404)
+            user_info, user_nodes = get_user_portal_payload(token)
+            if not user_info:
+                self._send_json({"ok": False, "error": "无效的订阅凭证 (用户不存在)"}, 404)
                 return
-
-            uid, uname, tok, en, rmk, cat, u_uuid = (
-                sub_row[0], sub_row[1] or "专属用户", sub_row[2], bool(sub_row[3]), sub_row[4] or "",
-                str(sub_row[5]), sub_row[6] or ""
-            )
-            limit_b = int(sub_row[7] or 0) if len(sub_row) > 7 and sub_row[7] is not None else 0
-            used_b = int(sub_row[8] or 0) if len(sub_row) > 8 and sub_row[8] is not None else 0
-            exp = str(sub_row[9] or "").strip() if len(sub_row) > 9 and sub_row[9] is not None else ""
-
-            rem_b = max(0, limit_b - used_b) if limit_b > 0 else 0
-            pct = round((used_b / limit_b) * 100, 1) if limit_b > 0 else 0
-            today_str = datetime.now().strftime("%Y-%m-%d")
-            is_exh = (limit_b > 0 and used_b >= limit_b)
-            is_exp = bool(exp and today_str > exp.split("T")[0])
-
-            days_left = None
-            if exp:
-                try:
-                    days_left = (datetime.strptime(exp.split("T")[0], "%Y-%m-%d").date() - datetime.now().date()).days
-                except Exception:
-                    pass
-
-            if not en:
-                st = "disabled"
-                st_text = "已暂停服务"
-            elif is_exh:
-                st = "exhausted"
-                st_text = "流量已耗尽"
-            elif is_exp:
-                st = "expired"
-                st_text = "订阅已过期"
-            else:
-                st = "normal"
-                st_text = "正常使用中"
-
-            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
-            cols = [d[0] for d in c.description]
-            raw_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
-            conn.close()
-
-            servers_data = get_cached_servers_with_stats()
-            online_server_uuids = set(
-                s["uuid"] for s in servers_data.get("servers", [])
-                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
-            )
-
-            user_nodes = []
-            for n in raw_nodes:
-                n_copy = dict(n)
-                if not n.get("is_external") and n.get("server_uuid") != "external" and u_uuid:
-                    n_copy["uuid_or_passwd"] = u_uuid
-                is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or n.get("server_uuid") in online_server_uuids)
-                user_nodes.append({
-                    "id": n.get("id"),
-                    "name": n.get("name"),
-                    "protocol": n.get("protocol"),
-                    "server_ip": n.get("server_ip"),
-                    "port": n.get("port"),
-                    "online": is_on,
-                    "share_link": build_node_share_link(n_copy)
-                })
-
-            user_info = {
-                "id": uid,
-                "name": uname,
-                "token": tok,
-                "enabled": en,
-                "remark": rmk,
-                "created_at": cat,
-                "user_uuid": u_uuid,
-                "traffic_limit_bytes": limit_b,
-                "traffic_limit_gb": round(limit_b / (1024**3), 2) if limit_b > 0 else 0,
-                "traffic_limit_formatted": format_bytes(limit_b) if limit_b > 0 else "无限制",
-                "traffic_used_bytes": used_b,
-                "traffic_used_gb": round(used_b / (1024**3), 2),
-                "traffic_used_formatted": format_bytes(used_b),
-                "traffic_remaining_bytes": rem_b,
-                "traffic_remaining_formatted": format_bytes(rem_b) if limit_b > 0 else "无限制",
-                "traffic_percent": min(100.0, pct),
-                "expire_time": exp,
-                "expire_remaining_days": days_left,
-                "status": st,
-                "status_text": st_text,
-                "sub_url": f"https://{DOMAIN}/sub/{tok}",
-                "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1",
-                "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1"
-            }
-
             self._send_json({"ok": True, "user": user_info, "nodes": user_nodes})
             return
 
@@ -4035,7 +4066,13 @@ rules:
         if path in ["/api/sub/users", "/api/node-mgr/sub/users"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions ORDER BY id ASC")
+            c.execute("PRAGMA table_info(subscriptions)")
+            sub_cols = [r[1] for r in c.fetchall()]
+            has_creds = ('username' in sub_cols and 'password' in sub_cols)
+            if has_creds:
+                c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time, username, password FROM subscriptions ORDER BY id ASC")
+            else:
+                c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions ORDER BY id ASC")
             users = []
             today_str = datetime.now().strftime("%Y-%m-%d")
             for r in c.fetchall():
@@ -4049,6 +4086,8 @@ rules:
                 limit_b = int(r[7] or 0) if len(r) > 7 and r[7] is not None else 0
                 used_b = int(r[8] or 0) if len(r) > 8 and r[8] is not None else 0
                 exp = str(r[9] or "").strip() if len(r) > 9 and r[9] is not None else ""
+                username = r[10] if len(r) > 10 and r[10] else uname
+                password = r[11] if len(r) > 11 and r[11] else "password123"
 
                 rem_b = max(0, limit_b - used_b) if limit_b > 0 else 0
                 pct = round((used_b / limit_b) * 100, 1) if limit_b > 0 else 0
@@ -4078,6 +4117,8 @@ rules:
                 users.append({
                     "id": uid,
                     "name": uname,
+                    "username": username,
+                    "password": password,
                     "token": tok,
                     "enabled": en,
                     "remark": rmk,
@@ -4292,6 +4333,44 @@ rules:
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
 
+        # Public User Portal Login Endpoint
+        if path in ["/api/user/login", "/api/node-mgr/user/login"]:
+            username = str(body.get("username") or "").strip()
+            password = str(body.get("password") or "").strip()
+            if not username or not password:
+                self._send_json({"ok": False, "error": "请输入用户名和密码"}, 400)
+                return
+
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("PRAGMA table_info(subscriptions)")
+            cols = [r[1] for r in c.fetchall()]
+            if 'username' in cols and 'password' in cols:
+                c.execute("SELECT token FROM subscriptions WHERE (LOWER(username) = LOWER(?) OR LOWER(name) = LOWER(?)) AND password = ? LIMIT 1",
+                          (username, username, password))
+            else:
+                c.execute("SELECT token FROM subscriptions WHERE LOWER(name) = LOWER(?) LIMIT 1", (username,))
+            row = c.fetchone()
+            conn.close()
+
+            if not row:
+                self._send_json({"ok": False, "error": "用户名或密码错误"}, 401)
+                return
+
+            token = row[0]
+            user_info, user_nodes = get_user_portal_payload(token)
+            if not user_info:
+                self._send_json({"ok": False, "error": "用户账号异常或已被删除"}, 404)
+                return
+
+            self._send_json({
+                "ok": True,
+                "token": token,
+                "user": user_info,
+                "nodes": user_nodes
+            })
+            return
+
         # Save subscription rules
         
         # Notifications API endpoints
@@ -4501,9 +4580,13 @@ rules:
         # User subscriptions management endpoints
         if path in ["/api/sub/users/create", "/api/node-mgr/sub/users/create"]:
             name = str(body.get("name") or "").strip()
+            username = str(body.get("username") or "").strip() or name
+            password = str(body.get("password") or "").strip() or secrets.token_hex(4)
             remark = str(body.get("remark") or "").strip()
             if not name:
-                self._send_json({"ok": False, "error": "用户名不能为空"}, 400)
+                name = username
+            if not username:
+                self._send_json({"ok": False, "error": "用户名或账号不能为空"}, 400)
                 return
             traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
             limit_bytes = int(traffic_limit_gb * (1024**3)) if traffic_limit_gb > 0 else 0
@@ -4512,8 +4595,14 @@ rules:
             new_uuid = str(uuid.uuid4())
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("INSERT INTO subscriptions (token, name, enabled, remark, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time) VALUES (?, ?, 1, ?, ?, ?, 0, ?)",
-                      (new_tok, name, remark, new_uuid, limit_bytes, expire_time))
+            c.execute("PRAGMA table_info(subscriptions)")
+            cols = [r[1] for r in c.fetchall()]
+            if 'username' in cols and 'password' in cols:
+                c.execute("INSERT INTO subscriptions (token, name, username, password, enabled, remark, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time) VALUES (?, ?, ?, ?, 1, ?, ?, ?, 0, ?)",
+                          (new_tok, name, username, password, remark, new_uuid, limit_bytes, expire_time))
+            else:
+                c.execute("INSERT INTO subscriptions (token, name, enabled, remark, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time) VALUES (?, ?, 1, ?, ?, ?, 0, ?)",
+                          (new_tok, name, remark, new_uuid, limit_bytes, expire_time))
             new_id = c.lastrowid
             conn.commit()
             conn.close()
@@ -4522,6 +4611,8 @@ rules:
                 "user": {
                     "id": new_id,
                     "name": name,
+                    "username": username,
+                    "password": password,
                     "token": new_tok,
                     "enabled": True,
                     "remark": remark,
@@ -4543,6 +4634,8 @@ rules:
                 self._send_json({"ok": False, "error": "缺少用户 ID"}, 400)
                 return
             name = str(body.get("name") or "").strip()
+            username = str(body.get("username") or "").strip() or name
+            password = str(body.get("password") or "").strip()
             remark = str(body.get("remark") or "").strip()
             traffic_limit_gb = float(body.get("traffic_limit_gb") or 0)
             limit_bytes = int(traffic_limit_gb * (1024**3)) if traffic_limit_gb > 0 else 0
@@ -4551,13 +4644,35 @@ rules:
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            if traffic_used_gb is not None:
-                used_bytes = int(float(traffic_used_gb) * (1024**3))
-                c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, traffic_used_bytes=?, expire_time=? WHERE id=?",
-                          (name, remark, limit_bytes, used_bytes, expire_time, uid))
+            c.execute("PRAGMA table_info(subscriptions)")
+            cols = [r[1] for r in c.fetchall()]
+            has_creds = ('username' in cols and 'password' in cols)
+
+            if has_creds:
+                if password:
+                    if traffic_used_gb is not None:
+                        used_bytes = int(float(traffic_used_gb) * (1024**3))
+                        c.execute("UPDATE subscriptions SET name=?, username=?, password=?, remark=?, traffic_limit_bytes=?, traffic_used_bytes=?, expire_time=? WHERE id=?",
+                                  (name, username, password, remark, limit_bytes, used_bytes, expire_time, uid))
+                    else:
+                        c.execute("UPDATE subscriptions SET name=?, username=?, password=?, remark=?, traffic_limit_bytes=?, expire_time=? WHERE id=?",
+                                  (name, username, password, remark, limit_bytes, expire_time, uid))
+                else:
+                    if traffic_used_gb is not None:
+                        used_bytes = int(float(traffic_used_gb) * (1024**3))
+                        c.execute("UPDATE subscriptions SET name=?, username=?, remark=?, traffic_limit_bytes=?, traffic_used_bytes=?, expire_time=? WHERE id=?",
+                                  (name, username, remark, limit_bytes, used_bytes, expire_time, uid))
+                    else:
+                        c.execute("UPDATE subscriptions SET name=?, username=?, remark=?, traffic_limit_bytes=?, expire_time=? WHERE id=?",
+                                  (name, username, remark, limit_bytes, expire_time, uid))
             else:
-                c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, expire_time=? WHERE id=?",
-                          (name, remark, limit_bytes, expire_time, uid))
+                if traffic_used_gb is not None:
+                    used_bytes = int(float(traffic_used_gb) * (1024**3))
+                    c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, traffic_used_bytes=?, expire_time=? WHERE id=?",
+                              (name, remark, limit_bytes, used_bytes, expire_time, uid))
+                else:
+                    c.execute("UPDATE subscriptions SET name=?, remark=?, traffic_limit_bytes=?, expire_time=? WHERE id=?",
+                              (name, remark, limit_bytes, expire_time, uid))
             conn.commit()
             conn.close()
             get_active_user_uuids(force_refresh=True)

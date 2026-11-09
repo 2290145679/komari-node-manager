@@ -115,24 +115,28 @@
         </div>
         <div>
           <h2 class="text-xl font-black text-slate-800 dark:text-slate-100">登录用户服务中心</h2>
-          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">输入您的专属订阅 Token 或订阅地址，即可查询流量明细并一键导入客户端</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400 mt-1.5">输入您的账号和密码，即可查询流量明细并一键导入客户端</p>
         </div>
 
         <div class="space-y-3 text-left">
-          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300">订阅凭据 (Token / 链接)</label>
-          <div class="relative">
-            <input type="text" id="tokenInput" placeholder="例如: 11c471015f8d55a9b8979fc745778a2e 或完整订阅链接" class="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/30 transition">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">账号 / 用户名</label>
+            <input type="text" id="usernameInput" placeholder="请输入您的账号或用户名" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/30 transition">
           </div>
-          <button onclick="handleLoginSubmit()" class="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-700 hover:to-indigo-700 shadow-md shadow-pink-500/20 btn-tap flex items-center justify-center gap-2">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">登录密码</label>
+            <input type="password" id="passwordInput" placeholder="请输入密码" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-pink-500/30 transition" onkeydown="if(event.key==='Enter') handleLoginSubmit()">
+          </div>
+          <button onclick="handleLoginSubmit()" class="w-full py-3 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-pink-600 via-purple-600 to-indigo-600 hover:from-pink-700 hover:to-indigo-700 shadow-md shadow-pink-500/20 btn-tap flex items-center justify-center gap-2 mt-2">
             <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            <span>登录并查看我的订阅</span>
+            <span>立即登录</span>
           </button>
         </div>
 
         <div class="text-[11px] text-slate-400 text-left bg-slate-50 dark:bg-zinc-800/50 p-3 rounded-xl border border-slate-100 dark:border-zinc-800">
           💡 <b>使用小提示:</b><br>
-          • 您可以直接粘贴管理员发给您的订阅完整 URL，系统将自动识别提取专属 Token。<br>
-          • 登录后浏览器将自动记住该凭据，下次可直接免密查看。
+          • 请使用管理员为您分配的用户名与密码登录。<br>
+          • 登录后浏览器将自动记住登录状态，下次访问无需重复输入。
         </div>
       </div>
     </div>
@@ -577,11 +581,16 @@
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0 ${protoBadge}">${(n.protocol || 'NODE').toUpperCase().replace('_', ' ')}</span>
                 <div class="min-w-0">
                   <div class="text-xs font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(n.name)}</div>
-                  <div class="text-[10px] text-slate-400 font-mono truncate">${n.server_ip || '127.0.0.1'}:${n.port || 443}</div>
+                  <div class="text-[10px] text-slate-400 font-mono truncate flex items-center gap-1.5 mt-0.5">
+                    <span>端口: ${n.port || 443}</span>
+                    <span>·</span>
+                    <span id="nodeIp-${n.id}" data-real-ip="${escapeHtml(n.server_ip || '')}">IP: 已保护隐藏</span>
+                    <button type="button" onclick="toggleNodeIp(${n.id})" class="text-pink-600 hover:text-pink-700 dark:text-pink-400 font-semibold cursor-pointer">[显示]</button>
+                  </div>
                 </div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
-                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-emerald-500' : 'bg-slate-300'}"></span>
+                <span class="w-2 h-2 rounded-full ${n.online ? 'bg-emerald-500' : 'bg-slate-300'}" title="${n.online ? '在线' : '离线'}"></span>
                 <button onclick="copyText('${n.share_link || ''}', '单个节点分享链接已复制！')" class="px-2 py-1 rounded-lg text-[11px] font-semibold text-pink-600 hover:bg-pink-50 dark:hover:bg-zinc-700 btn-tap" title="复制单个节点链接">
                   复制链接
                 </button>
@@ -592,6 +601,20 @@
       }
 
       initLucide();
+    }
+
+    function toggleNodeIp(id) {
+      const el = document.getElementById(`nodeIp-${id}`);
+      const btn = event.currentTarget;
+      if (!el) return;
+      const realIp = el.getAttribute('data-real-ip') || '未知';
+      if (el.textContent === 'IP: 已保护隐藏') {
+        el.textContent = `IP: ${realIp}`;
+        if (btn) btn.textContent = '[隐藏]';
+      } else {
+        el.textContent = 'IP: 已保护隐藏';
+        if (btn) btn.textContent = '[显示]';
+      }
     }
 
     function escapeHtml(str) {
@@ -634,19 +657,39 @@
       document.getElementById('qrModal').classList.add('hidden');
     }
 
-    function handleLoginSubmit() {
-      const val = document.getElementById('tokenInput').value.trim();
-      if (!val) {
-        showToast('请输入您的订阅 Token 或订阅链接', 'error');
+    async function handleLoginSubmit() {
+      const username = (document.getElementById('usernameInput')?.value || '').trim();
+      const password = (document.getElementById('passwordInput')?.value || '').trim();
+      if (!username || !password) {
+        showToast('请输入用户名和密码', 'error');
         return;
       }
-      loadUserData(val);
+      try {
+        const res = await fetch('/api/node-mgr/user/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        }).then(r => r.json());
+
+        if (!res || !res.ok || !res.user) {
+          showToast(res && res.error ? res.error : '用户名或密码错误', 'error');
+          return;
+        }
+
+        currentUserData = res;
+        localStorage.setItem('komari_sub_token', res.token);
+        renderDashboard(res.user, res.nodes || []);
+        showToast(`欢迎回来，${res.user.name || res.user.username}！`, 'success');
+      } catch (err) {
+        showToast('登录请求失败，请检查网络或后端服务', 'error');
+      }
     }
 
     function logout() {
       localStorage.removeItem('komari_sub_token');
       currentUserData = null;
-      document.getElementById('tokenInput').value = '';
+      if (document.getElementById('usernameInput')) document.getElementById('usernameInput').value = '';
+      if (document.getElementById('passwordInput')) document.getElementById('passwordInput').value = '';
       showLoginView();
       showToast('已安全退出登录');
     }
