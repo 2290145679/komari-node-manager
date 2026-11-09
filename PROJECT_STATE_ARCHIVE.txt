@@ -1,0 +1,150 @@
+================================================================================
+           KOMARI MONITOR & NODE MANAGER - 项目状态与重要信息归档文档
+                       (Project State Archive & Handover)
+                           归档时间: 2026-11-09
+================================================================================
+
+【说明】
+本文档用于记录当前项目的核心架构、服务器连接凭据、数据库位置、已实现功能、
+近期修复的关键问题以及运维指令，便于新窗口快速恢复全部上下文。
+
+--------------------------------------------------------------------------------
+一、生产服务器与连接信息 (Production Server Credentials)
+--------------------------------------------------------------------------------
+1. 主控端 VPS (Oracle Cloud - 甲骨文2):
+   - 公网 IPv4: 161.118.196.134
+   - 绑定域名: https://jgw2.yohoo.xyz
+   - SSH 端口: 22
+   - SSH 用户: ubuntu
+   - SSH 私钥路径: /tmp/oracle_test.key
+   - SSH 快速直连命令:
+     ssh -i /tmp/oracle_test.key -p 22 -o StrictHostKeyChecking=no ubuntu@161.118.196.134
+
+2. 核心服务运行端口与路径:
+   - 主控 API 服务 (Node Manager): 127.0.0.1:25775 (系统服务: komari-node-mgr.service)
+     文件路径: /opt/komari/node-mgr/server.py
+   - 探针核心服务 (Komari Go Core): 0.0.0.0:25774 (系统服务: komari.service)
+     文件路径: /opt/komari/komari
+   - 节点代理核心 (Sing-box 1.14.4):
+     程序路径: /usr/local/bin/sing-box
+     配置文件: /etc/sing-box/config.json
+     Clash API 本地控制台: http://127.0.0.1:9090 (监听 connections/traffic)
+     系统服务: sing-box.service
+   - 节点配置同步脚本:
+     文件路径: /usr/local/bin/komari-node-sync.sh (每 5-10 秒与主控同步配置并上报流量)
+
+3. 生产数据库路径:
+   - 节点与订阅数据库 (NODES_DB):
+     /opt/komari-pro/data/nodes.db (软链/回退: /opt/komari/data/nodes.db)
+     核心表: subscriptions (订阅用户), nodes (节点列表), servers (服务器列表),
+            subscription_rules (分流规则), notification_rules (告警规则)
+   - 探针与客户端数据库 (KOMARI_DB):
+     /opt/komari-pro/data/komari.db (软链/回退: /opt/komari/data/komari.db)
+     核心表: clients (探针上报的所有 VPS 实例与 Token), users (管理员用户)
+
+4. 关键 Web 访问路径:
+   - 管理后台 (SPA 单页系统): https://jgw2.yohoo.xyz/admin-spa/index.html
+   - 用户中心门户 (User Portal): https://jgw2.yohoo.xyz/user
+   - 探针监控大屏: https://jgw2.yohoo.xyz/
+   - 节点一键部署脚本入口: https://jgw2.yohoo.xyz/install-node.sh
+   - 订阅拉取入口: https://jgw2.yohoo.xyz/sub/{token}
+     (支持参数: ?clash=1, ?singbox=1, 或直接作为 Clash/Shadowrocket 订阅链接)
+
+--------------------------------------------------------------------------------
+二、当前节点与订阅资产清单 (Fleet Assets & Subscriptions)
+--------------------------------------------------------------------------------
+1. 当前注册的服务器节点 (Servers in Fleet):
+   - 甲骨文2 (Master): 161.118.196.134 (Token: RxSnvOK9YfW63atsq6HqAw)
+     对应节点: ID 1 '甲骨文2 - Reality' (端口 20082)
+   - 甲骨文ARM: 138.2.70.183 (Token: iIFIF9KRclqOiag8xQHkia)
+     对应节点: ID 26 '甲骨文ARM - Reality' (端口 40148)
+   - 懒猫JPL: 23.249.25.140 (Token: GrwD2pa89fyaOcCkCyBmok)
+     对应节点: ID 25 '懒猫JPL - Reality' (端口 11101)
+   - 懒猫SG-GM: 178.94.15.19 (Token: baaf13386fdfd878630b37dd3e37b78a)
+     对应节点: ID 29 '懒猫G-GM' (端口 11101)
+   - Biglobe: 167.254.242.31 / 104.28.243.105 (Token: 8ccc557b5ff33bbf1e43256b4dc057a3)
+     对应节点: ID 36 'SG-GM-BigLobe' (中转中继节点, 落地到 178.94.15.19:11102)
+   - AWS SG (External): 18.136.66.215 (Token: AwS4tXlXhZ3o7WbizSKhRm)
+     对应节点: ID 6 'AWS SG 三网' (端口 23583)
+
+2. 当前订阅用户账号 (Subscriptions):
+   - 用户 ID 1: 用户名 'default', Token '644817146753fd6e805406444b893a3e', UUID 2f97687e-45e3-45ce-9231-85d11802efaf (无限制流量)
+   - 用户 ID 3: 用户名 '朋友A', 密码 'password123', Token 'cb35b9fc835f56d2158f8459ba6d44bf', UUID 0427a41f-8795-4023-80db-30bb1daadac0 (流量上限 1.00 GB)
+
+--------------------------------------------------------------------------------
+三、最近完成的核心功能与问题修复记录 (Completed Features & Bugfixes)
+--------------------------------------------------------------------------------
+1. 【核心】实时流量统计与秒级配额硬断流机制 (Real-time Traffic & Hard Cutoff):
+   - 解决问题: 用户测速跑流后后台与用户中心始终显示 0B 流量，导致盗刷风险。
+   - 核心机制:
+     1) Sing-box 核心配置中动态为每位订阅用户分配 auth_user: ["sub_{id}"] 路由规则，
+        出站映射至独立 direct 标签 out-sub-{id}，并启动 experimental.clash_api (127.0.0.1:9090)。
+     2) 主控后台运行 TrafficCollector 线程 (每 2 秒一次)，精准比对长连接增量及全局瞬时闭合连接增量，
+        将实时字节数累加回写至 SQLite 的 subscriptions.traffic_used_bytes 字段。
+     3) 节点端 komari-node-sync.sh 内置轻量 Python 采集模块，定期向主控 POST /api/node-mgr/agent/report-traffic 上报分布式流量。
+     4) 强配额熔断: 一旦 traffic_used_bytes >= traffic_limit_bytes，系统立即触发 Clash API
+        DELETE /connections 斩断当前所有活跃长连接，并在下次节点配置同步中彻底剔除该用户 UUID。
+   - 验证结果: 生产环境使用“朋友A”进行 500KB 真实代理请求压测，流量从 0B 准确增加至 500,444 字节 (488.71 KB)，
+     用户中心与后台管理页面秒级同步。
+
+2. 【修复】服务器删除时中转节点级联清理 (Cascade Delete for Relays):
+   - 解决问题: 用户删除了 HKcloudx 服务器，但残留了中转落地节点导致脏数据。
+   - 修复内容: 在 delete_server_fully() 中增加级联删除逻辑:
+     server_uuid = ? OR (is_relay = 1 AND relay_server_uuid = ?)
+     无论该机器是目标落地机还是中转中继机，关联节点一并彻底清理并重定向规则。
+
+3. 【功能】用户中心改造成账号密码登录体系 (User Portal Username/Password Login):
+   - 废除只认 token 登录的形式，支持 用户名/密码 登录与鉴权。
+   - 用户登录后可在列表查看节点，节点服务器 IP 默认打码脱敏，支持点击眼睛切换显示。
+   - 剥离用户管理的冗余复制订阅功能，收敛至用户中心与节点管理。
+
+4. 【功能】部署指令一键切换免 sudo 选项 (Install Command Sudo Switcher):
+   - 在后台生成一键部署脚本指令弹窗中，增加“带 sudo”与“去除 sudo”单选切换，
+     解决部分精简环境或无 sudo 命令设备复制报错的问题。
+
+5. 【UI】探针离线红色高亮特效 (Probe Offline Visual Highlight):
+   - 探针总览页面中，对于心跳超时的离线服务器节点（如懒猫JPL），
+     增加了明显的红框和红色高亮离线特效标识。
+
+--------------------------------------------------------------------------------
+四、常用运维与管理命令备忘 (Ops Cheat Sheet)
+--------------------------------------------------------------------------------
+1. 查看与重启主控端 Node Manager:
+   sudo systemctl status komari-node-mgr.service --no-pager
+   sudo systemctl restart komari-node-mgr.service
+   sudo journalctl -u komari-node-mgr.service -n 50 --no-pager
+
+2. 查看与重启 Sing-box 服务:
+   sudo systemctl status sing-box.service --no-pager
+   sudo systemctl restart sing-box.service
+   sudo journalctl -u sing-box.service -n 50 --no-pager
+
+3. 查看本地 Sing-box Clash API 连接状态:
+   curl -s http://127.0.0.1:9090/connections | jq .
+
+4. 查询用户流量使用情况:
+   sudo python3 -c '
+   import sqlite3
+   conn = sqlite3.connect("/opt/komari-pro/data/nodes.db")
+   c = conn.cursor()
+   c.execute("SELECT id, username, traffic_limit_bytes, traffic_used_bytes FROM subscriptions")
+   for r in c.fetchall(): print(r)
+   '
+
+5. 重置指定用户流量为 0:
+   sudo python3 -c '
+   import sqlite3
+   conn = sqlite3.connect("/opt/komari-pro/data/nodes.db")
+   c = conn.cursor()
+   c.execute("UPDATE subscriptions SET traffic_used_bytes = 0 WHERE id = 3")
+   conn.commit()
+   print("User 3 traffic reset to 0")
+   '
+
+--------------------------------------------------------------------------------
+五、Git 仓库状态 (Repository Status)
+--------------------------------------------------------------------------------
+- 远程仓库: https://github.com/2290145679/komari-node-manager.git
+- 当前分支: main
+- 最新提交: 包含实时流量统计、Clash API 监控、硬配额截断及节点同步脚本。
+================================================================================
