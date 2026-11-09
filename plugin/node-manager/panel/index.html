@@ -1087,7 +1087,7 @@
           </label>
           <div class="pt-2 border-t border-indigo-100/80 dark:border-indigo-900/40">
             <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">自定义公网入站 IP / 域名 (针对 NAT机 / WARP出口机)</label>
-            <input type="text" id="editServerCustomIp" placeholder="例如: 167.254.242.31 (留空则使用探针自动上报的IP)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none font-mono text-xs">
+            <input type="text" id="editServerCustomIp" oninput="updateEditDeployCmd()" placeholder="例如: 167.254.242.31 (留空则使用探针自动上报的IP)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none font-mono text-xs">
             <p class="text-[10px] text-slate-400 mt-1 leading-normal">说明：如果该机器开启了 Cloudflare WARP 导致探针检测为 104.28.x.x 出口IP，或者属于 NAT 共享IP VPS，请填入商家分配的真实外网入站 IP 或 DDNS。系统创建节点与 Realm 转发时将自动优先使用此地址。</p>
           </div>
         </div>
@@ -1359,6 +1359,19 @@
           </div>
         </div>
 
+        <!-- Custom IP Override Box (针对 WARP / 多IP / NAT 机器) -->
+        <div class="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 space-y-1.5">
+          <div class="flex items-center justify-between">
+            <label class="block font-bold text-amber-800 dark:text-amber-300 text-xs flex items-center gap-1.5">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+              <span>指定服务器真实公网 IP (WARP/NAT/多IP机器必填):</span>
+            </label>
+            <span class="text-[10px] text-amber-600 dark:text-amber-400 font-medium">防 WARP 虚假出口</span>
+          </div>
+          <input type="text" id="deployModalCustomIp" placeholder="例如: 167.254.242.31 (留空则部署时自动识别)" oninput="updateDeployModalCmd()" class="w-full px-3 py-1.5 rounded-xl border border-amber-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none font-mono text-xs text-slate-800 dark:text-slate-100">
+          <p class="text-[10px] text-slate-400 leading-tight">若机器启用了 Cloudflare WARP 出口（导致探针识别为 104.28.x.x），请填入真实公网 IP。指令将带上 <code>--ip</code> 参数锁定入站，彻底防止 IP 识别错误与断流。</p>
+        </div>
+
         <!-- Terminal Command Box -->
         <div class="space-y-2">
           <label class="block font-semibold text-slate-600 dark:text-slate-400">一键安装命令 (VPS 终端复制粘贴回车即可):</label>
@@ -1470,8 +1483,16 @@
 
       <div class="overflow-y-auto py-4 space-y-4 flex-1">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">服务器标识名称</label>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">服务器标识名称 *</label>
           <input type="text" id="addServerName" placeholder="例如: 香港 BGP / 日本 4837 / 懒猫中转" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center justify-between">
+            <span>服务器真实公网 IP (可选):</span>
+            <span class="text-[10px] text-amber-600 dark:text-amber-400">WARP/NAT/多IP机器填写</span>
+          </label>
+          <input type="text" id="addServerCustomIp" oninput="updateAddServerCmd()" placeholder="例如: 167.254.242.31 (留空则部署时自动识别)" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none font-mono">
         </div>
 
         <!-- Component Selector Checkboxes -->
@@ -1600,13 +1621,13 @@
 
       <div class="py-4 space-y-3.5">
         <div>
-          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">显示名称 / 用户名 *</label>
-          <input type="text" id="newUserName" placeholder="例如: 朋友B / 团队办公" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+          <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 / 用户名 * (英文字母或数字)</label>
+          <input type="text" id="newUserUsername" placeholder="例如: user1, test2, vip01" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 *</label>
-            <input type="text" id="newUserUsername" placeholder="登录账号 (默认同名称)" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
+            <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">显示别名 (可选)</label>
+            <input type="text" id="newUserName" placeholder="留空默认同账号" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs focus:outline-none">
           </div>
           <div>
             <label class="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">登录密码 *</label>
@@ -1651,13 +1672,13 @@
       <div class="py-4 space-y-3.5 text-xs">
         <input type="hidden" id="editUserId">
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">显示名称 / 用户名</label>
-          <input type="text" id="editUserName" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号 / 用户名 * (英文字母或数字)</label>
+          <input type="text" id="editUserUsername" placeholder="例如: user1, test2" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">登录账号</label>
-            <input type="text" id="editUserUsername" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">显示别名 (可选)</label>
+            <input type="text" id="editUserName" placeholder="留空默认同账号" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
           <div>
             <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">重置密码 (留空不改)</label>
@@ -3869,11 +3890,13 @@
       const compProbe = document.getElementById('addCompProbe')?.checked ?? true;
       const compSingbox = document.getElementById('addCompSingbox')?.checked ?? true;
       const compRealm = document.getElementById('addCompRealm')?.checked ?? false;
+      const customIp = (document.getElementById('addServerCustomIp')?.value || '').trim();
 
       let flags = '';
       if (!compProbe) flags += ' --skip-probe';
       if (!compSingbox) flags += ' --skip-singbox';
       if (compRealm) flags += ' --with-realm';
+      if (customIp) flags += ` --ip ${customIp}`;
 
       const host = window.location.host;
       const proto = window.location.protocol;
@@ -3894,11 +3917,12 @@
 
     async function generateServerInstallCommand() {
       const name = document.getElementById('addServerName').value.trim() || 'New Server';
+      const custom_ip = (document.getElementById('addServerCustomIp')?.value || '').trim();
       try {
         const res = await fetch('/api/node-mgr/servers/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name })
+          body: JSON.stringify({ name, custom_ip })
         }).then(r => r.json());
         if (res.ok) {
           state.addServerToken = res.token;
@@ -3937,12 +3961,15 @@
       const proto = window.location.protocol;
       const ep = `${proto}//${host}`;
       const token = state.currentEditServerToken || '';
+      const customIp = (document.getElementById('editServerCustomIp')?.value || '').trim();
+      let flags = '';
+      if (customIp) flags += ` --ip ${customIp}`;
       const bashExec = getDeployUseSudo() ? 'sudo bash' : 'bash';
       let cmd = '';
       if (currentTool === 'curl') {
-        cmd = `curl -fsSL ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}`;
+        cmd = `curl -fsSL ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       } else {
-        cmd = `wget -qO- ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}`;
+        cmd = `wget -qO- ${ep}/install-node.sh | ${bashExec} -s -- -e ${ep} -t ${token}${flags}`;
       }
       const el = document.getElementById('editDeployCmdText');
       if (el) el.textContent = cmd;
@@ -3966,6 +3993,13 @@
       document.getElementById('deployServerNameText').textContent = s.name || 'Server';
       document.getElementById('deployServerIpText').textContent = s.ipv4 || s.ipv6 || '无IP';
       document.getElementById('deployServerTokenBadge').textContent = s.token || '无 Token';
+
+      const customIpEl = document.getElementById('deployModalCustomIp');
+      if (customIpEl) {
+        const initIp = s.custom_ip || (s.ipv4 && !s.ipv4.startsWith('104.28.') && !s.ipv4.startsWith('162.158.') ? s.ipv4 : '');
+        customIpEl.value = initIp;
+      }
+
       if (document.getElementById('deployCompProbe')) document.getElementById('deployCompProbe').checked = true;
       if (document.getElementById('deployCompSingbox')) document.getElementById('deployCompSingbox').checked = true;
       if (document.getElementById('deployCompRealm')) document.getElementById('deployCompRealm').checked = false;
@@ -3996,11 +4030,13 @@
       const compProbe = document.getElementById('deployCompProbe')?.checked ?? true;
       const compSingbox = document.getElementById('deployCompSingbox')?.checked ?? true;
       const compRealm = document.getElementById('deployCompRealm')?.checked ?? false;
+      const customIp = (document.getElementById('deployModalCustomIp')?.value || '').trim();
 
       let flags = '';
       if (!compProbe) flags += ' --skip-probe';
       if (!compSingbox) flags += ' --skip-singbox';
       if (compRealm) flags += ' --with-realm';
+      if (customIp) flags += ` --ip ${customIp}`;
 
       const host = window.location.host;
       const proto = window.location.protocol;
@@ -4019,6 +4055,13 @@
 
     function copyDeployModalCmd() {
       const text = document.getElementById('deployModalCmdText').textContent;
+      const s = state.activeDeployServer;
+      const customIp = (document.getElementById('deployModalCustomIp')?.value || '').trim();
+      if (s && s.token && customIp && customIp !== s.custom_ip) {
+        fetch(`/api/node-mgr/agent/set-server-ip?token=${encodeURIComponent(s.token)}&ip=${encodeURIComponent(customIp)}`).catch(() => {});
+        s.custom_ip = customIp;
+        s.ipv4 = customIp;
+      }
       copyText(text, '一键安装部署指令已复制！直接粘贴到 VPS 回车');
     }
 
@@ -4037,6 +4080,9 @@
       document.getElementById('editServerGroup').value = s.group || '';
       document.getElementById('editServerTags').value = s.tags || '';
       document.getElementById('editServerWeight').value = s.weight || 0;
+
+      const customIpInput = document.getElementById('editServerCustomIp');
+      if (customIpInput) customIpInput.value = s.custom_ip || '';
 
       // Populate deploy command box inside modal
       state.currentEditServerToken = s.token || '';
@@ -4060,8 +4106,6 @@
       // Realm component toggle & badge
       const realmChk = document.getElementById('editServerHasRealm');
       if (realmChk) realmChk.checked = !!(s.has_realm || s.realm_installed || s.realm_online);
-      const customIpInput = document.getElementById('editServerCustomIp');
-      if (customIpInput) customIpInput.value = s.custom_ip || '';
       const realmBadgeEl = document.getElementById('editServerRealmStatusBadge');
       if (realmBadgeEl) {
         if (s.realm_online) {
@@ -5175,15 +5219,19 @@
     }
 
     async function submitCreateUser() {
-      const name = document.getElementById('newUserName').value.trim();
-      const username = (document.getElementById('newUserUsername')?.value || '').trim() || name;
+      const username = (document.getElementById('newUserUsername')?.value || '').trim();
+      const name = (document.getElementById('newUserName')?.value || '').trim() || username;
       const password = (document.getElementById('newUserPassword')?.value || '').trim();
       const remark = document.getElementById('newUserRemark').value.trim();
       const trafficLimitGb = parseFloat(document.getElementById('newUserTrafficLimit').value || '0') || 0;
       const expireTime = document.getElementById('newUserExpireTime').value.trim();
 
-      if (!name) {
-        showToast('用户名不能为空', 'warn');
+      if (!username) {
+        showToast('登录账号/用户名不能为空', 'warn');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        showToast('用户名只能由英文字母或数字组成（例如: user1, test2）', 'warn');
         return;
       }
       try {
@@ -5193,7 +5241,7 @@
           body: JSON.stringify({ name, username, password, remark, traffic_limit_gb: trafficLimitGb, expire_time: expireTime })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(`🎉 成功创建用户【${name}】！账号密码已就绪。`, 'success');
+          showToast(`🎉 成功创建用户【${username}】！账号密码已就绪。`, 'success');
           closeModal('modalCreateUser');
           document.getElementById('newUserName').value = '';
           if (document.getElementById('newUserUsername')) document.getElementById('newUserUsername').value = '';
@@ -5214,8 +5262,8 @@
       const u = state.users.find(x => x.id === id);
       if (!u) return;
       document.getElementById('editUserId').value = u.id;
-      document.getElementById('editUserName').value = u.name;
-      if (document.getElementById('editUserUsername')) document.getElementById('editUserUsername').value = u.username || u.name;
+      document.getElementById('editUserUsername').value = u.username || u.name;
+      document.getElementById('editUserName').value = u.name || u.username;
       if (document.getElementById('editUserPassword')) document.getElementById('editUserPassword').value = '';
       document.getElementById('editUserRemark').value = u.remark || '';
       document.getElementById('editUserTrafficLimit').value = u.traffic_limit_gb || 0;
@@ -5226,16 +5274,20 @@
 
     async function submitEditUser() {
       const id = parseInt(document.getElementById('editUserId').value);
-      const name = document.getElementById('editUserName').value.trim();
-      const username = (document.getElementById('editUserUsername')?.value || '').trim() || name;
+      const username = (document.getElementById('editUserUsername')?.value || '').trim();
+      const name = (document.getElementById('editUserName')?.value || '').trim() || username;
       const password = (document.getElementById('editUserPassword')?.value || '').trim();
       const remark = document.getElementById('editUserRemark').value.trim();
       const trafficLimitGb = parseFloat(document.getElementById('editUserTrafficLimit').value || '0') || 0;
       const trafficUsedGb = parseFloat(document.getElementById('editUserTrafficUsed').value || '0') || 0;
       const expireTime = document.getElementById('editUserExpireTime').value.trim();
 
-      if (!name) {
-        showToast('用户名不能为空', 'warn');
+      if (!username) {
+        showToast('登录账号/用户名不能为空', 'warn');
+        return;
+      }
+      if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+        showToast('用户名只能由英文字母或数字组成（例如: user1, test2）', 'warn');
         return;
       }
       try {
@@ -5245,7 +5297,7 @@
           body: JSON.stringify({ id, name, username, password, remark, traffic_limit_gb: trafficLimitGb, traffic_used_gb: trafficUsedGb, expire_time: expireTime })
         }).then(r => r.json());
         if (res.ok) {
-          showToast(`✅ 用户【${name}】账号配置与限额已更新！`, 'success');
+          showToast(`✅ 用户【${username}】账号配置与限额已更新！`, 'success');
           closeModal('modalEditUser');
           loadUsers();
         } else {

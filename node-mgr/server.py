@@ -835,19 +835,89 @@ def sync_ping_tasks_all_clients():
         print(f"[PingSync] Error syncing all_clients ping tasks: {e}")
         return 0
 
+def set_authoritative_server_ip(token, custom_ip):
+    """Lock authoritative IP for a server and sync across komari.db, nodes.db and all nodes (永恒防错机制)"""
+    if not token or not custom_ip:
+        return False, "missing token or ip", None
+    token = str(token).strip()
+    custom_ip = str(custom_ip).strip()
+    suuid = None
+    if os.path.exists(KOMARI_DB):
+        try:
+            conn_k = sqlite3.connect(KOMARI_DB)
+            c_k = conn_k.cursor()
+            c_k.execute("SELECT uuid FROM clients WHERE token = ? OR uuid = ?", (token, token))
+            row_k = c_k.fetchone()
+            if row_k:
+                suuid = row_k[0]
+                c_k.execute("UPDATE clients SET ipv4 = ?, updated_at = ? WHERE uuid = ?", (custom_ip, datetime.now().isoformat(), suuid))
+                conn_k.commit()
+            conn_k.close()
+        except Exception as e:
+            print(f"[SetServerIP] komari.db error: {e}")
+
+    if not suuid and os.path.exists(NODES_DB):
+        try:
+            conn_n = sqlite3.connect(NODES_DB)
+            c_n = conn_n.cursor()
+            c_n.execute("SELECT server_uuid FROM nodes WHERE server_uuid = ? LIMIT 1", (token,))
+            row_n = c_n.fetchone()
+            if row_n:
+                suuid = row_n[0]
+            conn_n.close()
+        except Exception:
+            pass
+
+    if suuid and os.path.exists(NODES_DB):
+        try:
+            conn_r = sqlite3.connect(NODES_DB)
+            c_r = conn_r.cursor()
+            c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            c_r.execute("SELECT has_realm, is_landing FROM server_realm_configs WHERE uuid = ?", (suuid,))
+            row_r = c_r.fetchone()
+            hr = row_r[0] if row_r else 0
+            land = row_r[1] if row_r else 0
+            c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", (suuid, hr, custom_ip, land))
+            # Also update all nodes attached to this server
+            c_r.execute("UPDATE nodes SET server_ip = ? WHERE server_uuid = ?", (custom_ip, suuid))
+            conn_r.commit()
+            conn_r.close()
+            # Invalidate stats cache so UI updates immediately
+            _stats_cache["ts"] = 0
+            return True, None, suuid
+        except Exception as e:
+            return False, str(e), None
+
+    return False, "server not found", None
+
 def auto_repair_node_ips():
-    """Automatically resolve missing server_ip and server_name for native nodes from komari clients table"""
+    """Automatically resolve missing server_ip and server_name for native nodes from komari clients table,
+    and enforce authoritative custom_ip from server_realm_configs to prevent WARP / NAT overwrite."""
     if not os.path.exists(KOMARI_DB) or not os.path.exists(NODES_DB):
         return 0
     try:
+        # 1. Load custom_ip overrides (authoritative locks)
+        conn_n = sqlite3.connect(NODES_DB)
+        c_n = conn_n.cursor()
+        c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        c_n.execute("SELECT uuid, custom_ip FROM server_realm_configs WHERE custom_ip != '' AND custom_ip IS NOT NULL")
+        custom_ips = {r[0]: str(r[1]).strip() for r in c_n.fetchall() if r[1] and str(r[1]).strip()}
+
+        # 2. Sync with komari.db clients table
         conn_k = sqlite3.connect(KOMARI_DB)
         c_k = conn_k.cursor()
         c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
         clients_map = {r[0]: {"name": r[1] or "", "ip": r[2] or r[3] or ""} for r in c_k.fetchall() if r[0]}
+
+        # If a server has an authoritative custom_ip, ensure komari.db clients.ipv4 is locked to it
+        for suuid, cip in custom_ips.items():
+            if suuid in clients_map:
+                clients_map[suuid]["ip"] = cip
+                c_k.execute("UPDATE clients SET ipv4 = ? WHERE uuid = ? AND (ipv4 != ? OR ipv4 IS NULL)", (cip, suuid, cip))
+        conn_k.commit()
         conn_k.close()
 
-        conn_n = sqlite3.connect(NODES_DB)
-        c_n = conn_n.cursor()
+        # 3. Enforce authoritative IP on all nodes bound to self-hosted servers
         c_n.execute("SELECT id, server_uuid, server_name, server_ip FROM nodes WHERE is_external = 0")
         rows = c_n.fetchall()
         repaired = 0
@@ -855,8 +925,8 @@ def auto_repair_node_ips():
             if suuid in clients_map:
                 cinfo = clients_map[suuid]
                 new_name = sname if sname else cinfo["name"]
-                new_ip = sip if sip else cinfo["ip"]
-                if (not sname and new_name) or (not sip and new_ip):
+                new_ip = custom_ips.get(suuid) or sip or cinfo["ip"]
+                if (not sname and new_name) or (sip != new_ip):
                     c_n.execute("UPDATE nodes SET server_name = ?, server_ip = ? WHERE id = ?", (new_name, new_ip, nid))
                     repaired += 1
         if repaired > 0:
@@ -1267,16 +1337,18 @@ def get_servers_with_stats():
         delta_tot = delta_up + delta_down
         total_traffic += delta_tot
 
+        ip_flag = f" --ip {custom_ip}" if custom_ip else ""
         servers.append({
             "uuid": uuid_val,
             "name": name or ip4 or "Server-" + uuid_val[:6],
             "ipv4": ip4 or "",
+            "custom_ip": custom_ip or "",
             "ipv6": ip6 or "",
             "os": os_name or "",
             "arch": arch or "",
             "token": token or "",
-            "install_cmd_wget": f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}",
-            "install_cmd_curl": f"curl -fsSL https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}",
+            "install_cmd_wget": f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}",
+            "install_cmd_curl": f"curl -fsSL https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}",
             "updated_at": str(rec_updated) if rec_updated else "",
             "price": float(price) if price is not None else 0.0,
             "billing_cycle": int(billing_cycle) if billing_cycle is not None else 0,
@@ -2265,7 +2337,7 @@ def build_sing_box_config(nodes_for_server):
         }
     return config
 
-INSTALL_SCRIPT_TEMPLATE = '''#!/bin/bash
+INSTALL_SCRIPT_TEMPLATE = r'''#!/bin/bash
 set -e
 
 # Komari & Sing-box All-In-One Installer (Universal: systemd & OpenRC/Alpine musl/glibc)
@@ -2277,6 +2349,7 @@ INSTALL_PROBE=1
 INSTALL_SINGBOX=1
 INSTALL_REALM=0
 ENABLE_BBR=1
+CUSTOM_IP=""
 
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -2287,6 +2360,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     -e|--endpoint)
       MASTER_URL="$2"
+      shift 2
+      ;;
+    --ip|-ip|--custom-ipv4)
+      CUSTOM_IP="$2"
       shift 2
       ;;
     --skip-probe)
@@ -2316,6 +2393,26 @@ if [ -z "$TOKEN" ]; then
   echo "[Error] --token is required!"
   echo "Usage: curl -fsSL $MASTER_URL/install-node.sh | bash -s -- --token <KOMARI_SERVER_TOKEN>"
   exit 1
+fi
+
+# 0. Intelligent IP Detection & Cloudflare WARP Shield (永恒防错机制)
+if [ -z "$CUSTOM_IP" ]; then
+  DEF_IF=$(ip route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+  if [ -n "$DEF_IF" ]; then
+    NIC_IP=$(ip -4 addr show dev "$DEF_IF" scope global 2>/dev/null | grep -oE 'inet [0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -n1 | awk '{print $2}')
+    EGRESS_IP=$(curl -s4 -m 3 https://api.ipify.org 2>/dev/null || curl -s4 -m 3 https://ifconfig.me 2>/dev/null || true)
+    if [[ "$EGRESS_IP" =~ ^104\.28\. ]] || [[ "$EGRESS_IP" =~ ^162\.158\. ]] || [[ "$EGRESS_IP" =~ ^172\.(6[4-9]|7[0-1])\. ]]; then
+      if [ -n "$NIC_IP" ] && ! [[ "$NIC_IP" =~ ^(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.) ]]; then
+        CUSTOM_IP="$NIC_IP"
+        echo "[WARP Shield] 检测到当前出口为 Cloudflare WARP 虚拟 IP ($EGRESS_IP)，已自动锁定物理网卡公网 IP: $CUSTOM_IP"
+      fi
+    fi
+  fi
+fi
+
+if [ -n "$CUSTOM_IP" ]; then
+  echo "[Info] 本机公网入站 IP 锁定为: $CUSTOM_IP"
+  curl -s -k -m 6 "$MASTER_URL/api/node-mgr/agent/set-server-ip?token=$TOKEN&ip=$CUSTOM_IP" >/dev/null 2>&1 || true
 fi
 
 echo "======================================================"
@@ -2477,7 +2574,11 @@ if command -v curl >/dev/null 2>&1; then
 elif command -v wget >/dev/null 2>&1; then
   DOWNLOADER="wget -qO-"
 fi
-$DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh | bash -s -- -e "$MASTER_URL" -t "$TOKEN" "${EXTRA_ARGS[@]}"
+PROBE_ARGS=("-e" "$MASTER_URL" "-t" "$TOKEN")
+if [ -n "$CUSTOM_IP" ]; then
+  PROBE_ARGS+=("--custom-ipv4" "$CUSTOM_IP")
+fi
+$DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh | bash -s -- "${PROBE_ARGS[@]}" "${EXTRA_ARGS[@]}"
 
 fi
 
@@ -4658,6 +4759,17 @@ rules:
             self._send_json(config)
             return
 
+        # Agent Register/Lock Server IP Endpoint (永恒防错机制)
+        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip"]:
+            token = query.get("token", [""])[0]
+            custom_ip = query.get("ip", [""])[0]
+            ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
+            if ok:
+                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
+            else:
+                self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
+            return
+
         self._send_json({"error": "not found"}, 404)
 
     def do_POST(self):
@@ -4666,6 +4778,17 @@ rules:
         query = parse_qs(parsed.query)
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
+
+        # Agent Register/Lock Server IP Endpoint (永恒防错机制 POST)
+        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip"]:
+            token = str(query.get("token", [""])[0] or body.get("token") or "")
+            custom_ip = str(query.get("ip", [""])[0] or body.get("ip") or "").strip()
+            ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
+            if ok:
+                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
+            else:
+                self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
+            return
 
         # Node Agent Traffic Reporting Endpoint
         if path in ["/api/agent/report-traffic", "/api/node-mgr/agent/report-traffic"]:
@@ -5148,22 +5271,31 @@ rules:
 
         if path in ["/api/servers/add", "/api/node-mgr/servers/add"]:
             name = str(body.get("name") or "New Server").strip()
+            custom_ip = str(body.get("custom_ip") or body.get("ip") or "").strip()
             new_uuid = str(uuid.uuid4())
             new_token = secrets.token_hex(16)
             now_iso = datetime.now().isoformat()
             if os.path.exists(KOMARI_DB):
                 conn_k = sqlite3.connect(KOMARI_DB)
                 c_k = conn_k.cursor()
-                c_k.execute("INSERT INTO clients (uuid, token, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
-                            (new_uuid, new_token, name, now_iso, now_iso))
+                c_k.execute("INSERT INTO clients (uuid, token, name, created_at, updated_at, ipv4) VALUES (?, ?, ?, ?, ?, ?)",
+                            (new_uuid, new_token, name, now_iso, now_iso, custom_ip))
                 conn_k.commit()
                 conn_k.close()
                 try:
                     sync_ping_tasks_all_clients()
                 except Exception:
                     pass
-            install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}"
-            self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "install_cmd": install_cmd})
+            if custom_ip and os.path.exists(NODES_DB):
+                conn_r = sqlite3.connect(NODES_DB)
+                c_r = conn_r.cursor()
+                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, 0, ?, 0, CURRENT_TIMESTAMP)", (new_uuid, custom_ip))
+                conn_r.commit()
+                conn_r.close()
+            ip_flag = f" --ip {custom_ip}" if custom_ip else ""
+            install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}{ip_flag}"
+            self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "custom_ip": custom_ip, "install_cmd": install_cmd})
             return
 
         if path in ["/api/servers/edit", "/api/node-mgr/servers/edit"]:
@@ -5235,6 +5367,19 @@ rules:
                 c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", (suuid, new_hr, new_cip, new_land))
                 conn_r.commit()
                 conn_r.close()
+                if "custom_ip" in body and new_cip:
+                    if os.path.exists(KOMARI_DB):
+                        conn_k = sqlite3.connect(KOMARI_DB)
+                        c_k = conn_k.cursor()
+                        c_k.execute("UPDATE clients SET ipv4 = ? WHERE uuid = ?", (new_cip, suuid))
+                        conn_k.commit()
+                        conn_k.close()
+                    conn_n = sqlite3.connect(NODES_DB)
+                    c_n = conn_n.cursor()
+                    c_n.execute("UPDATE nodes SET server_ip = ? WHERE server_uuid = ?", (new_cip, suuid))
+                    conn_n.commit()
+                    conn_n.close()
+                _stats_cache["ts"] = 0
 
             self._send_json({"ok": True})
             return
