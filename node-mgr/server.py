@@ -2603,10 +2603,28 @@ CONFIG_FILE="/etc/sing-box/config.json"
 MD5_FILE="/etc/sing-box/config.md5"
 
 restart_sing_box() {
+  if [ -f "$CONFIG_FILE" ]; then
+    PORTS=$(grep -oE '"listen_port"[[:space:]]*:[[:space:]]*[0-9]+' "$CONFIG_FILE" 2>/dev/null | grep -oE '[0-9]+' | sort -u)
+    for p in $PORTS; do
+      fuser -k -9 ${p}/tcp >/dev/null 2>&1 || true
+    done
+  fi
   if command -v systemctl >/dev/null 2>&1; then
-    systemctl restart sing-box.service >/dev/null 2>&1 || true
+    systemctl restart sing-box.service >/dev/null 2>&1 || systemctl start sing-box.service >/dev/null 2>&1 || true
   elif command -v rc-service >/dev/null 2>&1; then
-    rc-service sing-box restart >/dev/null 2>&1 || true
+    killall -9 sing-box >/dev/null 2>&1 || true
+    rc-service sing-box zap >/dev/null 2>&1 || true
+    rc-service sing-box restart >/dev/null 2>&1 || rc-service sing-box start >/dev/null 2>&1 || true
+  fi
+}
+
+restart_realm() {
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
+  elif command -v rc-service >/dev/null 2>&1; then
+    killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
+    rc-service realm zap >/dev/null 2>&1 || true
+    rc-service realm restart >/dev/null 2>&1 || rc-service realm start >/dev/null 2>&1 || true
   fi
 }
 
@@ -2680,14 +2698,23 @@ while true; do
           iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
           iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
         done
-        if command -v systemctl >/dev/null 2>&1; then
-          systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
-        elif command -v rc-service >/dev/null 2>&1; then
-          rc-service realm zap >/dev/null 2>&1 || true
-          rc-service realm restart >/dev/null 2>&1 || rc-service realm start >/dev/null 2>&1 || true
-        fi
+        restart_realm
         echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
       fi
+    fi
+  fi
+
+  # Active Health Check & Self-Healing
+  if [ -f "$CONFIG_FILE" ] && grep -q '"listen_port"' "$CONFIG_FILE"; then
+    if ! pgrep -x sing-box >/dev/null 2>&1; then
+      echo "[AutoHeal] Sing-box down detected, restarting..."
+      restart_sing_box
+    fi
+  fi
+  if [ -f /etc/realm/config.toml ] && grep -q '\[\[endpoints\]\]' /etc/realm/config.toml; then
+    if ! pgrep -x realm >/dev/null 2>&1; then
+      echo "[AutoHeal] Realm down detected, restarting..."
+      restart_realm
     fi
   fi
 
