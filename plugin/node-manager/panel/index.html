@@ -1737,13 +1737,13 @@
           <input type="text" id="editNodeName" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 items-end">
           <div>
             <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">连接地址 (落地机公网IP / 域名) *</label>
             <input type="text" id="editNodeServerIp" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
           </div>
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">落地机端口 (Sing-box 核心) *</label>
+            <label id="editNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">落地机端口 *</label>
             <input type="number" id="editNodePort" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
           </div>
         </div>
@@ -1754,8 +1754,31 @@
         </div>
 
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">伪装域名 (SNI / ServerName)</label>
-          <input type="text" id="editNodeSni" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400">伪装域名 (SNI / ServerName)</label>
+            <div class="relative">
+              <select onchange="applySniPreset(this.value, 'editNodeSni'); this.selectedIndex=0;" class="text-[11px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800/60 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-purple-100 transition-colors">
+                <option value="" disabled selected>⚡ 选择热门大厂域名...</option>
+                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org (默认推荐)</option>
+                <option value="www.microsoft.com">微软 · www.microsoft.com</option>
+                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud)</option>
+                <option value="www.apple.com">苹果 · www.apple.com</option>
+                <option value="aws.amazon.com">亚马逊 · aws.amazon.com</option>
+                <option value="dl.google.com">谷歌 · dl.google.com</option>
+                <option value="www.speedtest.net">测速网 · www.speedtest.net</option>
+                <option value="dash.cloudflare.com">Cloudflare · dash.cloudflare.com</option>
+              </select>
+            </div>
+          </div>
+          <input type="text" id="editNodeSni" list="sniPresetList" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="applySniPreset('addons.mozilla.org', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Mozilla</button>
+            <button type="button" onclick="applySniPreset('www.microsoft.com', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Microsoft</button>
+            <button type="button" onclick="applySniPreset('gateway.icloud.com', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">iCloud</button>
+            <button type="button" onclick="applySniPreset('www.apple.com', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Apple</button>
+            <button type="button" onclick="applySniPreset('aws.amazon.com', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">AWS</button>
+            <button type="button" onclick="applySniPreset('dl.google.com', 'editNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Google</button>
+          </div>
         </div>
 
         <div id="editNodeRealityFields" class="grid grid-cols-2 gap-3 hidden">
@@ -1891,19 +1914,52 @@
             <option value="vmess_ws">VMess + WebSocket</option>
           </select>
         </div>
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-2 gap-3 items-end">
           <div>
             <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">节点名称</label>
-            <input type="text" id="createNodeName" placeholder="例如: 日本软银 - 01" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <input type="text" id="createNodeName" oninput="onNodeNameInput()" placeholder="例如: 🇯🇵 懒猫JPL - Reality" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
           <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">落地机端口 (Sing-box核心，NAT机填映射端口)</label>
-            <input type="number" id="createNodePort" placeholder="例如: 11101" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">服务端口</label>
+            <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
         </div>
         <div>
-          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">伪装域名 (SNI)</label>
-          <input type="text" id="createNodeSni" placeholder="addons.mozilla.org" value="addons.mozilla.org" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400">伪装域名 (SNI)</label>
+            <div class="relative">
+              <select onchange="applySniPreset(this.value, 'createNodeSni'); this.selectedIndex=0;" class="text-[11px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800/60 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-purple-100 transition-colors">
+                <option value="" disabled selected>⚡ 选择热门大厂域名...</option>
+                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org (默认推荐)</option>
+                <option value="www.microsoft.com">微软 · www.microsoft.com</option>
+                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud)</option>
+                <option value="www.apple.com">苹果 · www.apple.com</option>
+                <option value="aws.amazon.com">亚马逊 · aws.amazon.com</option>
+                <option value="dl.google.com">谷歌 · dl.google.com</option>
+                <option value="www.speedtest.net">测速网 · www.speedtest.net</option>
+                <option value="dash.cloudflare.com">Cloudflare · dash.cloudflare.com</option>
+              </select>
+            </div>
+          </div>
+          <input type="text" id="createNodeSni" list="sniPresetList" placeholder="addons.mozilla.org" value="addons.mozilla.org" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          <datalist id="sniPresetList">
+            <option value="addons.mozilla.org">Mozilla 插件中心</option>
+            <option value="www.microsoft.com">微软官网</option>
+            <option value="gateway.icloud.com">Apple iCloud 网关</option>
+            <option value="www.apple.com">Apple 官网</option>
+            <option value="aws.amazon.com">亚马逊 AWS</option>
+            <option value="dl.google.com">Google 下载中心</option>
+            <option value="www.speedtest.net">Speedtest 测速网</option>
+            <option value="dash.cloudflare.com">Cloudflare 控制台</option>
+          </datalist>
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="applySniPreset('addons.mozilla.org', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Mozilla</button>
+            <button type="button" onclick="applySniPreset('www.microsoft.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Microsoft</button>
+            <button type="button" onclick="applySniPreset('gateway.icloud.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">iCloud</button>
+            <button type="button" onclick="applySniPreset('www.apple.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Apple</button>
+            <button type="button" onclick="applySniPreset('aws.amazon.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">AWS</button>
+            <button type="button" onclick="applySniPreset('dl.google.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Google</button>
+          </div>
         </div>
 
         <button onclick="submitCreateNativeNode()" class="w-full py-3 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap">
@@ -2245,12 +2301,18 @@
       }
       renderNodesList();
 
+      state.nodeNameUserModified = false;
+      const nameInput = document.getElementById('createNodeName');
+      if (nameInput) nameInput.value = '';
       const chk = document.getElementById('createNodeEnableRelay');
       if (chk) chk.checked = false;
       const rPort = document.getElementById('createNodeRelayPort');
       if (rPort) rPort.value = '';
+      const sniInput = document.getElementById('createNodeSni');
+      if (sniInput && !sniInput.value) sniInput.value = 'addons.mozilla.org';
       toggleCreateNodeRelayFields();
       populateServerSelectForNode();
+      updateCreateNodeDefaultName();
       openModal('modalCreateNode');
     }
     function openImportNodeModal() { openModal('modalImportNode'); }
@@ -4694,6 +4756,11 @@
         }
       }
 
+      const editPortLabel = document.getElementById('editNodePortLabel');
+      if (editPortLabel) {
+        editPortLabel.textContent = node.is_relay ? '落地机端口 *' : '服务端口 *';
+      }
+
       openModal('modalEditNode');
     }
 
@@ -4809,6 +4876,122 @@
       }
     }
 
+    function getRegionFlag(serverOrName, optRegion = '') {
+      let name = '';
+      let region = optRegion;
+      if (typeof serverOrName === 'object' && serverOrName !== null) {
+        name = serverOrName.name || '';
+        region = serverOrName.region || optRegion || '';
+      } else if (typeof serverOrName === 'string') {
+        name = serverOrName;
+        const matchedSrv = state.servers?.find(s => s.name === name);
+        if (matchedSrv && matchedSrv.region) region = matchedSrv.region;
+      }
+
+      // 1. If region already has an emoji (e.g. 🇸🇬, 🇯🇵, 🇭🇰, 🇺🇸)
+      if (region && /\p{Extended_Pictographic}/u.test(region)) {
+        const match = region.match(/\p{Extended_Pictographic}+/u);
+        if (match) return match[0];
+      }
+
+      // 2. If region is 2-letter country code (e.g. HK, JP, SG, US)
+      if (region && /^[A-Za-z]{2}$/.test(region.trim())) {
+        const code = region.trim().toUpperCase();
+        return String.fromCodePoint(...code.split('').map(c => 127397 + c.charCodeAt(0)));
+      }
+
+      // 3. Match keywords in name and region
+      const text = `${name} ${region}`.toLowerCase();
+      if (/hk|hong\s*kong|香港|广港|深港/.test(text)) return '🇭🇰';
+      if (/jp|japan|日本|东京|大阪|软银|樱花|tokyo|osaka|biglobe|沪日/.test(text)) return '🇯🇵';
+      if (/sg|singapore|新加坡|狮城|广新/.test(text)) return '🇸🇬';
+      if (/us|united\s*states|america|美国|美西|美东|洛杉矶|圣何塞|硅谷|凤凰城|芝加哥|纽约|达拉斯|波特兰|西雅图/.test(text)) return '🇺🇸';
+      if (/tw|taiwan|台湾|台北|台中|彰化/.test(text)) return '🇹🇼';
+      if (/kr|korea|韩国|首尔|春川|沪韩/.test(text)) return '🇰🇷';
+      if (/uk|gb|britain|england|英国|伦敦/.test(text)) return '🇬🇧';
+      if (/de|germany|德国|法兰克福|京德/.test(text)) return '🇩🇪';
+      if (/fr|france|法国|巴黎/.test(text)) return '🇫🇷';
+      if (/ca|canada|加拿大|多伦多|温哥华/.test(text)) return '🇨🇦';
+      if (/au|australia|澳大利亚|澳洲|悉尼|墨尔本/.test(text)) return '🇦🇺';
+      if (/ru|russia|俄罗斯|莫斯科|伯力|海参崴/.test(text)) return '🇷🇺';
+      if (/nl|netherlands|荷兰|阿姆斯特丹/.test(text)) return '🇳🇱';
+      if (/in|india|印度|孟买/.test(text)) return '🇮🇳';
+      if (/my|malaysia|马来|马来西亚|吉隆坡/.test(text)) return '🇲🇾';
+      if (/th|thailand|泰国|曼谷/.test(text)) return '🇹🇭';
+      if (/vn|vietnam|越南|河内|胡志明/.test(text)) return '🇻🇳';
+      if (/ph|philippines|菲律宾|马尼拉/.test(text)) return '🇵🇭';
+      if (/tr|turkey|土耳其|伊斯坦布尔/.test(text)) return '🇹🇷';
+      if (/br|brazil|巴西|圣保罗/.test(text)) return '🇧🇷';
+      if (/ae|uae|dubai|阿联酋|迪拜/.test(text)) return '🇦🇪';
+      if (/cn|china|中国|广州|上海|北京|深圳|镇江|常州|徐州/.test(text)) return '🇨🇳';
+      if (/甲骨文|oracle/.test(text)) return '🇸🇬';
+
+      return '🌐';
+    }
+
+    function applySniPreset(val, targetId = 'createNodeSni') {
+      if (!val) return;
+      const input = document.getElementById(targetId);
+      if (input) {
+        input.value = val;
+        input.focus();
+      }
+    }
+
+    function onNodeNameInput() {
+      const val = document.getElementById('createNodeName')?.value.trim();
+      state.nodeNameUserModified = !!val;
+    }
+
+    function updateCreateNodeDefaultName() {
+      const isRelay = !!document.getElementById('createNodeEnableRelay')?.checked;
+      const mainUuid = document.getElementById('createNodeServerSelect')?.value;
+      const mainSrv = state.servers.find(s => s.uuid === mainUuid);
+      const mainName = mainSrv ? mainSrv.name : '';
+
+      const protoEl = document.getElementById('createNodeProtocol');
+      const proto = protoEl ? protoEl.value : 'vless_reality';
+      const protoLabels = {
+        'vless_reality': 'Reality',
+        'hysteria2': 'Hysteria 2',
+        'tuic': 'TUIC',
+        'trojan': 'Trojan',
+        'vmess_ws': 'VMess'
+      };
+      const protoLabel = protoLabels[proto] || 'Reality';
+
+      let autoName = '';
+      if (isRelay) {
+        const landingUuid = document.getElementById('createNodeLandingServerSelect')?.value;
+        const landingSrv = state.servers.find(s => s.uuid === landingUuid);
+        const landingName = landingSrv ? landingSrv.name : '';
+        const landingFlag = getRegionFlag(landingSrv || landingName);
+
+        if (mainName && landingName) {
+          autoName = `${landingFlag} ${mainName} 🛩 ${landingName}`;
+        } else if (mainName) {
+          autoName = `${landingFlag} ${mainName} 🛩 目标落地`;
+        } else {
+          autoName = `🛩 中转落地节点`;
+        }
+      } else {
+        const flag = getRegionFlag(mainSrv || mainName);
+        if (mainName) {
+          autoName = `${flag} ${mainName} - ${protoLabel}`;
+        } else {
+          autoName = `🌐 自建节点 - ${protoLabel}`;
+        }
+      }
+
+      const nameInput = document.getElementById('createNodeName');
+      if (nameInput) {
+        nameInput.placeholder = autoName;
+        if (!state.nodeNameUserModified || !nameInput.value.trim()) {
+          nameInput.value = autoName;
+        }
+      }
+    }
+
     let currentPickerTarget = 'main'; // 'main' or 'landing'
 
     function setLandingPickerFilter(onlyMarked) {
@@ -4907,7 +5090,7 @@
                 <div class="w-9 h-9 rounded-xl ${isSelected ? 'bg-purple-600 text-white' : 'bg-slate-200/80 dark:bg-zinc-700/80 text-slate-600 dark:text-slate-300'} flex items-center justify-center font-bold text-xs shrink-0">
                   <i data-lucide="server" class="w-4 h-4"></i>
                 </div>
-                <div class="font-bold text-sm tracking-tight truncate">${escapeHtml(srv.name)}</div>
+                <div class="font-bold text-sm tracking-tight truncate">${getRegionFlag(srv)} ${escapeHtml(srv.name)}</div>
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 ${landingTag}
@@ -4945,6 +5128,7 @@
           }
         }
         updateCreateNodeIpHint();
+        updateCreateNodeDefaultName();
       } else {
         const input = document.getElementById('createNodeLandingServerSelect');
         const display = document.getElementById('createNodeLandingServerSelectName');
@@ -4959,6 +5143,7 @@
             portInput.value = landingNode.port;
           }
         }
+        updateCreateNodeDefaultName();
       }
 
       closeModal('modalServerPicker');
@@ -5041,6 +5226,7 @@
       }
 
       updateCreateNodeIpHint();
+      updateCreateNodeDefaultName();
       initLucide();
     }
 
@@ -5050,7 +5236,12 @@
       if (fields) {
         fields.classList.toggle('hidden', !enabled);
       }
+      const portLabel = document.getElementById('createNodePortLabel');
+      if (portLabel) {
+        portLabel.textContent = enabled ? '落地机端口' : '服务端口';
+      }
       populateServerSelectForNode();
+      updateCreateNodeDefaultName();
       initLucide();
     }
 
@@ -5077,6 +5268,7 @@
       else if (p === 'tuic') portInput.value = '20444';
       else if (p === 'trojan') portInput.value = '20445';
       else if (p === 'vmess_ws') portInput.value = '20080';
+      updateCreateNodeDefaultName();
     }
 
     async function submitCreateNativeNode() {
@@ -5148,16 +5340,33 @@
           return;
         }
       }
+
+      const proto = document.getElementById('createNodeProtocol')?.value || 'vless_reality';
+      const protoLabels = {
+        'vless_reality': 'Reality',
+        'hysteria2': 'Hysteria 2',
+        'tuic': 'TUIC',
+        'trojan': 'Trojan',
+        'vmess_ws': 'VMess'
+      };
+      const protoLabel = protoLabels[proto] || 'Reality';
+      const landingFlag = getRegionFlag(finalServerName);
+      const mainFlag = getRegionFlag(relayServerName || finalServerName);
+
       const defaultNodeName = isRelay 
-        ? `${relayServerName || '中转'} ➔ ${finalServerName || '落地'} (Reality)`
-        : `${finalServerName || '自建'} - Reality`;
+        ? `${landingFlag} ${relayServerName || '中转'} 🛩 ${finalServerName || '落地'}`
+        : `${mainFlag} ${finalServerName || '自建'} - ${protoLabel}`;
+
+      const nameInput = document.getElementById('createNodeName');
+      const inputName = nameInput ? nameInput.value.trim() : '';
+      const finalName = inputName || defaultNodeName;
 
       const payload = {
         server_uuid: finalServerUuid,
         server_name: finalServerName,
         server_ip: finalServerIp,
-        protocol: document.getElementById('createNodeProtocol').value,
-        name: document.getElementById('createNodeName').value.trim() || defaultNodeName,
+        protocol: proto,
+        name: finalName,
         port: port,
         sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
         enabled: 1,

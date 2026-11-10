@@ -1287,6 +1287,7 @@ def get_servers_with_stats():
         weight = row.get("weight") or 0
         remark = row.get("remark") or ""
         public_remark = row.get("public_remark") or ""
+        region = row.get("region") or ""
 
         last_seen = heartbeats.get(token, 0)
         is_online = (now - last_seen) <= 35 if last_seen > 0 else False
@@ -1341,6 +1342,7 @@ def get_servers_with_stats():
         servers.append({
             "uuid": uuid_val,
             "name": name or ip4 or "Server-" + uuid_val[:6],
+            "region": region,
             "ipv4": ip4 or "",
             "custom_ip": custom_ip or "",
             "ipv6": ip6 or "",
@@ -2702,8 +2704,82 @@ try:
     with open(STATE_FILE, "r") as f:
         state = json.load(f)
 except Exception:
-    state = {"conns": {}, "global_total": 0, "last_sub": None, "recent_subs": {}}
+    state = {}
 
+ip_to_sub = state.get("ip_to_sub") or {}
+ipport_to_sub = state.get("ipport_to_sub") or {}
+pending = state.get("pending_sessions") or {}
+log_offset = int(state.get("log_offset") or 0)
+tracked = state.get("conns") or {}
+recent_subs = state.get("recent_subs") or {}
+last_sub = state.get("last_sub")
+now = time.time()
+
+# 1. Parse sing-box access log to map IP/Port directly to user ID
+sb_log = "/var/log/sing-box/access.log"
+if os.path.exists(sb_log):
+    try:
+        sz = os.path.getsize(sb_log)
+        if sz < log_offset:
+            log_offset = 0
+        elif sz > 10 * 1024 * 1024:
+            with open(sb_log, "w") as f_trunc: pass
+            log_offset = 0
+        with open(sb_log, "r", encoding="utf-8", errors="ignore") as f:
+            f.seek(log_offset)
+            for line in f:
+                m_cid = re.search(r"\[(\d+)\s+[^\]]+\]", line)
+                m_conn = re.search(r"inbound connection from ([\d\.:a-fA-F]+):(\d+)", line)
+                m_user = re.search(r"\[(sub_\d+|default)\]", line)
+                m_ukw = re.search(r"user:\s*(sub_\d+|default)", line)
+                if m_cid:
+                    cid = m_cid.group(1)
+                    if m_conn:
+                        ip = m_conn.group(1).strip()
+                        port = m_conn.group(2).strip()
+                        if cid in pending and "sub" in pending[cid]:
+                            sub = pending.pop(cid)["sub"]
+                            ip_to_sub[ip] = sub
+                            ipport_to_sub[f"{ip}:{port}"] = sub
+                            last_sub = sub
+                            recent_subs[str(sub)] = now
+                        else:
+                            pending[cid] = {"ip": ip, "port": port, "time": now}
+                    elif m_user or m_ukw:
+                        u_str = (m_user or m_ukw).group(1)
+                        sub = 1 if u_str == "default" else int(u_str.replace("sub_", ""))
+                        if cid in pending and "ip" in pending[cid]:
+                            sess = pending.pop(cid)
+                            ip = sess["ip"]
+                            port = sess["port"]
+                            ip_to_sub[ip] = sub
+                            ipport_to_sub[f"{ip}:{port}"] = sub
+                            last_sub = sub
+                            recent_subs[str(sub)] = now
+                        else:
+                            pending[cid] = {"sub": sub, "time": now}
+                elif m_conn and (m_user or m_ukw):
+                    ip = m_conn.group(1).strip()
+                    port = m_conn.group(2).strip()
+                    u_str = (m_user or m_ukw).group(1)
+                    sub = 1 if u_str == "default" else int(u_str.replace("sub_", ""))
+                    ip_to_sub[ip] = sub
+                    ipport_to_sub[f"{ip}:{port}"] = sub
+                    last_sub = sub
+                    recent_subs[str(sub)] = now
+            log_offset = f.tell()
+    except Exception:
+        pass
+
+for k in list(pending.keys()):
+    if now - pending[k].get("time", 0) > 60:
+        pending.pop(k, None)
+if len(ip_to_sub) > 500:
+    ip_to_sub = dict(list(ip_to_sub.items())[-200:])
+if len(ipport_to_sub) > 2000:
+    ipport_to_sub = dict(list(ipport_to_sub.items())[-500:])
+
+# 2. Query Clash API for active sockets and global byte totals
 try:
     req = urllib.request.Request("http://127.0.0.1:9090/connections")
     with urllib.request.urlopen(req, timeout=2) as resp:
@@ -2715,28 +2791,11 @@ dl_total = int(data.get("downloadTotal") or 0)
 up_total = int(data.get("uploadTotal") or 0)
 global_total = dl_total + up_total
 
-tracked = state.get("conns") or {}
-recent_subs = state.get("recent_subs") or {}
-last_sub = state.get("last_sub")
 current_ids = set()
 deltas = {}
 sum_active_deltas = 0
-now = time.time()
 
 def extract_sub_id(c):
-    meta = c.get("metadata") or {}
-    meta_user = str(meta.get("user") or "")
-    if meta_user.startswith("sub_"):
-        try: return int(meta_user.replace("sub_", ""))
-        except ValueError: pass
-    elif meta_user == "default": return 1
-
-    u = str(c.get("user") or "")
-    if u.startswith("sub_"):
-        try: return int(u.replace("sub_", ""))
-        except ValueError: pass
-    elif u == "default": return 1
-
     for ch in c.get("chains") or []:
         s_ch = str(ch)
         if "out-sub-" in s_ch:
@@ -2750,6 +2809,26 @@ def extract_sub_id(c):
     rp = str(c.get("rulePayload") or "")
     m = re.search(r"sub_(\d+)", rp)
     if m: return int(m.group(1))
+
+    meta = c.get("metadata") or {}
+    src_ip = meta.get("sourceIP") or ""
+    src_port = str(meta.get("sourcePort") or "")
+    if src_ip and src_port and f"{src_ip}:{src_port}" in ipport_to_sub:
+        return ipport_to_sub[f"{src_ip}:{src_port}"]
+    if src_ip and src_ip in ip_to_sub:
+        return ip_to_sub[src_ip]
+
+    meta_user = str(meta.get("user") or "")
+    if meta_user.startswith("sub_"):
+        try: return int(meta_user.replace("sub_", ""))
+        except ValueError: pass
+    elif meta_user == "default": return 1
+
+    u = str(c.get("user") or "")
+    if u.startswith("sub_"):
+        try: return int(u.replace("sub_", ""))
+        except ValueError: pass
+    elif u == "default": return 1
     return None
 
 for c in data.get("connections", []):
@@ -2808,16 +2887,19 @@ elif last_global > 0 and global_total >= last_global:
             target = str(last_sub) if last_sub else None
             if not target and recent_subs:
                 target = max(recent_subs.keys(), key=lambda k: recent_subs[k])
-            if not target:
-                target = "1"
-            deltas[target] = deltas.get(target, 0) + unacc
+            if target:
+                deltas[target] = deltas.get(target, 0) + unacc
 
-recent_subs = {k: v for k, v in recent_subs.items() if now - v < 300}
+recent_subs = {k: v for k, v in recent_subs.items() if now - v < 600}
 
 state["conns"] = tracked
 state["global_total"] = global_total
 state["last_sub"] = last_sub
 state["recent_subs"] = recent_subs
+state["ip_to_sub"] = ip_to_sub
+state["ipport_to_sub"] = ipport_to_sub
+state["pending_sessions"] = pending
+state["log_offset"] = log_offset
 try:
     with open(STATE_FILE, "w") as f: json.dump(state, f)
 except Exception: pass
@@ -3833,16 +3915,19 @@ def build_node_sync_script(master_url, token):
 
 class NodeMgrHandler(BaseHTTPRequestHandler):
     def _send_json(self, data, status=200, extra_headers=None):
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json; charset=utf-8")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-        if extra_headers:
-            for k, v in extra_headers.items():
-                self.send_header(k, str(v))
-        self.end_headers()
-        self.wfile.write(json.dumps(data).encode("utf-8"))
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
+            if extra_headers:
+                for k, v in extra_headers.items():
+                    self.send_header(k, str(v))
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode("utf-8"))
+        except (BrokenPipeError, ConnectionResetError):
+            pass
 
     def _send_text(self, text, status=200, content_type="text/plain; charset=utf-8", extra_headers=None):
         self.send_response(status)
