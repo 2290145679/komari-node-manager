@@ -2675,12 +2675,16 @@ restart_sing_box() {
 restart_realm() {
   if command -v systemctl >/dev/null 2>&1; then
     systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
-  elif command -v rc-service >/dev/null 2>&1; then
+  elif command -v rc-service >/dev/null 2>&1 && [ -f /etc/init.d/realm ]; then
     rc-service realm restart >/dev/null 2>&1 || {
       killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
       rc-service realm zap >/dev/null 2>&1 || true
       rc-service realm start >/dev/null 2>&1 || true
     }
+  fi
+  if ! is_process_running realm && [ -x /usr/local/bin/realm ] && [ -f /etc/realm/config.toml ]; then
+    killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
+    nohup /usr/local/bin/realm -c /etc/realm/config.toml >/dev/null 2>&1 &
   fi
 }
 
@@ -2977,23 +2981,36 @@ if deltas:
       fi
     fi
 
-    # Sync Realm port forward rules if realm is installed
-    if [ -x /usr/local/bin/realm ] || [ -f /etc/realm/config.toml ]; then
-      REALM_RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
-      if [ -n "$REALM_RES" ] && echo "$REALM_RES" | grep -q '\[network\]'; then
-        REALM_MD5=$(echo "$REALM_RES" | md5sum | awk '{print $1}')
-        OLD_REALM_MD5=$(cat /etc/realm/config.md5 2>/dev/null || true)
-        if [ "$REALM_MD5" != "$OLD_REALM_MD5" ]; then
-          echo "$REALM_RES" > /etc/realm/config.toml
-          echo "$REALM_MD5" > /etc/realm/config.md5
-          R_PORTS=$(grep -oE ':[0-9]+"' /etc/realm/config.toml | tr -d ':"' | sort -u)
-          for rp in $R_PORTS; do
-            iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
-            iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
-          done
-          restart_realm
-          echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
-        fi
+    # Sync Realm port forward rules
+    REALM_RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
+    if [ -n "$REALM_RES" ] && echo "$REALM_RES" | grep -q '\[network\]'; then
+      if [ ! -x /usr/local/bin/realm ]; then
+        ARCH=$(uname -m)
+        case "$ARCH" in
+          x86_64|amd64) REALM_ARCH="x86_64-unknown-linux-musl" ;;
+          aarch64|arm64) REALM_ARCH="aarch64-unknown-linux-musl" ;;
+          *) REALM_ARCH="x86_64-unknown-linux-musl" ;;
+        esac
+        mkdir -p /etc/realm
+        curl -fsSL "https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH}.tar.gz" -o /tmp/realm.tar.gz 2>/dev/null || \
+        wget -qO /tmp/realm.tar.gz "https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH}.tar.gz" 2>/dev/null
+        tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm 2>/dev/null
+        chmod +x /usr/local/bin/realm 2>/dev/null
+        rm -f /tmp/realm.tar.gz
+      fi
+      REALM_MD5=$(echo "$REALM_RES" | md5sum | awk '{print $1}')
+      OLD_REALM_MD5=$(cat /etc/realm/config.md5 2>/dev/null || true)
+      if [ "$REALM_MD5" != "$OLD_REALM_MD5" ]; then
+        mkdir -p /etc/realm
+        echo "$REALM_RES" > /etc/realm/config.toml
+        echo "$REALM_MD5" > /etc/realm/config.md5
+        R_PORTS=$(grep -oE ':[0-9]+"' /etc/realm/config.toml | tr -d ':"' | sort -u)
+        for rp in $R_PORTS; do
+          iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+          iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+        done
+        restart_realm
+        echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
       fi
     fi
 
