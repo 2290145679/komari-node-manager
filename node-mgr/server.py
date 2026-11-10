@@ -2580,6 +2580,7 @@ command="/usr/local/bin/sing-box"
 command_args="run -c /etc/sing-box/config.json"
 pidfile="/run/sing-box.pid"
 supervisor=supervise-daemon
+supervise_daemon_args="--respawn-max 0 --respawn-delay 5"
 
 depend() {
     need net
@@ -2661,9 +2662,11 @@ restart_sing_box() {
   if command -v systemctl >/dev/null 2>&1; then
     systemctl restart sing-box.service >/dev/null 2>&1 || systemctl start sing-box.service >/dev/null 2>&1 || true
   elif command -v rc-service >/dev/null 2>&1; then
-    killall -9 sing-box >/dev/null 2>&1 || true
-    rc-service sing-box zap >/dev/null 2>&1 || true
-    rc-service sing-box restart >/dev/null 2>&1 || rc-service sing-box start >/dev/null 2>&1 || true
+    rc-service sing-box restart >/dev/null 2>&1 || {
+      killall -9 sing-box >/dev/null 2>&1 || true
+      rc-service sing-box zap >/dev/null 2>&1 || true
+      rc-service sing-box start >/dev/null 2>&1 || true
+    }
   fi
 }
 
@@ -2671,10 +2674,16 @@ restart_realm() {
   if command -v systemctl >/dev/null 2>&1; then
     systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
   elif command -v rc-service >/dev/null 2>&1; then
-    killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
-    rc-service realm zap >/dev/null 2>&1 || true
-    rc-service realm restart >/dev/null 2>&1 || rc-service realm start >/dev/null 2>&1 || true
+    rc-service realm restart >/dev/null 2>&1 || {
+      killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
+      rc-service realm zap >/dev/null 2>&1 || true
+      rc-service realm start >/dev/null 2>&1 || true
+    }
   fi
+}
+
+is_process_running() {
+  pidof "$1" >/dev/null 2>&1 || killall -0 "$1" >/dev/null 2>&1 || pgrep -x "$1" >/dev/null 2>&1
 }
 
 TICK=0
@@ -2908,13 +2917,13 @@ if deltas:
 
     # Active Health Check & Self-Healing
     if [ -f "$CONFIG_FILE" ] && grep -q '"listen_port"' "$CONFIG_FILE"; then
-      if ! pgrep -x sing-box >/dev/null 2>&1; then
+      if ! is_process_running sing-box; then
         echo "[AutoHeal] Sing-box down detected, restarting..."
         restart_sing_box
       fi
     fi
     if [ -f /etc/realm/config.toml ] && grep -q '\[\[endpoints\]\]' /etc/realm/config.toml; then
-      if ! pgrep -x realm >/dev/null 2>&1; then
+      if ! is_process_running realm; then
         echo "[AutoHeal] Realm down detected, restarting..."
         restart_realm
       fi
@@ -2977,6 +2986,7 @@ command="/bin/bash"
 command_args="/usr/local/bin/komari-pro-node-sync.sh"
 pidfile="/run/komari-node-sync.pid"
 supervisor=supervise-daemon
+supervise_daemon_args="--respawn-max 0 --respawn-delay 5"
 
 depend() {
     need net
@@ -3066,6 +3076,7 @@ command="/usr/local/bin/realm"
 command_args="-c /etc/realm/config.toml"
 pidfile="/run/realm.pid"
 supervisor=supervise-daemon
+supervise_daemon_args="--respawn-max 0 --respawn-delay 5"
 depend() { need net; after network; }
 EOF
       chmod +x /etc/init.d/realm

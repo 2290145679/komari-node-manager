@@ -74,7 +74,25 @@
 --------------------------------------------------------------------------------
 三、最近完成的核心功能与问题修复记录 (Completed Features & Bugfixes)
 --------------------------------------------------------------------------------
-1. 【修复】高并发与 Speedtest 测速短连接流量严重少算缺陷 (Speedtest Traffic Accounting):
+1. 【修复】Alpine Linux 节点上 sing-box 进程被高频杀掉重启导致节点断连/测速间歇性超时 (BusyBox pgrep -x 误判自愈死循环):
+   - 解决问题: 在 HKL 服务器 (Alpine Linux v3.23) 等 NAT/普通节点上，用户使用 NekoBox 导入面板创建的节点测试延时或连接时，经常出现有时候通、有时候超时丢包的现象；而直接使用一键脚本安装的节点却稳定连接。
+   - 根本原因排查:
+     1) 深入排查 HKL (`193.142.18.208`) 的系统日志 `/var/log/messages`，发现 `supervise-daemon` 记录了高频的 `sing-box terminated by signal 9` (SIGKILL)，平均每 5 秒被强制杀掉重启一次！
+     2) 定位到 `komari-pro-node-sync.sh` 中的健康巡检自愈逻辑 (AutoHeal):
+        原代码使用 `pgrep -x sing-box` 检测进程是否存在；
+     3) 严重兼容性问题: Alpine Linux 默认搭载 BusyBox 工具链，其内置的 `pgrep -x` 对进程名称匹配存在缺陷（无论进程是否存活均恒定返回 exit code 1）；
+     4) 结果导致 `komari-pro-node-sync.sh` 在每个巡检周期（每 5 秒）都误认为 sing-box 崩溃了，从而疯狂执行 `restart_sing_box` (`killall -9 sing-box && rc-service sing-box restart`)；
+     5) 当客户端发起 ping/延时测速时，若请求刚好落在进程被 kill 重启的 1~2 秒窗口期内即发生超时丢包，若落在重启后的 2~3 秒内则响应正常，直接导致“抽风式”不稳定；同理 `pgrep -x realm` 亦存在相同陷阱。
+   - 修复方案与实施:
+     1) 封装跨平台通用的进程存活检测函数 `is_process_running()`:
+        `pidof "$1" >/dev/null 2>&1 || killall -0 "$1" >/dev/null 2>&1 || pgrep -x "$1" >/dev/null 2>&1`
+        经实测，`pidof` 在 Alpine BusyBox 与 Debian/Ubuntu procps 环境下均 100% 准确判定进程 PID，彻底消除误杀；
+     2) 优化 OpenRC 服务定义: 为 `sing-box`、`komari-pro-node-sync`、`realm` 的 OpenRC 启动脚本注入 `supervise_daemon_args="--respawn-max 0 --respawn-delay 5"`，防止被系统限制重试次数；
+     3) 优化 OpenRC 重启流程: 优先由 OpenRC 守护进程安全平滑重启，避免并发发送 `killall -9` 导致 supervisor 状态脱节；
+     4) 将修复同步至 `node-mgr/server.py` (包含安装脚本模板与 sync-script 热更新接口) 及 `komari-node-sync.sh`；
+     5) 在生产环境 HKL 服务器上实机部署验证，连续监控 30+ 秒 sing-box PID 始终锁定保持恒定，系统日志再无 signal 9 异常，端口 11101 与 Clash API 监听及连接持续稳定。
+
+2. 【修复】高并发与 Speedtest 测速短连接流量严重少算缺陷 (Speedtest Traffic Accounting):
    - 解决问题: 用户进行真实的 Speedtest 带宽测速或大文件下载几十/上百兆流量，后台及订阅仅显示 1MB 左右。
    - 根本原因:
      1) 节点采集脚本此前采样周期长达 6~8 秒，测速时频繁创建与断开的短切片连接在两次轮询间隙直接关闭并被丢弃；
