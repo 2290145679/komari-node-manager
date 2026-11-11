@@ -506,6 +506,31 @@
         </button>
       </div>
 
+      <!-- Subscription Profile Title Settings Card -->
+      <div class="bento-card p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-purple-100 dark:border-purple-900/30">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center text-lg shadow-sm">
+            🏷️
+          </div>
+          <div>
+            <div class="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+              <span>客户端订阅名称 (Profile-Title)</span>
+              <span class="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 font-normal">Clash / 小火箭 / Sing-box 显示标题</span>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              自定义客户端导入订阅时显示的默认名称，子用户将自动附加用户名（如：[名称] - user1）
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 w-full sm:w-auto">
+          <input type="text" id="globalSubTitleInput" placeholder="例如: Komari Pro 优质节点" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-slate-100 w-full sm:w-64 focus:outline-none focus:ring-2 focus:ring-purple-500">
+          <button onclick="saveGlobalSubTitle()" id="saveSubTitleBtn" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-sm shrink-0 flex items-center gap-1.5 btn-tap">
+            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+            <span>保存</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Users Grid -->
       <div id="usersListContainer" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5 gap-4 sm:gap-5">
         <!-- Rendered by JS -->
@@ -2934,14 +2959,47 @@
     // 3. USERS SUBSCRIPTIONS DATA
     async function loadUsers() {
       try {
-        const res = await fetch('/api/node-mgr/sub/users').then(r => r.json());
-        if (res.ok && res.users) {
-          state.users = res.users;
+        const [usersRes, titleRes] = await Promise.all([
+          fetch('/api/node-mgr/sub/users').then(r => r.json()),
+          fetch('/api/node-mgr/sub/title').then(r => r.json()).catch(() => null)
+        ]);
+        if (usersRes && usersRes.ok && usersRes.users) {
+          state.users = usersRes.users;
           renderUsersList();
-          document.getElementById('badgeUserCount').textContent = res.users.length;
+          document.getElementById('badgeUserCount').textContent = usersRes.users.length;
+        }
+        if (titleRes && titleRes.ok && titleRes.sub_title) {
+          state.subTitle = titleRes.sub_title;
+          const input = document.getElementById('globalSubTitleInput');
+          if (input) input.value = titleRes.sub_title;
         }
       } catch (e) {
         console.error('Load users error:', e);
+      }
+    }
+
+    async function saveGlobalSubTitle() {
+      const input = document.getElementById('globalSubTitleInput');
+      const title = (input?.value || '').trim();
+      if (!title) {
+        showToast('订阅名称不能为空', 'warn');
+        return;
+      }
+      try {
+        const res = await fetch('/api/node-mgr/sub/title', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sub_title: title })
+        }).then(r => r.json());
+        if (res.ok) {
+          state.subTitle = title;
+          showToast(`✅ 客户端订阅名称已成功保存为【${title}】！`, 'success');
+          loadUsers();
+        } else {
+          showToast(res.error || '保存失败', 'error');
+        }
+      } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
       }
     }
 
@@ -3034,6 +3092,11 @@
 
             <!-- Actions -->
             <div class="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-1.5 text-xs">
+              <button onclick="copyText('${escapeHtml(u.sub_url)}', '【${escapeHtml(u.name)}】专属订阅链接已复制！')" class="px-2.5 py-1.5 rounded-xl font-bold text-pink-700 bg-pink-50 dark:bg-pink-950/40 hover:bg-pink-100 transition btn-tap flex items-center justify-center gap-1" title="复制专属订阅链接">
+                <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+                <span>复制订阅</span>
+              </button>
+
               <button onclick="openEditUserModal(${u.id})" class="flex-1 py-1.5 rounded-xl font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center justify-center gap-1" title="编辑账号密码、配额与有效期">
                 <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
                 <span>编辑</span>
@@ -4943,6 +5006,44 @@
       state.nodeNameUserModified = !!val;
     }
 
+    function getRegionMeta(serverOrName, optRegion = '') {
+      let name = '';
+      let region = optRegion;
+      if (typeof serverOrName === 'object' && serverOrName !== null) {
+        name = serverOrName.name || '';
+        region = serverOrName.region || optRegion || '';
+      } else if (typeof serverOrName === 'string') {
+        name = serverOrName;
+        const matchedSrv = state.servers?.find(s => s.name === name);
+        if (matchedSrv && matchedSrv.region) region = matchedSrv.region;
+      }
+
+      const text = `${name} ${region}`.toLowerCase();
+      if (/hk|hong\s*kong|香港|广港|深港/.test(text)) return { flag: '🇭🇰', name: '香港', short: '香港' };
+      if (/jp|japan|日本|东京|大阪|软银|樱花|tokyo|osaka|biglobe|沪日/.test(text)) {
+        const isTokyo = /东京|tokyo/.test(text);
+        return { flag: '🇯🇵', name: '日本', short: isTokyo ? '东京' : '日本' };
+      }
+      if (/sg|singapore|新加坡|狮城|广新/.test(text)) return { flag: '🇸🇬', name: '新加坡', short: '狮城' };
+      if (/us|united\s*states|america|美国|美西|美东|洛杉矶|圣何塞|硅谷|凤凰城|芝加哥|纽约|达拉斯|波特兰|西雅图/.test(text)) return { flag: '🇺🇸', name: '美国', short: '美国' };
+      if (/tw|taiwan|台湾|台北|台中|彰化/.test(text)) return { flag: '🇹🇼', name: '台湾', short: '台湾' };
+      if (/kr|korea|韩国|首尔|春川|沪韩/.test(text)) return { flag: '🇰🇷', name: '韩国', short: '首尔' };
+      if (/uk|gb|britain|england|英国|伦敦/.test(text)) return { flag: '🇬🇧', name: '英国', short: '英国' };
+      if (/de|germany|德国|法兰克福|京德/.test(text)) return { flag: '🇩🇪', name: '德国', short: '德国' };
+      if (/fr|france|法国|巴黎/.test(text)) return { flag: '🇫🇷', name: '法国', short: '法国' };
+      if (/ca|canada|加拿大|多伦多|温哥华/.test(text)) return { flag: '🇨🇦', name: '加拿大', short: '加拿大' };
+      if (/au|australia|澳大利亚|澳洲|悉尼|墨尔本/.test(text)) return { flag: '🇦🇺', name: '澳大利亚', short: '澳洲' };
+      if (/ru|russia|俄罗斯|莫斯科|伯力|海参崴/.test(text)) return { flag: '🇷🇺', name: '俄罗斯', short: '俄罗斯' };
+      if (/nl|netherlands|荷兰|阿姆斯特丹/.test(text)) return { flag: '🇳🇱', name: '荷兰', short: '荷兰' };
+      if (/my|malaysia|马来|马来西亚|吉隆坡/.test(text)) return { flag: '🇲🇾', name: '马来西亚', short: '大马' };
+      if (/th|thailand|泰国|曼谷/.test(text)) return { flag: '🇹🇭', name: '泰国', short: '泰国' };
+      if (/cn|china|中国|广州|上海|北京|深圳|镇江|常州|徐州/.test(text)) return { flag: '🇨🇳', name: '中国', short: '国内' };
+      if (/甲骨文|oracle/.test(text)) return { flag: '🇸🇬', name: '新加坡', short: '狮城' };
+
+      const flag = getRegionFlag(serverOrName, optRegion);
+      return { flag: flag || '🌐', name: name || '通用', short: name || '通用' };
+    }
+
     function updateCreateNodeDefaultName() {
       const isRelay = !!document.getElementById('createNodeEnableRelay')?.checked;
       const mainUuid = document.getElementById('createNodeServerSelect')?.value;
@@ -4965,21 +5066,28 @@
         const landingUuid = document.getElementById('createNodeLandingServerSelect')?.value;
         const landingSrv = state.servers.find(s => s.uuid === landingUuid);
         const landingName = landingSrv ? landingSrv.name : '';
-        const landingFlag = getRegionFlag(landingSrv || landingName);
+        const landingMeta = getRegionMeta(landingSrv || landingName);
+        const mainMeta = getRegionMeta(mainSrv || mainName);
+
+        const relayCount = (state.nodes || []).filter(n => n.is_relay).length;
+        const seq = String(relayCount + 1).padStart(2, '0');
 
         if (mainName && landingName) {
-          autoName = `${landingFlag} ${mainName} 🛩 ${landingName}`;
+          autoName = `${landingMeta.flag} ${mainMeta.short} ➔ ${landingMeta.name} ${seq} | 隧道高速中转`;
         } else if (mainName) {
-          autoName = `${landingFlag} ${mainName} 🛩 目标落地`;
+          autoName = `${landingMeta.flag} ${mainMeta.short} ➔ 目标落地 ${seq} | 隧道高速中转`;
         } else {
-          autoName = `🛩 中转落地节点`;
+          autoName = `✈️ 中转 ➔ 目标落地 ${seq} | 隧道高速中转`;
         }
       } else {
-        const flag = getRegionFlag(mainSrv || mainName);
+        const meta = getRegionMeta(mainSrv || mainName);
+        const regionCount = (state.nodes || []).filter(n => !n.is_relay && (n.name?.includes(meta.name) || n.name?.includes(meta.flag))).length;
+        const seq = String(regionCount + 1).padStart(2, '0');
+
         if (mainName) {
-          autoName = `${flag} ${mainName} - ${protoLabel}`;
+          autoName = `${meta.flag} ${meta.name} ${seq} | ${protoLabel} 优质直连`;
         } else {
-          autoName = `🌐 自建节点 - ${protoLabel}`;
+          autoName = `🌐 自建节点 ${seq} | ${protoLabel} 优质直连`;
         }
       }
 
@@ -5611,12 +5719,12 @@
     function openClientScheme(type) {
       const defaultUser = state.users.find(u => u.name === 'default') || state.users[0];
       const subUrl = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
-      const title = encodeURIComponent('Komari Nodes');
+      const title = encodeURIComponent(state.subTitle || 'Komari Pro 优质节点');
       const encoded = encodeURIComponent(subUrl);
 
       let scheme = '';
       if (type === 'clash') scheme = `clash://install-config?url=${encoded}&name=${title}`;
-      else if (type === 'surge') scheme = `surge:///install-config?url=${encoded}`;
+      else if (type === 'surge') scheme = `surge:///install-config?url=${encoded}&name=${title}`;
       else if (type === 'shadowrocket') scheme = `shadowrocket://add/sub://${btoa(subUrl)}?title=${title}`;
       else if (type === 'stash') scheme = `stash://install-config?url=${encoded}&name=${title}`;
 

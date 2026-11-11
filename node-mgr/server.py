@@ -481,7 +481,8 @@ def init_db():
         ("target_tg", "TEXT DEFAULT 'PROXY'"),
         ("target_media", "TEXT DEFAULT 'PROXY'"),
         ("target_dev", "TEXT DEFAULT 'PROXY'"),
-        ("target_games", "TEXT DEFAULT 'DIRECT'")
+        ("target_games", "TEXT DEFAULT 'DIRECT'"),
+        ("sub_title", "TEXT DEFAULT 'Komari Pro 优质节点'")
     ]
     for col, ctype in extra_cols:
         try:
@@ -623,7 +624,8 @@ def get_subscription_rules():
             "proxy_tg": False,
             "proxy_media": False,
             "proxy_dev": False,
-            "direct_games": False
+            "direct_games": False,
+            "sub_title": "Komari Pro 优质节点"
         }
     d = dict(row)
     return {
@@ -643,7 +645,8 @@ def get_subscription_rules():
         "target_tg": d.get("target_tg") or "PROXY",
         "target_media": d.get("target_media") or "PROXY",
         "target_dev": d.get("target_dev") or "PROXY",
-        "target_games": d.get("target_games") or "DIRECT"
+        "target_games": d.get("target_games") or "DIRECT",
+        "sub_title": d.get("sub_title") or "Komari Pro 优质节点"
     }
 
 def get_rules_referencing_node(node_name):
@@ -1452,9 +1455,11 @@ def build_node_share_link(node):
         return f"vmess://{b64}"
     return ""
 
-def build_clash_meta_yaml(nodes, rules_cfg=None):
+def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
     if rules_cfg is None:
         rules_cfg = get_subscription_rules()
+    if not sub_title:
+        sub_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
 
     proxies = []
     names = []
@@ -1695,8 +1700,14 @@ def build_clash_meta_yaml(nodes, rules_cfg=None):
     rules_list.append(f"  - MATCH,{final}")
 
     rules_yaml = "\n".join(rules_list)
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    return f"""port: 7890
+    return f"""# ========================================================
+# 🚀 订阅名称: {sub_title}
+# ⏰ 更新时间: {now_str}
+# ========================================================
+
+port: 7890
 socks-port: 7891
 allow-lan: true
 mode: rule
@@ -1718,7 +1729,7 @@ rules:
 {rules_yaml}
 """
 
-def build_sing_box_client_profile(nodes, rules_cfg=None):
+def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
     if rules_cfg is None:
         rules_cfg = get_subscription_rules()
 
@@ -3891,6 +3902,11 @@ def get_user_portal_payload(token):
             "share_link": build_node_share_link(n_copy)
         })
 
+    rules_cfg = get_subscription_rules()
+    base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+    p_title = f"{base_title} - {uname}" if (uname and uname != "default") else base_title
+    frag = f"#{urllib.parse.quote(p_title)}"
+
     user_info = {
         "id": uid,
         "name": uname,
@@ -3914,9 +3930,10 @@ def get_user_portal_payload(token):
         "expire_remaining_days": days_left,
         "status": st,
         "status_text": st_text,
-        "sub_url": f"https://{DOMAIN}/sub/{tok}",
-        "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1",
-        "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1"
+        "profile_title": p_title,
+        "sub_url": f"https://{DOMAIN}/sub/{tok}{frag}",
+        "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1{frag}",
+        "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1{frag}"
     }
     return user_info, user_nodes
 
@@ -3962,6 +3979,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
         self.end_headers()
+
+    def do_HEAD(self):
+        self.do_GET()
 
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -4100,10 +4120,11 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 except Exception:
                     exp_ts = 0
 
-            extra_hdrs = {
-                "Subscription-Userinfo": f"upload=0; download={traffic_used}; total={traffic_limit}; expire={exp_ts}",
-                "Profile-Update-Interval": "60" if (is_exhausted or is_expired or is_disabled) else "7200"
-            }
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+            profile_title = f"{base_title} - {sub_name}" if (sub_name and sub_name != "default") else base_title
+            quoted_title = urllib.parse.quote(profile_title)
+            safe_ascii = re.sub(r'[^a-zA-Z0-9_\-]', '', profile_title) or "komari-sub"
 
             ua = self.headers.get("User-Agent", "").lower()
             fmt = query.get("format", [""])[0].lower() or sub_format
@@ -4113,6 +4134,14 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
             is_singbox_req = (fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or sb_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]))
             is_clash_req = (fmt in ["clash", "meta"] or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]))
+
+            ext = "json" if is_singbox_req else ("txt" if fmt == "raw" else "yaml")
+            extra_hdrs = {
+                "Subscription-Userinfo": f"upload=0; download={traffic_used}; total={traffic_limit}; expire={exp_ts}",
+                "Profile-Update-Interval": "60" if (is_exhausted or is_expired or is_disabled) else "7200",
+                "Profile-Title": quoted_title,
+                "Content-Disposition": f"attachment; filename=\"{safe_ascii}.{ext}\"; filename*=UTF-8''{quoted_title}.{ext}"
+            }
 
             # Block if exhausted, expired, or disabled
             if is_exhausted or is_expired or is_disabled:
@@ -4195,10 +4224,10 @@ rules:
             rules_cfg = get_subscription_rules()
 
             if is_singbox_req:
-                sb_profile = build_sing_box_client_profile(nodes, rules_cfg)
+                sb_profile = build_sing_box_client_profile(nodes, rules_cfg, sub_title=profile_title)
                 self._send_text(json.dumps(sb_profile, indent=2, ensure_ascii=False), 200, "application/json; charset=utf-8", extra_headers=extra_hdrs)
             elif is_clash_req:
-                yaml_data = build_clash_meta_yaml(nodes, rules_cfg)
+                yaml_data = build_clash_meta_yaml(nodes, rules_cfg, sub_title=profile_title)
                 self._send_text(yaml_data, 200, "text/yaml; charset=utf-8", extra_headers=extra_hdrs)
             elif fmt == "raw":
                 links = [build_node_share_link(n) for n in nodes if build_node_share_link(n)]
@@ -4750,6 +4779,11 @@ rules:
             self._send_json(p_data)
             return
 
+        if path in ["/api/sub/title", "/api/node-mgr/sub/title"]:
+            rules = get_subscription_rules()
+            self._send_json({"ok": True, "sub_title": rules.get("sub_title", "Komari Pro 优质节点")})
+            return
+
         if path == "/api/sub/token" or path == "/api/node-mgr/sub/token":
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
@@ -4757,7 +4791,10 @@ rules:
             row = c.fetchone()
             conn.close()
             token = row[0] if row else ""
-            self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}"})
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+            frag = f"#{urllib.parse.quote(base_title)}"
+            self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}{frag}", "profile_title": base_title})
             return
 
         # Public User Portal Info Endpoint
@@ -4786,6 +4823,8 @@ rules:
                 c.execute("SELECT id, name, token, enabled, remark, created_at, user_uuid, traffic_limit_bytes, traffic_used_bytes, expire_time FROM subscriptions ORDER BY id ASC")
             users = []
             today_str = datetime.now().strftime("%Y-%m-%d")
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
             for r in c.fetchall():
                 uid = r[0]
                 uname = r[1] or "默认用户"
@@ -4825,6 +4864,9 @@ rules:
                     st = "normal"
                     st_text = "正常使用中"
 
+                p_title = f"{base_title} - {uname}" if (uname and uname != "default") else base_title
+                frag = f"#{urllib.parse.quote(p_title)}"
+
                 users.append({
                     "id": uid,
                     "name": uname,
@@ -4850,7 +4892,8 @@ rules:
                     "is_expired": is_exp,
                     "status": st,
                     "status_text": st_text,
-                    "sub_url": f"https://{DOMAIN}/sub/{tok}",
+                    "profile_title": p_title,
+                    "sub_url": f"https://{DOMAIN}/sub/{tok}{frag}",
                     "portal_url": f"https://{DOMAIN}/user?token={tok}"
                 })
             conn.close()
@@ -5253,6 +5296,19 @@ rules:
             self._send_json({"ok": True})
             return
 
+        if path in ["/api/sub/title", "/api/node-mgr/sub/title"]:
+            title = str(body.get("sub_title") or "").strip()
+            if not title:
+                self._send_json({"ok": False, "error": "订阅标题不能为空"}, 400)
+                return
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("UPDATE subscription_rules SET sub_title = ? WHERE id = 1", (title,))
+            conn.commit()
+            conn.close()
+            self._send_json({"ok": True, "sub_title": title, "msg": f"客户端订阅名称已成功保存为：{title}"})
+            return
+
         if path in ["/api/sub/rules", "/api/node-mgr/sub/rules"]:
             direct_bt = 1 if body.get("direct_bt", True) else 0
             direct_cn = 1 if body.get("direct_cn", True) else 0
@@ -5274,6 +5330,10 @@ rules:
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
+            if "sub_title" in body:
+                st = str(body.get("sub_title") or "").strip()
+                if st:
+                    c.execute("UPDATE subscription_rules SET sub_title = ? WHERE id = 1", (st,))
             c.execute("""
                 UPDATE subscription_rules
                 SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?,
@@ -5373,8 +5433,11 @@ rules:
             conn.commit()
             conn.close()
             get_active_user_uuids(force_refresh=True)
-            new_sub_url = f"https://{DOMAIN}/sub/{new_token}"
-            self._send_json({"ok": True, "token": new_token, "user_uuid": new_uuid, "sub_url": new_sub_url})
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+            frag = f"#{urllib.parse.quote(base_title)}"
+            new_sub_url = f"https://{DOMAIN}/sub/{new_token}{frag}"
+            self._send_json({"ok": True, "token": new_token, "user_uuid": new_uuid, "sub_url": new_sub_url, "profile_title": base_title})
             return
 
         # User subscriptions management endpoints
@@ -5420,6 +5483,10 @@ rules:
             conn.commit()
             conn.close()
             get_active_user_uuids(force_refresh=True)
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+            p_title = f"{base_title} - {name}" if (name and name != "default") else base_title
+            frag = f"#{urllib.parse.quote(p_title)}"
             self._send_json({
                 "user": {
                     "id": new_id,
@@ -5434,7 +5501,8 @@ rules:
                     "traffic_limit_gb": traffic_limit_gb,
                     "traffic_used_bytes": 0,
                     "expire_time": expire_time,
-                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}",
+                    "profile_title": p_title,
+                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}{frag}",
                     "portal_url": f"https://{DOMAIN}/user?token={new_tok}"
                 },
                 "ok": True
@@ -5557,7 +5625,10 @@ rules:
             conn.commit()
             conn.close()
             get_active_user_uuids(force_refresh=True)
-            self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"https://{DOMAIN}/sub/{new_tok}"})
+            rules_cfg = get_subscription_rules()
+            base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
+            frag = f"#{urllib.parse.quote(base_title)}"
+            self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"https://{DOMAIN}/sub/{new_tok}{frag}", "profile_title": base_title})
             return
 
         if path in ["/api/sub/users/toggle", "/api/node-mgr/sub/users/toggle"]:
