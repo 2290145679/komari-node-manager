@@ -665,21 +665,37 @@
         return;
       }
       try {
+        // 1. Try user login first
         const res = await fetch('/api/node-mgr/user/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ username, password })
-        }).then(r => r.json());
+        }).then(r => r.json()).catch(() => null);
 
-        if (!res || !res.ok || !res.user) {
-          showToast(res && res.error ? res.error : '用户名或密码错误', 'error');
+        if (res && res.ok && res.user) {
+          currentUserData = res;
+          localStorage.setItem('komari_sub_token', res.token);
+          renderDashboard(res.user, res.nodes || []);
+          showToast(`欢迎回来，${res.user.name || res.user.username}！`, 'success');
           return;
         }
 
-        currentUserData = res;
-        localStorage.setItem('komari_sub_token', res.token);
-        renderDashboard(res.user, res.nodes || []);
-        showToast(`欢迎回来，${res.user.name || res.user.username}！`, 'success');
+        // 2. If user login failed, check if it's the Admin
+        const adminRes = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        }).then(r => r.json()).catch(() => null);
+
+        if (adminRes && adminRes.status !== 'error') {
+          showToast('👑 检测到管理员身份，正在跳转至管理控制台...', 'success');
+          setTimeout(() => {
+            window.location.href = '/admin/';
+          }, 500);
+          return;
+        }
+
+        showToast(res && res.error ? res.error : '用户名或密码错误', 'error');
       } catch (err) {
         showToast('登录请求失败，请检查网络或后端服务', 'error');
       }
