@@ -1919,12 +1919,12 @@
 
             <div class="grid grid-cols-2 gap-3">
               <div>
-                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转机开放端口 (客户端连接端口)</label>
-                <input type="number" id="createNodeRelayPort" placeholder="NAT机请填分配的映射端口" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
+                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转机开放端口 (客户端直连端口)</label>
+                <input type="number" id="createNodeRelayPort" placeholder="例如: 11102" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
               </div>
               <div class="flex flex-col justify-end">
                 <div class="text-[11px] text-indigo-600 dark:text-indigo-400 leading-tight">
-                  中转机上的 Realm 将自动监听该端口并转发至落地机（NAT机请填服务商分配的公网端口）。
+                  客户端直连连接该端口，由中转机 Realm 转发至落地机。
                 </div>
               </div>
             </div>
@@ -1945,15 +1945,13 @@
             <option value="vmess_ws">VMess + WebSocket</option>
           </select>
         </div>
-        <div class="grid grid-cols-2 gap-3 items-end">
-          <div>
-            <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">节点名称</label>
-            <input type="text" id="createNodeName" oninput="onNodeNameInput()" placeholder="例如: 🇯🇵 懒猫JPL - Reality" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
-          </div>
-          <div>
-            <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">服务端口</label>
-            <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
-          </div>
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">节点名称</label>
+          <input type="text" id="createNodeName" oninput="onNodeNameInput()" placeholder="例如: 🇯🇵 懒猫JPL - Reality" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+        </div>
+        <div id="createNodePortRow">
+          <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">服务端口 (Sing-box 监听端口)</label>
+          <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
         </div>
         <div>
           <div class="flex items-center justify-between mb-1">
@@ -2879,6 +2877,14 @@
           vmess_ws: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'
         };
         const badgeColor = protoBadges[n.protocol] || 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300';
+        const protoLabels = {
+          vless_reality: 'VLESS Reality',
+          hysteria2: 'Hysteria 2',
+          tuic: 'TUIC',
+          trojan: 'Trojan',
+          vmess_ws: 'VMess WS'
+        };
+        const protoText = protoLabels[n.protocol] || (n.protocol || 'CUSTOM').toUpperCase().replace('_', ' ');
 
         const lat = state.nodeLatencies[n.id] !== undefined ? state.nodeLatencies[n.id] : n.ping_ms;
         let latBadge = '';
@@ -2886,7 +2892,7 @@
           latBadge = `<span class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-semibold bg-purple-100 text-purple-700 status-pulse">测速中</span>`;
         } else if (typeof lat === 'number' && lat > 0) {
           const c = lat < 100 ? 'bg-emerald-100 text-emerald-700' : (lat < 220 ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700');
-          latBadge = `<span class="px-2.5 py-0.5 rounded-lg text-[11px] font-mono font-bold ${c}">⚡ ${lat} ms</span>`;
+          latBadge = `<span class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold ${c}">⚡ ${lat} ms</span>`;
         } else if (lat === -1) {
           latBadge = `<span class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-semibold bg-rose-100 text-rose-700">超时</span>`;
         }
@@ -2896,90 +2902,108 @@
           ? `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span>在线</span>`
           : `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-rose-500"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>离线</span>`;
 
+        // 判定该节点所对应的主机是否确实拥有 IPv6
+        const directSrv = state.servers?.find(s => s.uuid === n.server_uuid);
+        const relaySrv = n.is_relay ? state.servers?.find(s => s.uuid === n.relay_server_uuid) : null;
+        const hostSrv = n.is_relay ? (relaySrv || directSrv) : directSrv;
+        const serverHasIpv6 = !!(hostSrv && (hostSrv.ipv6 || hostSrv.ipv6_address || hostSrv.ip_v6));
+
+        // 关键路由信息：服务器、端口、中转
+        const routeInfoHtml = n.is_relay ? `
+          <div class="p-2.5 rounded-xl bg-gradient-to-r from-indigo-50/80 via-purple-50/60 to-pink-50/40 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-pink-950/10 border border-indigo-100/80 dark:border-indigo-900/40 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <span class="w-5 h-5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-xs shrink-0 font-bold">✈️</span>
+              <span class="font-bold text-slate-700 dark:text-slate-200 truncate">${escapeHtml(n.relay_server_name || '中转机')}</span>
+              <span class="font-mono text-[11px] text-indigo-600 dark:text-indigo-400 font-bold shrink-0">:${n.relay_port || n.port}</span>
+            </div>
+            <div class="flex items-center gap-1 text-slate-400 dark:text-slate-500 shrink-0 px-1 font-mono font-bold text-xs">➔</div>
+            <div class="flex items-center gap-1.5 min-w-0 justify-end">
+              <span class="w-5 h-5 rounded-md bg-pink-500/10 text-pink-600 dark:text-pink-400 flex items-center justify-center text-xs shrink-0 font-bold">🎯</span>
+              <span class="font-bold text-slate-700 dark:text-slate-200 truncate">${escapeHtml(n.server_name || '落地机')}</span>
+              <span class="font-mono text-[11px] text-pink-600 dark:text-pink-400 font-bold shrink-0">:${n.port}</span>
+            </div>
+          </div>
+        ` : `
+          <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-100 dark:border-zinc-800 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2 min-w-0">
+              <span class="w-5 h-5 rounded-md bg-slate-200/80 dark:bg-zinc-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs shrink-0">
+                <i data-lucide="server" class="w-3 h-3"></i>
+              </span>
+              <span class="font-bold text-slate-700 dark:text-slate-200 truncate">${escapeHtml(n.server_name || '自建服务器')}</span>
+            </div>
+            <div class="flex items-center gap-1.5 shrink-0 font-mono text-[11px] text-slate-600 dark:text-slate-300 bg-white dark:bg-zinc-800 px-2 py-0.5 rounded-lg border border-slate-200/60 dark:border-zinc-700">
+              <span class="text-slate-400 font-sans text-[10px]">端口:</span>
+              <span class="font-bold text-purple-600 dark:text-purple-400">${n.port || '-'}</span>
+              <span class="text-slate-300 dark:text-zinc-600">·</span>
+              <span class="truncate max-w-[130px] sm:max-w-none text-slate-500">${n.server_ip || '127.0.0.1'}</span>
+            </div>
+          </div>
+        `;
+
         return `
-          <div class="bento-card p-4 sm:p-5 flex flex-col space-y-3 border-slate-100 dark:border-zinc-800/80 hover:border-purple-200 dark:hover:border-purple-900/40 transition-all">
+          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3 relative overflow-hidden transition-all duration-200 border-slate-100 dark:border-zinc-800/80 hover:border-purple-200 dark:hover:border-purple-900/40">
             <!-- Row 1: Header (Protocol, Name, Latency, Status) -->
             <div class="flex items-start justify-between gap-2">
-              <div class="flex items-center gap-2 flex-wrap min-w-0">
-                <span class="inline-flex items-center px-2.5 py-1 rounded-xl text-[10px] font-black uppercase tracking-wider ${badgeColor}">
-                  ${n.protocol.replace('_', ' ')}
-                </span>
-                <h3 class="font-black text-xs sm:text-sm text-slate-800 dark:text-slate-100 break-words">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5 flex-wrap mb-1">
+                  <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${badgeColor} shrink-0">
+                    ${protoText}
+                  </span>
+                  ${n.is_relay ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 shrink-0">中转</span>' : '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-500 shrink-0">直连</span>'}
+                  ${n.name.includes('[IPv6]') ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0">IPv6</span>' : ''}
+                  ${n.is_external ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 shrink-0">外部</span>' : ''}
+                </div>
+                <h3 class="font-black text-xs sm:text-sm text-slate-800 dark:text-slate-100 break-words leading-snug">
                   ${escapeHtml(n.name)}
                 </h3>
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="flex items-center gap-1.5 shrink-0 pt-0.5">
                 ${latBadge}
                 ${statusDot}
               </div>
             </div>
 
-            <!-- Row 2: Metadata Info Pills (Server, IP:Port, SNI, IPv6) -->
-            <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-              ${n.is_relay ? `
-                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gradient-to-r from-indigo-500/10 via-purple-500/15 to-pink-500/10 border border-indigo-200/80 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-semibold">
-                  <i data-lucide="plane-takeoff" class="w-3.5 h-3.5 text-indigo-500 shrink-0"></i>
-                  <span>中转: ${escapeHtml(n.relay_server_name || '线路机')} (${n.relay_server_ip || '-'}:${n.relay_port || n.port}) ➔ 落地: ${escapeHtml(n.server_name || '落地机')}</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300">Realm 中转</span>
-              ` : `
-                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-300 font-medium">
-                  <i data-lucide="server" class="w-3 h-3 text-slate-400"></i>
-                  <span>${escapeHtml(n.server_name || '自建')}</span>
-                </span>
-                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 font-mono">
-                  <i data-lucide="network" class="w-3 h-3 text-slate-400"></i>
-                  <span>${n.server_ip || '127.0.0.1'}:${n.port || '-'}</span>
-                </span>
-              `}
-              ${n.sni ? `
-                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 font-mono text-[10px]">
-                  <i data-lucide="shield" class="w-3 h-3 text-purple-400"></i>
-                  <span>${escapeHtml(n.sni)}</span>
-                </span>
-              ` : ''}
-              ${n.name.includes('[IPv6]') ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">IPv6</span>` : ''}
-              ${n.is_external ? `<span class="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">外部</span>` : ''}
-            </div>
+            <!-- Row 2: 核心关键信息展示 (服务器、端口、中转/直连拓扑) -->
+            ${routeInfoHtml}
 
-            <!-- Row 3: Actions Toolbar -->
-            <div class="pt-2 border-t border-slate-100 dark:border-zinc-800/80 flex items-center justify-between gap-2 flex-wrap">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <!-- Ping button -->
-                <button onclick="pingSingleNode(${n.id})" id="ping-btn-${n.id}" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1">
+            <!-- Row 3: 底部操作栏 (紧凑单行排布，不折行不凌乱) -->
+            <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800/70 flex items-center justify-between gap-1.5">
+              <div class="flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-x-auto no-scrollbar py-0.5">
+                <!-- 测速 -->
+                <button onclick="pingSingleNode(${n.id})" id="ping-btn-${n.id}" class="px-2.5 py-1 rounded-xl text-xs font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 dark:hover:bg-purple-900/60 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="实时测速">
                   <i data-lucide="zap" class="w-3.5 h-3.5"></i>
                   <span>测速</span>
                 </button>
 
-                <!-- Edit Node -->
-                <button onclick="openEditNodeModal(${n.id})" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-purple-700 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 transition btn-tap flex items-center gap-1">
-                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-                  <span>编辑</span>
-                </button>
-
-                <!-- Copy Link -->
-                <button onclick="copyNodeLink(${n.id})" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 transition btn-tap flex items-center gap-1">
+                <!-- 复制 -->
+                <button onclick="copyNodeLink(${n.id})" class="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="复制节点直连链接">
                   <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                   <span>复制</span>
                 </button>
 
-                <!-- Clone IPv6 -->
-                ${(!n.is_external && !n.name.includes('[IPv6]')) ? `
-                  <button onclick="cloneIpv6Node(${n.id})" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-blue-700 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap flex items-center gap-1">
+                <!-- 编辑 -->
+                <button onclick="openEditNodeModal(${n.id})" class="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="编辑节点参数">
+                  <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+                  <span>编辑</span>
+                </button>
+
+                <!-- 克隆 IPv6 (仅当对应服务器真的有 IPv6 时才渲染，绝不占用无 IPv6 机器的空间) -->
+                ${(!n.is_external && !n.name.includes('[IPv6]') && serverHasIpv6) ? `
+                  <button onclick="cloneIpv6Node(${n.id})" class="px-2 py-1 rounded-xl text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="克隆该节点的 IPv6 入口">
                     <i data-lucide="globe" class="w-3.5 h-3.5"></i>
-                    <span>克隆 IPv6</span>
+                    <span>IPv6</span>
                   </button>
                 ` : ''}
               </div>
 
-              <div class="flex items-center gap-1.5">
-                <!-- Enabled Toggle -->
-                <button onclick="toggleNodeEnabled(${n.id}, ${n.enabled ? 'false' : 'true'})" class="px-2.5 py-1.5 rounded-xl text-xs font-semibold ${n.enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-200 text-slate-500'} btn-tap">
+              <div class="flex items-center gap-1 shrink-0 pl-1">
+                <!-- 启用/停用轻量切换 -->
+                <button onclick="toggleNodeEnabled(${n.id}, ${n.enabled ? 'false' : 'true'})" class="px-2 py-1 rounded-lg text-xs font-bold transition btn-tap whitespace-nowrap ${n.enabled ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40' : 'bg-slate-100 text-slate-400 dark:bg-zinc-800 dark:text-zinc-500'}" title="点击切换状态">
                   ${n.enabled ? '已启用' : '已停用'}
                 </button>
 
-                <!-- Delete -->
-                <button onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')" class="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition btn-tap" title="删除节点">
+                <!-- 删除 -->
+                <button onclick="deleteNode(${n.id}, '${escapeHtml(n.name)}')" class="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition btn-tap shrink-0" title="删除节点">
                   <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
               </div>
@@ -5392,7 +5416,7 @@
       }
       const portLabel = document.getElementById('createNodePortLabel');
       if (portLabel) {
-        portLabel.textContent = enabled ? '落地机端口' : '服务端口';
+        portLabel.textContent = enabled ? '落地机端口 (Sing-box 监听端口)' : '服务端口 (Sing-box 监听端口)';
       }
       populateServerSelectForNode();
       updateCreateNodeDefaultName();
