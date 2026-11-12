@@ -1113,12 +1113,39 @@ def parse_proxy_link(link):
 
 
 _stats_cache = {"ts": 0, "data": None}
+_basic_servers_cache = {"ts": 0, "data": []}
 _node_latency_cache = {}
+
+def get_servers_basic():
+    """
+    Ultra-lightweight query for server auth and token mapping from KOMARI_DB (clients table).
+    Cached in memory for 5 seconds to eliminate SQLite overhead on high-frequency agent requests.
+    Zero ThreadPool, zero metrics.db queries, near 0ms execution time.
+    """
+    global _basic_servers_cache
+    now = time.time()
+    if _basic_servers_cache["data"] and (now - _basic_servers_cache["ts"] < 5.0):
+        return _basic_servers_cache["data"]
+
+    if not os.path.exists(KOMARI_DB):
+        return []
+    try:
+        conn = sqlite3.connect(KOMARI_DB)
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute("SELECT uuid, token, name, ipv4, ipv6 FROM clients")
+        rows = [dict(r) for r in c.fetchall()]
+        conn.close()
+        _basic_servers_cache["ts"] = now
+        _basic_servers_cache["data"] = rows
+        return rows
+    except Exception:
+        return _basic_servers_cache.get("data") or []
 
 def get_cached_servers_with_stats():
     global _stats_cache
     now = time.time()
-    if _stats_cache["data"] and (now - _stats_cache["ts"]) < 1.2:
+    if _stats_cache["data"] and (now - _stats_cache["ts"]) < 3.0:
         return _stats_cache["data"]
     data = get_servers_with_stats()
     _stats_cache["ts"] = now
@@ -1404,7 +1431,10 @@ def get_servers_with_stats():
         "total_raw_traffic": total_raw_traffic
     }
 def get_servers():
-    return get_servers_with_stats().get("servers", [])
+    """
+    Fast, lightweight server metadata retrieval for agent endpoints and background tasks.
+    """
+    return get_servers_basic()
 
 def build_node_share_link(node):
     if node.get("raw_link"):
@@ -2935,8 +2965,8 @@ if deltas:
     fi
   fi
 
-  # 2. Config & Health Checks (Runs every 10 seconds or on first tick)
-  if [ $TICK -eq 1 ] || [ $((TICK % 5)) -eq 0 ]; then
+  # 2. Config & Health Checks (Runs every 30 seconds or on first tick)
+  if [ $TICK -eq 1 ] || [ $((TICK % 6)) -eq 0 ]; then
     # Ensure TLS certificate exists for Hysteria2 / TUIC / Trojan
     if [ ! -f /etc/sing-box/cert.key ] || [ ! -f /etc/sing-box/cert.pem ]; then
       if command -v openssl >/dev/null 2>&1; then
@@ -3040,8 +3070,8 @@ if deltas:
     fi
   fi
 
-  # 3. Auto-update Sync Script Check (every 60s, i.e., TICK % 30 == 0)
-  if [ $((TICK % 30)) -eq 0 ]; then
+  # 3. Auto-update Sync Script Check (every 60s, i.e., TICK % 12 == 0)
+  if [ $((TICK % 12)) -eq 0 ]; then
     NEW_SYNC=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/sync-script?token=$TOKEN" 2>/dev/null || true)
     if [ -n "$NEW_SYNC" ] && echo "$NEW_SYNC" | grep -q 'komari-pro-node-sync'; then
       SYNC_MD5=$(echo "$NEW_SYNC" | md5sum | awk '{print $1}')
@@ -3060,7 +3090,7 @@ if deltas:
     fi
   fi
 
-  sleep 2
+  sleep 5
 done
 EOF
 

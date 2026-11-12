@@ -271,8 +271,8 @@ if deltas:
     fi
   fi
 
-  # 2. Config & Health Checks (Runs every 10 seconds or on first tick)
-  if [ $TICK -eq 1 ] || [ $((TICK % 5)) -eq 0 ]; then
+  # 2. Config & Health Checks (Runs every 30 seconds or on first tick)
+  if [ $TICK -eq 1 ] || [ $((TICK % 6)) -eq 0 ]; then
     # Ensure TLS certificate exists for Hysteria2 / TUIC / Trojan
     if [ ! -f /etc/sing-box/cert.key ] || [ ! -f /etc/sing-box/cert.pem ]; then
       if command -v openssl >/dev/null 2>&1; then
@@ -363,8 +363,8 @@ if deltas:
     fi
   fi
 
-  # 3. Auto-update Sync Script Check (every 60s, i.e., TICK % 30 == 0)
-  if [ $((TICK % 30)) -eq 0 ]; then
+  # 3. Auto-update Sync Script Check (every 60s, i.e., TICK % 12 == 0)
+  if [ $((TICK % 12)) -eq 0 ]; then
     NEW_SYNC=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/sync-script?token=$TOKEN" 2>/dev/null || true)
     if [ -n "$NEW_SYNC" ] && echo "$NEW_SYNC" | grep -q 'komari-pro-node-sync'; then
       SYNC_MD5=$(echo "$NEW_SYNC" | md5sum | awk '{print $1}')
@@ -383,5 +383,5 @@ if deltas:
     fi
   fi
 
-  sleep 2
+  sleep 5
 done
