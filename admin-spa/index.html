@@ -1524,6 +1524,13 @@
             <span class="text-[10px] text-amber-600 dark:text-amber-400">WARP/NAT/多IP机器填写</span>
           </label>
           <input type="text" id="addServerCustomIp" oninput="updateAddServerCmd()" placeholder="例如: 167.254.242.31 (留空则部署时自动识别)" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 text-xs sm:text-sm focus:outline-none font-mono">
+          <div class="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+            <span>💡 若此机器此前曾被删除，输入 IP 将<b>自动解除防火墙拦截</b>。</span>
+            <button type="button" onclick="showBlockedIpsModal()" class="text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 shrink-0">
+              <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i>
+              <span>拦截管理</span>
+            </button>
+          </div>
         </div>
 
         <!-- Component Selector Checkboxes -->
@@ -1584,6 +1591,49 @@
             </button>
           </div>
           <p class="text-[11px] text-slate-400">⚡ 复制并在服务器终端运行即可全自动完成配置与心跳对接。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 防火墙安全拦截管理 -->
+  <div id="modalBlockedIps" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[85vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-5 h-5 text-rose-500"></i>
+          <span>底层防火墙安全拦截管理</span>
+        </h3>
+        <button onclick="closeModal('modalBlockedIps')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-4 flex-1">
+        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200 dark:border-zinc-700/60 text-xs text-slate-600 dark:text-slate-300 space-y-2">
+          <div class="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+            <i data-lucide="info" class="w-4 h-4 text-purple-500"></i>
+            <span>防御机制说明</span>
+          </div>
+          <p class="leading-relaxed">
+            当某台服务器被彻底删除、或废弃机器携带失效凭据死循环狂刷时，系统会在 Linux 内核防火墙（iptables）彻底拦截该 IP，避免耗费主控 CPU。
+          </p>
+          <p class="leading-relaxed text-emerald-600 dark:text-emerald-400 font-semibold">
+            ✨ 若您要再次重新接入该服务器，只需在此点击解封，或在添加服务器时输入该 IP 即可自动放行。
+          </p>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-xs font-bold text-slate-700 dark:text-slate-200">当前被拦截的 IP 列表</span>
+          <button onclick="unblockIp('all')" class="px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-xs font-bold transition flex items-center gap-1 btn-tap">
+            <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
+            <span>一键解封全部</span>
+          </button>
+        </div>
+
+        <div id="blockedIpsList" class="space-y-2">
+          <div class="p-4 text-center text-xs text-slate-400">正在查询拦截状态...</div>
         </div>
       </div>
     </div>
@@ -2096,7 +2146,7 @@
         </button>
       </div>
 
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
         <button onclick="switchTab('theme'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-fuchsia-50 dark:bg-fuchsia-950/20 text-fuchsia-600 flex flex-col items-center gap-2 btn-tap">
           <i data-lucide="palette" class="w-6 h-6"></i>
           <span class="text-xs font-bold">主题设置</span>
@@ -2116,6 +2166,10 @@
         <button onclick="switchTab('settings'); closeModal('sheetMore')" class="p-3 rounded-2xl bg-slate-100 dark:bg-zinc-800 text-slate-700 dark:text-slate-200 flex flex-col items-center gap-2 btn-tap">
           <i data-lucide="settings" class="w-6 h-6"></i>
           <span class="text-xs font-bold">系统设置</span>
+        </button>
+        <button onclick="showBlockedIpsModal(); closeModal('sheetMore')" class="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/20 text-rose-600 flex flex-col items-center gap-2 btn-tap">
+          <i data-lucide="shield-alert" class="w-6 h-6"></i>
+          <span class="text-xs font-bold">防火墙拦截</span>
         </button>
       </div>
 
@@ -2366,7 +2420,7 @@
     // Mobile swipe-down to dismiss for bottom sheets
     (function initBottomSheetSwipe() {
       document.addEventListener('DOMContentLoaded', () => {
-        const sheets = ['sheetMore', 'modalEditServer', 'modalPingTask', 'modalServerDeploy', 'modalImportThemeUrl', 'modalUploadThemeZip', 'modalAddServer', 'modalClientImport', 'modalCreateUser', 'modalCreateNode', 'modalImportNode'];
+        const sheets = ['sheetMore', 'modalEditServer', 'modalPingTask', 'modalServerDeploy', 'modalImportThemeUrl', 'modalUploadThemeZip', 'modalAddServer', 'modalBlockedIps', 'modalClientImport', 'modalCreateUser', 'modalCreateNode', 'modalImportNode'];
         sheets.forEach(id => {
           const sheet = document.getElementById(id);
           if (!sheet) return;
@@ -4136,6 +4190,65 @@
     function copyInstallCommand() {
       const text = document.getElementById('installCmdText').textContent;
       copyText(text, '一键安装命令已复制到剪贴板！');
+    }
+
+    async function showBlockedIpsModal() {
+      openModal('modalBlockedIps');
+      await refreshBlockedIpsList();
+    }
+
+    async function refreshBlockedIpsList() {
+      const listEl = document.getElementById('blockedIpsList');
+      if (!listEl) return;
+      try {
+        const res = await fetch('/api/node-mgr/security/blocked-ips');
+        const data = await res.json();
+        const ips = data.blocked_ips || [];
+        if (ips.length === 0) {
+          listEl.innerHTML = `
+            <div class="p-6 text-center rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-800/30">
+              <i data-lucide="shield-check" class="w-8 h-8 text-emerald-500 mx-auto mb-2"></i>
+              <div class="text-xs font-bold text-slate-700 dark:text-slate-200">当前无任何拦截 IP</div>
+              <div class="text-[11px] text-slate-400 mt-1">所有服务器通信畅通，底层防火墙正常运转中</div>
+            </div>`;
+        } else {
+          listEl.innerHTML = ips.map(ip => `
+            <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700">
+              <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+                <span class="text-xs font-mono font-bold text-slate-800 dark:text-slate-100">${escapeHtml(ip)}</span>
+              </div>
+              <button onclick="unblockIp('${escapeHtml(ip)}')" class="px-3 py-1 rounded-lg bg-white dark:bg-zinc-700 border border-slate-200 dark:border-zinc-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 text-xs font-bold transition flex items-center gap-1 btn-tap">
+                <i data-lucide="unlock" class="w-3 h-3"></i>
+                <span>解除拦截</span>
+              </button>
+            </div>
+          `).join('');
+        }
+        if (window.lucide) lucide.createIcons();
+      } catch (e) {
+        listEl.innerHTML = `<div class="p-3 text-center text-xs text-rose-500">加载失败: ${e.message}</div>`;
+      }
+    }
+
+    async function unblockIp(targetIp) {
+      if (targetIp === 'all' && !confirm('确认要解封当前所有被拦截的 IP 吗？')) return;
+      try {
+        const res = await fetch('/api/node-mgr/security/unblock-ip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip: targetIp })
+        });
+        const data = await res.json();
+        if (data.ok) {
+          showToast(data.message || '解封成功', 'success');
+          await refreshBlockedIpsList();
+        } else {
+          showToast(data.error || '解封失败', 'error');
+        }
+      } catch (e) {
+        showToast('请求失败: ' + e.message, 'error');
+      }
     }
 
     function setEditDeployCmdTool(tool) {

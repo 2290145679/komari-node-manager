@@ -3829,6 +3829,71 @@ def block_ip_permanently(ip_str):
     except Exception as e:
         print(f"[Security Defense] Error applying iptables for {ip}: {e}")
 
+def get_blocked_ips_list():
+    """
+    Returns list of all currently blocked IPs from the persistent file.
+    """
+    if not os.path.exists(BLOCKED_IPS_FILE):
+        return []
+    try:
+        with open(BLOCKED_IPS_FILE, "r") as f:
+            return [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+    except Exception:
+        return []
+
+def unblock_ip(ip_str):
+    """
+    Safely unblocks an IP from kernel firewall (iptables/ip6tables) and removes from persistent blocked_ips.txt.
+    Called automatically when a server is re-added, edited, or re-associated in admin panel.
+    """
+    if not ip_str:
+        return True
+    target = ip_str.strip()
+    if not target:
+        return True
+
+    # If "all", unblock all historical blocked IPs
+    if target.lower() == "all":
+        ips_to_clear = get_blocked_ips_list()
+        for one_ip in ips_to_clear:
+            unblock_ip(one_ip)
+        try:
+            if os.path.exists(BLOCKED_IPS_FILE):
+                with open(BLOCKED_IPS_FILE, "w") as f:
+                    f.write("")
+        except Exception:
+            pass
+        return True
+
+    # 1. Remove from persistent file
+    if os.path.exists(BLOCKED_IPS_FILE):
+        try:
+            with open(BLOCKED_IPS_FILE, "r") as f:
+                lines = [line.strip() for line in f if line.strip() and line.strip() != target]
+            with open(BLOCKED_IPS_FILE, "w") as f:
+                for l in lines:
+                    f.write(f"{l}\n")
+        except Exception as e:
+            print(f"[Security Defense] Error updating {BLOCKED_IPS_FILE} during unblock: {e}")
+
+    # 2. Delete iptables DROP rules (both IPv4 and IPv6, loop until all duplicate rules are removed)
+    try:
+        is_v6 = ":" in target
+        cmd = "ip6tables" if is_v6 else "iptables"
+        while True:
+            check_proc = subprocess.run(["sudo", cmd, "-C", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
+            if check_proc.returncode == 0:
+                subprocess.run(["sudo", cmd, "-D", "INPUT", "-s", target, "-j", "DROP"], capture_output=True)
+                print(f"[Security Defense] Successfully unblocked IP from firewall: {target}")
+            else:
+                break
+    except Exception as e:
+        print(f"[Security Defense] Error removing iptables rule for {target}: {e}")
+
+    with _fail_tracker_lock:
+        _token_fail_tracker.pop(target, None)
+    return True
+
 def load_blocked_ips_on_startup():
     """
     Reloads all persistent blocked IPs on service startup to guarantee firewall protection.
@@ -4455,6 +4520,10 @@ rules:
                 "active_nodes": len(nodes),
                 "offline_nodes": len(all_nodes) - len(nodes)
             })
+            return
+
+        if path in ["/api/security/blocked-ips", "/api/node-mgr/security/blocked-ips"]:
+            self._send_json({"ok": True, "blocked_ips": get_blocked_ips_list()})
             return
 
         if path == "/api/servers" or path == "/api/node-mgr/servers":
@@ -5256,6 +5325,8 @@ rules:
             custom_ip = query.get("ip", [""])[0]
             ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
             if ok:
+                if custom_ip:
+                    unblock_ip(custom_ip)
                 self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
             else:
                 self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
@@ -5304,6 +5375,8 @@ rules:
             custom_ip = str(query.get("ip", [""])[0] or body.get("ip") or "").strip()
             ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
             if ok:
+                if custom_ip:
+                    unblock_ip(custom_ip)
                 self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
             else:
                 self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
@@ -5827,9 +5900,21 @@ rules:
             self._send_json({"ok": True})
             return
 
+        if path in ["/api/security/unblock-ip", "/api/node-mgr/security/unblock-ip"]:
+            target_ip = str(body.get("ip") or query.get("ip", [""])[0] or "").strip()
+            if not target_ip:
+                self._send_json({"ok": False, "error": "missing ip"}, 400)
+                return
+            unblock_ip(target_ip)
+            self._send_json({"ok": True, "message": f"IP {target_ip} 已成功从防火墙解封并允许连接", "blocked_ips": get_blocked_ips_list()})
+            return
+
         if path in ["/api/servers/add", "/api/node-mgr/servers/add"]:
             name = str(body.get("name") or "New Server").strip()
             custom_ip = str(body.get("custom_ip") or body.get("ip") or "").strip()
+            # If this IP was previously blocked, unblock it immediately so the re-added server connects smoothly
+            if custom_ip:
+                unblock_ip(custom_ip)
             new_uuid = str(uuid.uuid4())
             new_token = secrets.token_hex(16)
             now_iso = datetime.now().isoformat()
@@ -5926,6 +6011,7 @@ rules:
                 conn_r.commit()
                 conn_r.close()
                 if "custom_ip" in body and new_cip:
+                    unblock_ip(new_cip)
                     if os.path.exists(KOMARI_DB):
                         conn_k = sqlite3.connect(KOMARI_DB)
                         c_k = conn_k.cursor()
