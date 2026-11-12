@@ -126,6 +126,16 @@ elif [ "$OS_TYPE" = "alpine" ]; then
 fi
 ok "系统依赖安装完成 (Python3 / SQLite3 / Nginx / Gzip)"
 
+# 6.5 校验并校准系统时区为 Asia/Shanghai (中国标准时间 UTC+8)
+info "正在校验并校准系统时区为 Asia/Shanghai (UTC+8)..."
+if command -v timedatectl >/dev/null 2>&1; then
+    timedatectl set-timezone Asia/Shanghai >/dev/null 2>&1 || true
+elif [ -f /usr/share/zoneinfo/Asia/Shanghai ]; then
+    ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime 2>/dev/null || true
+    echo "Asia/Shanghai" > /etc/timezone 2>/dev/null || true
+fi
+ok "系统时区已校准为 Asia/Shanghai (保证运维简报与告警时间精准)"
+
 # 7. 开启 TCP BBR 网络拥塞控制算法
 info "正在检查并开启 TCP BBR 网络加速算法..."
 enable_bbr() {

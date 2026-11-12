@@ -19,7 +19,7 @@ import io
 import zipfile
 import shutil
 import html
-from datetime import datetime
+from datetime import datetime, timezone
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 
@@ -3289,10 +3289,21 @@ def parse_iso_or_ts(val):
         return 0
     if isinstance(val, (int, float)):
         return int(val)
-    s = str(val).split(".")[0].replace("Z", "").replace("+00:00", "")
+    val_str = str(val).strip()
+    try:
+        dt = datetime.fromisoformat(val_str)
+        if dt.tzinfo is None:
+            # Naive timestamps from SQLite CURRENT_TIMESTAMP are UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        pass
+    s = val_str.split(".")[0].replace("Z", "").replace("+00:00", "")
     for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
-            return int(datetime.strptime(s, fmt).timestamp())
+            dt = datetime.strptime(s, fmt)
+            dt = dt.replace(tzinfo=timezone.utc)
+            return int(dt.timestamp())
         except Exception:
             pass
     return 0
@@ -3406,8 +3417,8 @@ def dispatch_notification(title, message, level="info", rule_key=""):
             conn_l = sqlite3.connect(NODES_DB)
             cl = conn_l.cursor()
             cl.execute("""
-                INSERT INTO notification_logs (rule_key, title, message, channel, status, error)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO notification_logs (rule_key, title, message, channel, status, error, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
             """, (rule_key, title, message, ch_name, "success" if success else "failed", err_msg))
             cl.execute("DELETE FROM notification_logs WHERE id NOT IN (SELECT id FROM notification_logs ORDER BY id DESC LIMIT 200)")
             conn_l.commit()
