@@ -2734,6 +2734,7 @@ is_process_running() {
 }
 
 TICK=0
+UNAUTH_FAIL_COUNT=0
 while true; do
   TICK=$((TICK + 1))
   if [ $TICK -ge 300 ]; then TICK=1; fi
@@ -2979,8 +2980,27 @@ if deltas:
       fi
     fi
 
-    RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
-    if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
+    HTTP_CODE=$(curl -k -s -m 10 -o /tmp/node_cfg.tmp -w "%{http_code}" "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+      UNAUTH_FAIL_COUNT=$((UNAUTH_FAIL_COUNT + 1))
+      echo "[NodeSync] Token unauthorized ($HTTP_CODE). Server might be deleted on master (attempt $UNAUTH_FAIL_COUNT/5)."
+      if [ $UNAUTH_FAIL_COUNT -ge 5 ]; then
+        echo "[NodeSync Defense] Server confirmed deleted from master! Auto-terminating service to eliminate resource usage."
+        if command -v systemctl >/dev/null 2>&1; then
+          systemctl stop komari-pro-node-sync.service >/dev/null 2>&1 &
+        elif command -v rc-service >/dev/null 2>&1; then
+          rc-service komari-pro-node-sync stop >/dev/null 2>&1 &
+        fi
+        exit 0
+      fi
+      sleep 20
+      continue
+    fi
+
+    if [ "$HTTP_CODE" = "200" ]; then
+      UNAUTH_FAIL_COUNT=0
+      RES=$(cat /tmp/node_cfg.tmp 2>/dev/null || true)
+      if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
       NEW_MD5=$(echo "$RES" | md5sum | awk '{print $1}')
       OLD_MD5=$(cat "$MD5_FILE" 2>/dev/null || true)
       if [ "$NEW_MD5" != "$OLD_MD5" ]; then
@@ -3021,6 +3041,7 @@ if deltas:
         fi
       fi
     fi
+  fi
 
     # Sync Realm port forward rules
     REALM_RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
@@ -3767,26 +3788,114 @@ def run_notification_engine():
             print("Notification Engine tick error:", e)
         time.sleep(30)
 
+BLOCKED_IPS_FILE = "/opt/komari/data/blocked_ips.txt"
+_token_fail_tracker = {}
+_fail_tracker_lock = threading.Lock()
+
+def block_ip_permanently(ip_str):
+    """
+    Blocks an abandoned/deleted server IP or rogue attacker at the kernel firewall level (iptables).
+    Saves to /opt/komari/data/blocked_ips.txt for persistent reboot recovery.
+    Zero CPU cost on future incoming packets (dropped directly at kernel level).
+    """
+    if not ip_str:
+        return
+    ip = ip_str.strip()
+    # Skip private, loopback, or self IPs
+    if ip in ["127.0.0.1", "::1", "localhost"] or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("172."):
+        return
+
+    # 1. Save to persistent file
+    try:
+        os.makedirs(os.path.dirname(BLOCKED_IPS_FILE), exist_ok=True)
+        existing = set()
+        if os.path.exists(BLOCKED_IPS_FILE):
+            with open(BLOCKED_IPS_FILE, "r") as f:
+                existing = set(line.strip() for line in f if line.strip())
+        if ip not in existing:
+            with open(BLOCKED_IPS_FILE, "a") as f:
+                f.write(f"{ip}\n")
+    except Exception as e:
+        print(f"[Security Defense] Failed to write {ip} to {BLOCKED_IPS_FILE}: {e}")
+
+    # 2. Apply iptables rule immediately (check if already in iptables first)
+    try:
+        is_v6 = ":" in ip
+        cmd = "ip6tables" if is_v6 else "iptables"
+        check_proc = subprocess.run(["sudo", cmd, "-C", "INPUT", "-s", ip, "-j", "DROP"], capture_output=True)
+        if check_proc.returncode != 0:
+            subprocess.run(["sudo", cmd, "-I", "INPUT", "1", "-s", ip, "-j", "DROP"], capture_output=True)
+            print(f"[Security Defense] Auto-blocked abandoned/rogue IP at firewall level: {ip}")
+    except Exception as e:
+        print(f"[Security Defense] Error applying iptables for {ip}: {e}")
+
+def load_blocked_ips_on_startup():
+    """
+    Reloads all persistent blocked IPs on service startup to guarantee firewall protection.
+    """
+    if not os.path.exists(BLOCKED_IPS_FILE):
+        return
+    try:
+        with open(BLOCKED_IPS_FILE, "r") as f:
+            for line in f:
+                ip = line.strip()
+                if ip and not ip.startswith("#"):
+                    try:
+                        is_v6 = ":" in ip
+                        cmd = "ip6tables" if is_v6 else "iptables"
+                        check_proc = subprocess.run(["sudo", cmd, "-C", "INPUT", "-s", ip, "-j", "DROP"], capture_output=True)
+                        if check_proc.returncode != 0:
+                            subprocess.run(["sudo", cmd, "-I", "INPUT", "1", "-s", ip, "-j", "DROP"], capture_output=True)
+                    except Exception:
+                        pass
+        print("[Security Defense] Persistent firewall blacklist rules loaded successfully.")
+    except Exception as e:
+        print(f"[Security Defense] Error loading {BLOCKED_IPS_FILE}: {e}")
+
+def record_token_failure(client_ip):
+    """
+    Dynamic 401 Rate-Limiter (Jail):
+    If any IP triggers 8 or more unauthorized/invalid token requests in 60s,
+    it is automatically identified as an uninstalled abandoned agent or brute-force attack
+    and instantly blocked at the kernel iptables level.
+    """
+    if not client_ip or client_ip in ["127.0.0.1", "::1"]:
+        return
+    now = time.time()
+    with _fail_tracker_lock:
+        fails = [t for t in _token_fail_tracker.get(client_ip, []) if now - t < 60]
+        fails.append(now)
+        _token_fail_tracker[client_ip] = fails
+        if len(fails) >= 8:
+            print(f"[Security Auto-Jail] IP {client_ip} triggered {len(fails)} unauthorized requests within 60s! Auto-blocking at firewall...")
+            block_ip_permanently(client_ip)
+            _token_fail_tracker.pop(client_ip, None)
+
 def delete_server_fully(server_uuid):
     """
     Completely and cleanly deletes a server and its associated resources:
-    1. Removes all child records in KOMARI_DB (offline_notifications, task_results)
-    2. Removes the server from KOMARI_DB clients table
-    3. Cleans up ping_tasks client lists
-    4. Deletes associated nodes, baselines, and realm configs from NODES_DB
-    5. Cleans up agent/realm heartbeats
-    6. Re-routes any routing rules referencing the deleted nodes to PROXY
+    1. Collects all known IPs of the server (ipv4, ipv6, custom_ip) and auto-blocks them at firewall
+    2. Removes all child records in KOMARI_DB (offline_notifications, task_results)
+    3. Removes the server from KOMARI_DB clients table
+    4. Cleans up ping_tasks client lists
+    5. Deletes associated nodes, baselines, and realm configs from NODES_DB
+    6. Cleans up agent/realm heartbeats
+    7. Re-routes any routing rules referencing the deleted nodes to PROXY
     """
     server_token = ""
-    # 1. Fetch server token & delete from KOMARI_DB
+    candidate_ips = set()
+
+    # 1. Fetch server token & IPs, then delete from KOMARI_DB
     if os.path.exists(KOMARI_DB):
         try:
             conn_k = sqlite3.connect(KOMARI_DB)
             c_k = conn_k.cursor()
-            c_k.execute("SELECT token FROM clients WHERE uuid = ?", (server_uuid,))
+            c_k.execute("SELECT token, ipv4, ipv6 FROM clients WHERE uuid = ?", (server_uuid,))
             row = c_k.fetchone()
             if row:
-                server_token = row[0]
+                server_token = row[0] or ""
+                if row[1]: candidate_ips.add(row[1].strip())
+                if row[2]: candidate_ips.add(row[2].strip())
             c_k.execute("DELETE FROM offline_notifications WHERE client = ?", (server_uuid,))
             c_k.execute("DELETE FROM task_results WHERE client = ?", (server_uuid,))
             c_k.execute("DELETE FROM clients WHERE uuid = ?", (server_uuid,))
@@ -3814,6 +3923,20 @@ def delete_server_fully(server_uuid):
         try:
             conn_n = sqlite3.connect(NODES_DB)
             c_n = conn_n.cursor()
+            # Collect custom_ip from realm configs and server_ip from nodes
+            try:
+                c_n.execute("SELECT custom_ip FROM server_realm_configs WHERE uuid = ?", (server_uuid,))
+                for r in c_n.fetchall():
+                    if r[0]: candidate_ips.add(r[0].strip())
+            except Exception:
+                pass
+            try:
+                c_n.execute("SELECT server_ip FROM nodes WHERE server_uuid = ?", (server_uuid,))
+                for r in c_n.fetchall():
+                    if r[0]: candidate_ips.add(r[0].strip())
+            except Exception:
+                pass
+
             c_n.execute("SELECT name FROM nodes WHERE server_uuid = ? OR (is_relay = 1 AND relay_server_uuid = ?)", (server_uuid, server_uuid))
             deleted_names = [r[0] for r in c_n.fetchall()]
             c_n.execute("DELETE FROM nodes WHERE server_uuid = ? OR (is_relay = 1 AND relay_server_uuid = ?)", (server_uuid, server_uuid))
@@ -3839,6 +3962,13 @@ def delete_server_fully(server_uuid):
             redirect_rules_for_node(nname, "PROXY")
         except Exception:
             pass
+
+    # 4. Kernel Firewall Defense: Automatically block all IP addresses of the deleted server
+    # This completely eliminates wasted CPU cycles and rogue request storms from uninstalled agents.
+    for ip in candidate_ips:
+        block_ip_permanently(ip)
+
+    return len(deleted_names)
 
     return len(deleted_names)
 
@@ -3978,6 +4108,17 @@ def build_node_sync_script(master_url, token):
     return raw_script.replace("__MASTER_URL__", master_url).replace("__TOKEN__", token)
 
 class NodeMgrHandler(BaseHTTPRequestHandler):
+    def get_client_ip(self):
+        xff = self.headers.get("X-Forwarded-For")
+        if xff:
+            return xff.split(",")[0].strip()
+        xri = self.headers.get("X-Real-IP")
+        if xri:
+            return xri.strip()
+        if self.client_address and len(self.client_address) > 0:
+            return str(self.client_address[0])
+        return ""
+
     def _send_json(self, data, status=200, extra_headers=None):
         try:
             self.send_response(status)
@@ -5138,6 +5279,7 @@ rules:
                     found = c_hb.fetchone()
                     conn_hb.close()
                     if not found:
+                        record_token_failure(self.get_client_ip())
                         self._send_text("# error: unauthorized token", 401)
                         return
                 except Exception:
@@ -5184,6 +5326,7 @@ rules:
                     found = c_hb.fetchone()
                     conn_hb.close()
                     if not found:
+                        record_token_failure(self.get_client_ip())
                         self._send_json({"error": "unauthorized token"}, 401)
                         return
                 except Exception:
@@ -6446,6 +6589,7 @@ rules:
         self._send_json({"error": "not found"}, 404)
 
 if __name__ == "__main__":
+    load_blocked_ips_on_startup()
     threading.Thread(target=run_notification_engine, daemon=True).start()
     threading.Thread(target=run_traffic_collector, daemon=True).start()
     print(f"Starting Node Manager server on 127.0.0.1:{PORT} (ThreadingHTTPServer)...")

@@ -40,6 +40,7 @@ is_process_running() {
 }
 
 TICK=0
+UNAUTH_FAIL_COUNT=0
 while true; do
   TICK=$((TICK + 1))
   if [ $TICK -ge 300 ]; then TICK=1; fi
@@ -285,8 +286,27 @@ if deltas:
       fi
     fi
 
-    RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || true)
-    if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
+    HTTP_CODE=$(curl -k -s -m 10 -o /tmp/node_cfg.tmp -w "%{http_code}" "$MASTER_URL/api/node-mgr/agent/config?token=$TOKEN" 2>/dev/null || echo "000")
+    if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "403" ]; then
+      UNAUTH_FAIL_COUNT=$((UNAUTH_FAIL_COUNT + 1))
+      echo "[NodeSync] Token unauthorized ($HTTP_CODE). Server might be deleted on master (attempt $UNAUTH_FAIL_COUNT/5)."
+      if [ $UNAUTH_FAIL_COUNT -ge 5 ]; then
+        echo "[NodeSync Defense] Server confirmed deleted from master! Auto-terminating service to eliminate resource usage."
+        if command -v systemctl >/dev/null 2>&1; then
+          systemctl stop komari-pro-node-sync.service >/dev/null 2>&1 &
+        elif command -v rc-service >/dev/null 2>&1; then
+          rc-service komari-pro-node-sync stop >/dev/null 2>&1 &
+        fi
+        exit 0
+      fi
+      sleep 20
+      continue
+    fi
+
+    if [ "$HTTP_CODE" = "200" ]; then
+      UNAUTH_FAIL_COUNT=0
+      RES=$(cat /tmp/node_cfg.tmp 2>/dev/null || true)
+      if [ -n "$RES" ] && echo "$RES" | grep -q '"inbounds"'; then
       NEW_MD5=$(echo "$RES" | md5sum | awk '{print $1}')
       OLD_MD5=$(cat "$MD5_FILE" 2>/dev/null || true)
       if [ "$NEW_MD5" != "$OLD_MD5" ]; then
@@ -327,6 +347,7 @@ if deltas:
         fi
       fi
     fi
+  fi
 
     # Sync Realm port forward rules if realm is installed
     if [ -x /usr/local/bin/realm ] || [ -f /etc/realm/config.toml ]; then
