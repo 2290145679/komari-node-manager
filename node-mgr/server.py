@@ -1320,10 +1320,10 @@ def get_servers_with_stats():
         region = row.get("region") or ""
 
         last_seen = heartbeats.get(token, 0)
-        is_online = (now - last_seen) <= 35 if last_seen > 0 else False
+        is_online = (now - last_seen) <= 75 if last_seen > 0 else False
 
         r_last_seen = realm_heartbeats.get(token, 0)
-        is_realm_online = (now - r_last_seen) <= 60 if r_last_seen > 0 else False
+        is_realm_online = (now - r_last_seen) <= 90 if r_last_seen > 0 else False
         r_conf = realm_configs.get(uuid_val, (0, '', 0))
         is_realm_configured = bool(r_conf[0]) if isinstance(r_conf, (list, tuple)) else bool(r_conf)
         custom_ip = str(r_conf[1] if isinstance(r_conf, (list, tuple)) and len(r_conf) > 1 else '').strip()
@@ -3503,27 +3503,34 @@ def check_and_notify_events():
                     )
 
         # Sing-box Core Online / Offline (rule: singbox_status)
-        sb_online = s.get("singbox_online", False)
+        cfg_sb = enabled_rules.get("singbox_status") or {}
+        sb_timeout = max(60, int(cfg_sb.get("offline_timeout", 75)))
+        s_last_seen = s.get("last_seen") or 0
+        sb_online = (now - s_last_seen) <= sb_timeout if s_last_seen > 0 else False
+        notify_sb_rec = bool(cfg_sb.get("notify_recovery", True))
+
         if host_online and s.get("singbox_installed", False) and "singbox_status" in enabled_rules:
-            cfg_sb = enabled_rules["singbox_status"] or {}
-            notify_sb_rec = bool(cfg_sb.get("notify_recovery", True))
             last_sb_st = get_state(f"sb_st:{uuid_val}")
             if not last_sb_st:
                 set_state(f"sb_st:{uuid_val}", "online" if sb_online else "offline")
             elif last_sb_st == "online" and not sb_online:
                 set_state(f"sb_st:{uuid_val}", "offline")
+                set_state(f"sb_off_time:{uuid_val}", str(now))
                 dispatch_notification(
                     title="🔴 Sing-box 核心离线告警",
-                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>异常事件</b>: 主机在线但 Sing-box 核心代理已中断连接！\n<b>排查建议</b>: 请登录节点后台或执行 <code>systemctl status sing-box</code> 查看日志排查。",
+                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>异常事件</b>: 主机在线但 Sing-box 核心代理已中断连接超过 {sb_timeout} 秒！\n<b>排查建议</b>: 请登录节点后台或执行 <code>systemctl status sing-box</code> 查看日志排查。",
                     level="danger",
                     rule_key="singbox_status"
                 )
             elif last_sb_st == "offline" and sb_online:
                 set_state(f"sb_st:{uuid_val}", "online")
                 if notify_sb_rec:
+                    off_time = int(get_state(f"sb_off_time:{uuid_val}", str(now)))
+                    dur_s = max(0, now - off_time)
+                    dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
                     dispatch_notification(
                         title="🟢 Sing-box 核心已恢复运行",
-                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。",
+                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。\n<b>本次中断时长</b>: {dur_txt}",
                         level="success",
                         rule_key="singbox_status"
                     )
