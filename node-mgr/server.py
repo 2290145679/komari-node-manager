@@ -6447,27 +6447,51 @@ rules:
             relay_server_name = str(body.get("relay_server_name") or "").strip()
             relay_server_ip = str(body.get("relay_server_ip") or "").strip()
             relay_port = int(body.get("relay_port") or port)
+            source_node_id = body.get("source_node_id")
 
-            # Inherit existing credentials if landing server already has a node on this port
-            if is_relay and server_uuid and port:
-                try:
-                    conn_land = sqlite3.connect(NODES_DB)
-                    c_land = conn_land.cursor()
-                    c_land.execute("SELECT uuid_or_passwd, public_key, private_key, short_id, sni, flow FROM nodes WHERE server_uuid = ? AND port = ? LIMIT 1", (server_uuid, port))
-                    land_row = c_land.fetchone()
-                    conn_land.close()
-                    if land_row and land_row[0] and land_row[1] and land_row[2]:
-                        u = land_row[0]
-                        pub_key = land_row[1]
-                        priv_key = land_row[2]
-                        if land_row[3]:
-                            short_id = land_row[3]
-                        if land_row[4]:
-                            sni = land_row[4]
-                        if land_row[5]:
-                            flow = land_row[5]
-                except Exception as e:
-                    print(f"Error inheriting landing credentials: {e}")
+            # Inherit existing credentials if source_node_id is provided or landing server already has a node on this port
+            if is_relay:
+                if source_node_id:
+                    try:
+                        conn_src = sqlite3.connect(NODES_DB)
+                        c_src = conn_src.cursor()
+                        c_src.execute("SELECT server_uuid, server_name, server_ip, port, protocol, uuid_or_passwd, public_key, private_key, short_id, sni, flow, ws_path FROM nodes WHERE id = ?", (source_node_id,))
+                        src_row = c_src.fetchone()
+                        conn_src.close()
+                        if src_row:
+                            if not server_uuid: server_uuid = src_row[0] or ""
+                            if not server_name: server_name = src_row[1] or ""
+                            if not server_ip: server_ip = src_row[2] or ""
+                            if not port: port = src_row[3]
+                            if src_row[4]: protocol = src_row[4]
+                            if src_row[5]: u = src_row[5]
+                            if src_row[6]: pub_key = src_row[6]
+                            if src_row[7]: priv_key = src_row[7]
+                            if src_row[8]: short_id = src_row[8]
+                            if src_row[9]: sni = src_row[9]
+                            if src_row[10]: flow = src_row[10]
+                            if src_row[11]: ws_path = src_row[11]
+                    except Exception as e:
+                        print(f"Error inheriting from source_node_id: {e}")
+                elif server_uuid and port:
+                    try:
+                        conn_land = sqlite3.connect(NODES_DB)
+                        c_land = conn_land.cursor()
+                        c_land.execute("SELECT uuid_or_passwd, public_key, private_key, short_id, sni, flow FROM nodes WHERE server_uuid = ? AND port = ? LIMIT 1", (server_uuid, port))
+                        land_row = c_land.fetchone()
+                        conn_land.close()
+                        if land_row and land_row[0] and land_row[1] and land_row[2]:
+                            u = land_row[0]
+                            pub_key = land_row[1]
+                            priv_key = land_row[2]
+                            if land_row[3]:
+                                short_id = land_row[3]
+                            if land_row[4]:
+                                sni = land_row[4]
+                            if land_row[5]:
+                                flow = land_row[5]
+                    except Exception as e:
+                        print(f"Error inheriting landing credentials: {e}")
 
             if protocol == "vless_reality" and (not pub_key or not priv_key):
                 priv, pub = get_reality_keypair()

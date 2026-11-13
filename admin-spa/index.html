@@ -1900,12 +1900,15 @@
     </div>
   </div>
 
-  <!-- Modal D: 创建自建节点 -->
+  <!-- Modal D: 创建自建落地节点 -->
   <div id="modalCreateNode" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
     <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[88vh] flex flex-col">
       <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
       <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
-        <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">🌐 创建自建 Sing-box 节点</h3>
+        <div>
+          <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">🌐 创建自建落地节点 (Sing-box 核心)</h3>
+          <p class="text-[11px] text-slate-400">部署直连出网节点；创建后可在卡片上直接【+中转】挂载 Realm 转发</p>
+        </div>
         <button onclick="closeModal('modalCreateNode')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
           <i data-lucide="x" class="w-5 h-5"></i>
         </button>
@@ -1913,7 +1916,7 @@
 
       <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
         <div>
-          <label id="createNodeServerSelectTitle" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属服务器 (线路/入口机)</label>
+          <label id="createNodeServerSelectTitle" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">所属落地服务器 (Sing-box 运行主机)</label>
           <button type="button" id="btnPickRelayServer" onclick="openServerPicker('main')" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-purple-50/50 dark:hover:bg-purple-950/20 hover:border-purple-300 dark:hover:border-purple-700/60 transition-all flex items-center justify-between text-left group shadow-sm btn-tap">
             <div class="flex items-center gap-2.5 min-w-0">
               <div class="w-8 h-8 rounded-xl bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0">
@@ -1927,64 +1930,185 @@
           </button>
           <input type="hidden" id="createNodeServerSelect" value="">
           <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
-          <!-- Alert if no realm servers -->
-          <div id="createNodeNoRealmAlert" class="hidden mt-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs space-y-1">
-            <div class="font-bold flex items-center gap-1.5">
-              <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600"></i>
-              <span>当前暂无在线并支持 Realm 的中转线路机</span>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">协议类型</label>
+          <select id="createNodeProtocol" onchange="toggleProtocolFields()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <option value="vless_reality">VLESS + Reality (极力推荐)</option>
+            <option value="hysteria2">Hysteria 2 (UDP 高速抗阻断)</option>
+            <option value="tuic">TUIC v5 (QUIC 高性能协议)</option>
+            <option value="trojan">Trojan (标准 TLS 伪装)</option>
+            <option value="vmess_ws">VMess + WebSocket</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">节点名称</label>
+          <input type="text" id="createNodeName" oninput="onNodeNameInput()" placeholder="例如: 🇯🇵 懒猫JPL - Reality" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+        </div>
+        <div id="createNodePortRow">
+          <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">服务端口 (Sing-box 监听端口)</label>
+          <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+        </div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400">伪装域名 (SNI)</label>
+            <div class="relative">
+              <select onchange="applySniPreset(this.value, 'createNodeSni'); this.selectedIndex=0;" class="text-[11px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800/60 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-purple-100 transition-colors">
+                <option value="" disabled selected>⚡ 选择热门大厂域名...</option>
+                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org (默认推荐)</option>
+                <option value="www.microsoft.com">微软 · www.microsoft.com</option>
+                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud)</option>
+                <option value="www.apple.com">苹果 · www.apple.com</option>
+                <option value="aws.amazon.com">亚马逊 · aws.amazon.com</option>
+                <option value="dl.google.com">谷歌 · dl.google.com</option>
+                <option value="www.speedtest.net">测速网 · www.speedtest.net</option>
+                <option value="dash.cloudflare.com">Cloudflare · dash.cloudflare.com</option>
+              </select>
             </div>
-            <p class="text-[11px] text-amber-700 dark:text-amber-300 leading-relaxed">
-              选择【线路-落地方案】的前提是中转机已部署 Realm 转发服务且在线。请先在一键安装脚本中加入 <code>--with-realm</code> 参数或在服务器管理中启用。
-            </p>
+          </div>
+          <input type="text" id="createNodeSni" list="sniPresetList" placeholder="addons.mozilla.org" value="addons.mozilla.org" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          <datalist id="sniPresetList">
+            <option value="addons.mozilla.org">Mozilla 插件中心</option>
+            <option value="www.microsoft.com">微软官网</option>
+            <option value="gateway.icloud.com">Apple iCloud 网关</option>
+            <option value="www.apple.com">Apple 官网</option>
+            <option value="aws.amazon.com">亚马逊 AWS</option>
+            <option value="dl.google.com">Google 下载中心</option>
+            <option value="www.speedtest.net">Speedtest 测速网</option>
+            <option value="dash.cloudflare.com">Cloudflare 控制台</option>
+          </datalist>
+          <div class="flex flex-wrap gap-1.5 mt-2">
+            <button type="button" onclick="applySniPreset('addons.mozilla.org', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Mozilla</button>
+            <button type="button" onclick="applySniPreset('www.microsoft.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Microsoft</button>
+            <button type="button" onclick="applySniPreset('gateway.icloud.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">iCloud</button>
+            <button type="button" onclick="applySniPreset('www.apple.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Apple</button>
+            <button type="button" onclick="applySniPreset('aws.amazon.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">AWS</button>
+            <button type="button" onclick="applySniPreset('dl.google.com', 'createNodeSni')" class="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-zinc-800 hover:bg-purple-100 hover:text-purple-600 dark:hover:bg-purple-950/40 dark:hover:text-purple-300 text-slate-500 transition-colors btn-tap">Google</button>
           </div>
         </div>
 
-        <!-- Realm 中转落地配置 -->
-        <div class="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/70 via-purple-50/40 to-pink-50/30 dark:from-indigo-950/20 dark:via-purple-950/20 dark:to-pink-950/10 border border-indigo-100 dark:border-indigo-900/40 space-y-3">
+        <button onclick="submitCreateNativeNode()" class="w-full py-3 rounded-xl font-bold text-white bg-purple-600 hover:bg-purple-700 shadow-md shadow-purple-500/20 btn-tap">
+          一键生成并部署自建落地节点
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: 为落地节点添加 Realm 端口中转 -->
+  <div id="modalAddRelayToNode" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/40 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-lg bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[88vh] flex flex-col">
+      <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full mx-auto mb-3 sm:hidden"></div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center text-sm font-bold">
+            ✈️
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-slate-800 dark:text-slate-100">为落地节点添加 Realm 中转</h3>
+            <p class="text-[11px] text-slate-400">国内连接中转机享受低延迟，海外落地机解密并出口</p>
+          </div>
+        </div>
+        <button onclick="closeModal('modalAddRelayToNode')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="overflow-y-auto py-4 space-y-3.5 flex-1 text-xs">
+        <!-- 目标海外落地节点卡片 (只读展示) -->
+        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-zinc-800/60 border border-slate-200/80 dark:border-zinc-700/80 space-y-2">
           <div class="flex items-center justify-between">
-            <label for="createNodeEnableRelay" class="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" id="createNodeEnableRelay" onchange="toggleCreateNodeRelayFields()" class="w-4 h-4 rounded text-purple-600 focus:ring-purple-500 border-slate-300 dark:border-zinc-700 cursor-pointer">
-              <span class="font-bold text-slate-700 dark:text-slate-200 text-xs">✈️ 启用 Realm 端口中转落地模式 (海外出口机)</span>
-            </label>
-            <span id="createNodeRelayBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-medium">默认直连</span>
+            <span class="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <span>🎯 目标海外落地节点</span>
+            </span>
+            <span id="addRelayLandingProtoBadge" class="px-2 py-0.5 rounded-md text-[10px] font-black bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">VLESS Reality</span>
           </div>
-
-          <div id="createNodeRelayFields" class="hidden pt-2.5 border-t border-indigo-100/80 dark:border-indigo-900/30 space-y-3">
-            <div>
-              <label class="block font-semibold text-slate-700 dark:text-slate-300 mb-1">🎯 目标海外落地服务器 (Landing VPS)</label>
-              <button type="button" id="btnPickLandingServer" onclick="openServerPicker('landing')" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 hover:border-indigo-300 dark:hover:border-indigo-700/60 transition-all flex items-center justify-between text-left group shadow-sm btn-tap">
-                <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
-                    <i data-lucide="radio" class="w-4 h-4"></i>
-                  </div>
-                  <div class="min-w-0">
-                    <span id="createNodeLandingServerSelectName" class="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate block">请选择目标落地服务器</span>
-                  </div>
-                </div>
-                <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0"></i>
-              </button>
-              <input type="hidden" id="createNodeLandingServerSelect" value="">
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">负责运行 Sing-box 核心解密并出网（支持原生IP/流媒体解锁）。</p>
+          <div class="flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <h4 id="addRelayLandingNodeName" class="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">🇯🇵 日本 02 | BigLobe 家宽 [直连]</h4>
+              <div id="addRelayLandingDetail" class="text-[11px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">BigLobe · 167.254.242.31:22202</div>
             </div>
-
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转机开放端口 (客户端直连端口)</label>
-                <input type="number" id="createNodeRelayPort" placeholder="例如: 11102" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 focus:outline-none">
-              </div>
-              <div class="flex flex-col justify-end">
-                <div class="text-[11px] text-indigo-600 dark:text-indigo-400 leading-tight">
-                  客户端直连连接该端口，由中转机 Realm 转发至落地机。
-                </div>
-              </div>
-            </div>
-
-            <div class="p-2.5 rounded-xl bg-white/70 dark:bg-zinc-800/60 text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed flex items-start gap-1.5 border border-indigo-100/50 dark:border-indigo-900/20">
-              <i data-lucide="info" class="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5"></i>
-              <span><strong>转发拓扑：</strong>客户端 ➔ 入口线路机 (Realm) ➔ 海外落地机 (Sing-box) ➔ 目标互联网。国内客户端享受中转机低延迟直连，出口展现落地机纯净IP。</span>
+            <div class="px-2.5 py-1 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 text-[10px] font-bold shrink-0">
+              ✓ 核心就绪
             </div>
           </div>
         </div>
+
+        <input type="hidden" id="addRelaySourceNodeId" value="">
+        <input type="hidden" id="addRelayLandingServerUuid" value="">
+        <input type="hidden" id="addRelayLandingServerIp" value="">
+        <input type="hidden" id="addRelayLandingPort" value="">
+
+        <!-- 中转服务器选择 -->
+        <div>
+          <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">中转服务器 (国内直连入口，须安装 Realm)</label>
+          <button type="button" id="btnPickRelayServerForNode" onclick="openServerPicker('relay_for_node')" class="w-full px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/20 hover:border-indigo-300 dark:hover:border-indigo-700/60 transition-all flex items-center justify-between text-left group shadow-sm btn-tap">
+            <div class="flex items-center gap-2.5 min-w-0">
+              <div class="w-8 h-8 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                <i data-lucide="git-branch" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0">
+                <span id="addRelayServerSelectName" class="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate block">请选择中转服务器</span>
+                <span id="addRelayServerIpHint" class="text-[11px] text-slate-400 block truncate"></span>
+              </div>
+            </div>
+            <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-hover:text-indigo-500 transition-colors shrink-0"></i>
+          </button>
+          <input type="hidden" id="addRelayServerUuid" value="">
+        </div>
+
+        <!-- 中转端口与推荐 -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400">中转机开放端口 (客户端直连端口)</label>
+            <button type="button" onclick="autoSuggestRelayPort()" class="text-[10px] text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 font-semibold">
+              <i data-lucide="sparkles" class="w-3 h-3"></i>
+              <span>智能推荐端口</span>
+            </button>
+          </div>
+          <input type="number" id="addRelayPort" oninput="onAddRelayPortChange()" placeholder="例如: 11102" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono text-sm">
+          <div id="addRelayPortStatus" class="mt-1 text-[11px] text-slate-500">客户端直接连接此端口，由中转机 Realm 转发至海外落地机。</div>
+        </div>
+
+        <!-- 中转节点名称 -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="block font-semibold text-slate-600 dark:text-slate-400">中转节点展示名称</label>
+            <button type="button" onclick="resetAddRelayDefaultName()" class="text-[10px] text-slate-400 hover:text-indigo-500 transition">恢复默认</button>
+          </div>
+          <input type="text" id="addRelayNodeName" placeholder="例如: 🇯🇵 东京 ➔ 日本 02 | 家宽 [JPL中转]" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+        </div>
+
+        <!-- 拓扑实时预览卡片 -->
+        <div class="p-3 rounded-2xl bg-gradient-to-r from-indigo-50/80 via-purple-50/50 to-pink-50/40 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-pink-950/10 border border-indigo-100 dark:border-indigo-900/30 space-y-2">
+          <div class="text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+            <i data-lucide="route" class="w-3.5 h-3.5"></i>
+            <span>转发路由拓扑预览</span>
+          </div>
+          <div class="flex items-center justify-between text-xs py-1">
+            <div class="flex items-center gap-1 min-w-0">
+              <span class="px-1.5 py-0.5 rounded bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 font-bold text-slate-700 dark:text-slate-200 text-[10px]">客户端</span>
+            </div>
+            <span class="text-slate-400 font-mono text-xs">➔</span>
+            <div class="flex items-center gap-1 min-w-0 max-w-[40%]">
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold">✈️</span>
+              <span id="addRelayPreviewRelay" class="font-bold text-slate-700 dark:text-slate-200 truncate">中转机:端口</span>
+            </div>
+            <span class="text-slate-400 font-mono text-xs">➔</span>
+            <div class="flex items-center gap-1 min-w-0 max-w-[40%]">
+              <span class="text-pink-600 dark:text-pink-400 font-bold">🎯</span>
+              <span id="addRelayPreviewLanding" class="font-bold text-slate-700 dark:text-slate-200 truncate">落地机:端口</span>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="submitAddRelayNode()" class="w-full py-3 rounded-xl font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-md shadow-indigo-500/20 btn-tap flex items-center justify-center gap-2">
+          <i data-lucide="check" class="w-4 h-4"></i>
+          <span>一键生成并部署 Realm 中转节点</span>
+        </button>
+      </div>
+    </div>
+  </div>
         <div>
           <label class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">协议类型</label>
           <select id="createNodeProtocol" onchange="toggleProtocolFields()" class="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
@@ -2387,13 +2511,8 @@
       state.nodeNameUserModified = false;
       const nameInput = document.getElementById('createNodeName');
       if (nameInput) nameInput.value = '';
-      const chk = document.getElementById('createNodeEnableRelay');
-      if (chk) chk.checked = false;
-      const rPort = document.getElementById('createNodeRelayPort');
-      if (rPort) rPort.value = '';
       const sniInput = document.getElementById('createNodeSni');
       if (sniInput && !sniInput.value) sniInput.value = 'addons.mozilla.org';
-      toggleCreateNodeRelayFields();
       populateServerSelectForNode();
       updateCreateNodeDefaultName();
       openModal('modalCreateNode');
@@ -2420,7 +2539,7 @@
     // Mobile swipe-down to dismiss for bottom sheets
     (function initBottomSheetSwipe() {
       document.addEventListener('DOMContentLoaded', () => {
-        const sheets = ['sheetMore', 'modalEditServer', 'modalPingTask', 'modalServerDeploy', 'modalImportThemeUrl', 'modalUploadThemeZip', 'modalAddServer', 'modalBlockedIps', 'modalClientImport', 'modalCreateUser', 'modalCreateNode', 'modalImportNode'];
+        const sheets = ['sheetMore', 'modalEditServer', 'modalPingTask', 'modalServerDeploy', 'modalImportThemeUrl', 'modalUploadThemeZip', 'modalAddServer', 'modalBlockedIps', 'modalClientImport', 'modalCreateUser', 'modalCreateNode', 'modalImportNode', 'modalAddRelayToNode'];
         sheets.forEach(id => {
           const sheet = document.getElementById(id);
           if (!sheet) return;
@@ -3003,7 +3122,7 @@
                   <span class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${badgeColor} shrink-0">
                     ${protoText}
                   </span>
-                  ${n.is_relay ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 shrink-0">中转</span>' : '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-zinc-800 text-slate-500 shrink-0">直连</span>'}
+                  ${n.is_relay ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 shrink-0">✈️ 中转</span>' : '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 shrink-0">🎯 直连落地</span>'}
                   ${n.name.includes('[IPv6]') ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0">IPv6</span>' : ''}
                   ${n.is_external ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 shrink-0">外部</span>' : ''}
                 </div>
@@ -3028,6 +3147,14 @@
                   <i data-lucide="zap" class="w-3.5 h-3.5"></i>
                   <span>测速</span>
                 </button>
+
+                <!-- 为自建直连落地节点挂载 Realm 端口中转 -->
+                ${(!n.is_relay && !n.is_external) ? `
+                  <button onclick="openAddRelayModalForNode(${n.id})" class="px-2.5 py-1 rounded-xl text-xs font-bold text-indigo-700 dark:text-indigo-300 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="为此落地节点挂载 Realm 端口中转">
+                    <i data-lucide="shuffle" class="w-3.5 h-3.5"></i>
+                    <span>+中转</span>
+                  </button>
+                ` : ''}
 
                 <!-- 复制 -->
                 <button onclick="copyNodeLink(${n.id})" class="px-2.5 py-1 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-zinc-800 hover:bg-slate-200 transition btn-tap flex items-center gap-1 shrink-0 whitespace-nowrap" title="复制节点直连链接">
@@ -5228,7 +5355,6 @@
     }
 
     function updateCreateNodeDefaultName() {
-      const isRelay = !!document.getElementById('createNodeEnableRelay')?.checked;
       const mainUuid = document.getElementById('createNodeServerSelect')?.value;
       const mainSrv = state.servers.find(s => s.uuid === mainUuid);
       const mainName = mainSrv ? mainSrv.name : '';
@@ -5244,34 +5370,15 @@
       };
       const protoLabel = protoLabels[proto] || 'Reality';
 
+      const meta = getRegionMeta(mainSrv || mainName);
+      const regionCount = (state.nodes || []).filter(n => !n.is_relay && (n.name?.includes(meta.name) || n.name?.includes(meta.flag))).length;
+      const seq = String(regionCount + 1).padStart(2, '0');
+
       let autoName = '';
-      if (isRelay) {
-        const landingUuid = document.getElementById('createNodeLandingServerSelect')?.value;
-        const landingSrv = state.servers.find(s => s.uuid === landingUuid);
-        const landingName = landingSrv ? landingSrv.name : '';
-        const landingMeta = getRegionMeta(landingSrv || landingName);
-        const mainMeta = getRegionMeta(mainSrv || mainName);
-
-        const relayCount = (state.nodes || []).filter(n => n.is_relay).length;
-        const seq = String(relayCount + 1).padStart(2, '0');
-
-        if (mainName && landingName) {
-          autoName = `${landingMeta.flag} ${mainMeta.short} ➔ ${landingMeta.name} ${seq} | 隧道高速中转`;
-        } else if (mainName) {
-          autoName = `${landingMeta.flag} ${mainMeta.short} ➔ 目标落地 ${seq} | 隧道高速中转`;
-        } else {
-          autoName = `✈️ 中转 ➔ 目标落地 ${seq} | 隧道高速中转`;
-        }
+      if (mainName) {
+        autoName = `${meta.flag} ${meta.name} ${seq} | ${mainName} [直连]`;
       } else {
-        const meta = getRegionMeta(mainSrv || mainName);
-        const regionCount = (state.nodes || []).filter(n => !n.is_relay && (n.name?.includes(meta.name) || n.name?.includes(meta.flag))).length;
-        const seq = String(regionCount + 1).padStart(2, '0');
-
-        if (mainName) {
-          autoName = `${meta.flag} ${meta.name} ${seq} | ${protoLabel} 优质直连`;
-        } else {
-          autoName = `🌐 自建节点 ${seq} | ${protoLabel} 优质直连`;
-        }
+        autoName = `🌐 自建落地节点 ${seq} | ${protoLabel} [直连]`;
       }
 
       const nameInput = document.getElementById('createNodeName');
@@ -5292,7 +5399,6 @@
 
     function openServerPicker(target) {
       currentPickerTarget = target;
-      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
       const titleEl = document.getElementById('serverPickerTitle');
       const subTitleEl = document.getElementById('serverPickerSubtitle');
       const iconEl = document.getElementById('serverPickerIcon');
@@ -5302,26 +5408,24 @@
       let candidates = [];
       let selectedUuid = '';
 
+      if (tabsEl) {
+        tabsEl.classList.add('hidden');
+        tabsEl.classList.remove('flex');
+        tabsEl.innerHTML = '';
+      }
+
       if (target === 'main') {
-        if (tabsEl) {
-          tabsEl.classList.add('hidden');
-          tabsEl.classList.remove('flex');
-          tabsEl.innerHTML = '';
-        }
         selectedUuid = document.getElementById('createNodeServerSelect')?.value || '';
-        if (isRelay) {
-          titleEl.textContent = '选择中转线路机';
-          subTitleEl.textContent = '仅展示已在线并就绪 Realm 转发的服务器';
-          iconEl.innerHTML = '<i data-lucide="git-branch" class="w-4 h-4 text-purple-600 dark:text-purple-300"></i>';
-          candidates = state.servers.filter(srv => 
-            (srv.realm_online || srv.realm_installed || srv.has_realm) && (srv.server_online || srv.probe_online)
-          );
-        } else {
-          titleEl.textContent = '选择所属服务器';
-          subTitleEl.textContent = '仅展示 Sing-box 核心在线的服务器';
-          iconEl.innerHTML = '<i data-lucide="server" class="w-4 h-4 text-purple-600 dark:text-purple-300"></i>';
-          candidates = state.servers.filter(srv => srv.singbox_online);
-        }
+        titleEl.textContent = '选择所属落地服务器';
+        subTitleEl.textContent = '仅展示 Sing-box 核心在线的主机';
+        iconEl.innerHTML = '<i data-lucide="server" class="w-4 h-4 text-purple-600 dark:text-purple-300"></i>';
+        candidates = state.servers.filter(srv => srv.singbox_online || srv.server_online || srv.probe_online);
+      } else if (target === 'relay_for_node') {
+        selectedUuid = document.getElementById('addRelayServerUuid')?.value || '';
+        titleEl.textContent = '选择中转线路机';
+        subTitleEl.textContent = '仅展示支持 Realm 转发且在线的服务器';
+        iconEl.innerHTML = '<i data-lucide="git-branch" class="w-4 h-4 text-indigo-600 dark:text-indigo-300"></i>';
+        candidates = state.servers.filter(srv => srv.uuid !== state.addRelaySourceLandingUuid && (srv.realm_online || srv.realm_installed || srv.has_realm || srv.server_online || srv.probe_online));
       } else {
         selectedUuid = document.getElementById('createNodeLandingServerSelect')?.value || '';
         titleEl.textContent = '选择目标海外落地机';
@@ -5351,13 +5455,8 @@
             ? `已筛选已标记为落地机的服务器 (共 ${markedLanding.length} 台)`
             : `展示全部 Sing-box 在线目标服务器 (共 ${allCandidates.length} 台)`;
         } else {
-          if (tabsEl) {
-            tabsEl.classList.add('hidden');
-            tabsEl.classList.remove('flex');
-            tabsEl.innerHTML = '';
-          }
           candidates = allCandidates;
-          subTitleEl.textContent = '仅展示 Sing-box 在线的目标服务器 (可去服务器管理中设为落地机)';
+          subTitleEl.textContent = '仅展示 Sing-box 在线的目标服务器';
         }
       }
 
@@ -5375,6 +5474,9 @@
           const landingTag = srv.is_landing 
             ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-pink-100 dark:bg-pink-950/40 text-pink-700 dark:text-pink-300 border border-pink-200 dark:border-pink-800/40 shrink-0">🎯 落地机</span>` 
             : '';
+          const realmTag = (srv.realm_online || srv.realm_installed)
+            ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/40 shrink-0">✈️ Realm</span>`
+            : '';
           return `
             <div onclick="selectServerFromPicker('${srv.uuid}')" class="p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between btn-tap ${isSelected ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/40 text-purple-900 dark:text-purple-200 shadow-sm' : 'border-slate-100 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-800/60 hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-800 dark:text-slate-200'}">
               <div class="flex items-center gap-3 min-w-0">
@@ -5385,6 +5487,7 @@
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 ${landingTag}
+                ${realmTag}
                 ${isSelected 
                   ? '<div class="w-6 h-6 rounded-full bg-purple-600 text-white flex items-center justify-center shrink-0"><i data-lucide="check" class="w-3.5 h-3.5"></i></div>' 
                   : '<div class="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-zinc-600 shrink-0"></div>'}
@@ -5407,33 +5510,15 @@
         const display = document.getElementById('createNodeServerSelectName');
         if (input) input.value = uuid;
         if (display) display.textContent = srv.name;
-
-        // If relay mode, check if landing needs reset
-        const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
-        if (isRelay) {
-          const landingInput = document.getElementById('createNodeLandingServerSelect');
-          if (landingInput && landingInput.value === uuid) {
-            landingInput.value = '';
-            const landingDisplay = document.getElementById('createNodeLandingServerSelectName');
-            if (landingDisplay) landingDisplay.textContent = '请选择目标落地服务器';
-          }
-        }
         updateCreateNodeIpHint();
         updateCreateNodeDefaultName();
+      } else if (currentPickerTarget === 'relay_for_node') {
+        selectRelayServerForAddRelay(uuid);
       } else {
         const input = document.getElementById('createNodeLandingServerSelect');
         const display = document.getElementById('createNodeLandingServerSelectName');
         if (input) input.value = uuid;
         if (display) display.textContent = srv.name;
-
-        // Auto-match port if landing server already has a node
-        const landingNode = state.nodes.find(n => n.server_uuid === uuid && !n.is_relay);
-        if (landingNode && landingNode.port) {
-          const portInput = document.getElementById('createNodePort');
-          if (portInput && (!portInput.value || portInput.value == 20082)) {
-            portInput.value = landingNode.port;
-          }
-        }
         updateCreateNodeDefaultName();
       }
 
@@ -5441,79 +5526,22 @@
     }
 
     function populateServerSelectForNode() {
-      const isRelay = document.getElementById('createNodeEnableRelay')?.checked;
       const input = document.getElementById('createNodeServerSelect');
       const display = document.getElementById('createNodeServerSelectName');
-      const landingInput = document.getElementById('createNodeLandingServerSelect');
-      const landingDisplay = document.getElementById('createNodeLandingServerSelectName');
-      const noRealmAlert = document.getElementById('createNodeNoRealmAlert');
-      const titleEl = document.getElementById('createNodeServerSelectTitle');
-      const badgeEl = document.getElementById('createNodeRelayBadge');
-
       if (!input || !display) return;
 
-      if (isRelay) {
-        if (titleEl) titleEl.textContent = '✈️ 中转线路机 (入口机，须安装 Realm 转发组件)';
-        if (badgeEl) {
-          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 font-bold';
-          badgeEl.textContent = '中转落地模式';
-        }
-
-        const realmServers = state.servers.filter(srv => 
-          (srv.realm_online || srv.realm_installed || srv.has_realm) && (srv.server_online || srv.probe_online)
-        );
-        if (realmServers.length === 0) {
-          input.value = '';
-          display.textContent = '⚠️ 暂无在线的 Realm 中转机';
-          if (noRealmAlert) noRealmAlert.classList.remove('hidden');
+      const onlineServers = state.servers.filter(srv => srv.singbox_online || srv.server_online || srv.probe_online);
+      if (onlineServers.length > 0) {
+        if (!input.value || !onlineServers.some(srv => srv.uuid === input.value)) {
+          input.value = onlineServers[0].uuid;
+          display.textContent = onlineServers[0].name;
         } else {
-          if (noRealmAlert) noRealmAlert.classList.add('hidden');
-          if (!input.value || !realmServers.some(srv => srv.uuid === input.value)) {
-            input.value = realmServers[0].uuid;
-            display.textContent = realmServers[0].name;
-          } else {
-            const current = realmServers.find(srv => srv.uuid === input.value);
-            if (current) display.textContent = current.name;
-          }
-        }
-
-        const landingServers = state.servers.filter(srv => srv.singbox_online && srv.uuid !== input.value);
-        const markedLanding = landingServers.filter(srv => srv.is_landing);
-        const preferredLandingServers = markedLanding.length > 0 ? markedLanding : landingServers;
-        if (preferredLandingServers.length > 0) {
-          if (!landingInput.value || !landingServers.some(srv => srv.uuid === landingInput.value)) {
-            landingInput.value = preferredLandingServers[0].uuid;
-            if (landingDisplay) landingDisplay.textContent = preferredLandingServers[0].name;
-          } else {
-            const curLanding = landingServers.find(srv => srv.uuid === landingInput.value);
-            if (curLanding && landingDisplay) landingDisplay.textContent = curLanding.name;
-          }
-        } else {
-          landingInput.value = '';
-          if (landingDisplay) landingDisplay.textContent = '请选择目标落地服务器';
+          const cur = onlineServers.find(srv => srv.uuid === input.value);
+          if (cur) display.textContent = cur.name;
         }
       } else {
-        if (titleEl) titleEl.textContent = '所属服务器 (直连节点，在此服务器直接运行 Sing-box)';
-        if (badgeEl) {
-          badgeEl.className = 'text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-zinc-800 text-slate-500 font-medium';
-          badgeEl.textContent = '默认直连';
-        }
-        if (noRealmAlert) noRealmAlert.classList.add('hidden');
-
-        // Only servers where Sing-box is online!
-        const onlineServers = state.servers.filter(srv => srv.singbox_online);
-        if (onlineServers.length > 0) {
-          if (!input.value || !onlineServers.some(srv => srv.uuid === input.value)) {
-            input.value = onlineServers[0].uuid;
-            display.textContent = onlineServers[0].name;
-          } else {
-            const cur = onlineServers.find(srv => srv.uuid === input.value);
-            if (cur) display.textContent = cur.name;
-          }
-        } else {
-          input.value = '';
-          display.textContent = '⚠️ 暂无 Sing-box 在线的服务器';
-        }
+        input.value = '';
+        display.textContent = '⚠️ 暂无在线的服务器';
       }
 
       updateCreateNodeIpHint();
@@ -5522,18 +5550,7 @@
     }
 
     function toggleCreateNodeRelayFields() {
-      const enabled = document.getElementById('createNodeEnableRelay')?.checked;
-      const fields = document.getElementById('createNodeRelayFields');
-      if (fields) {
-        fields.classList.toggle('hidden', !enabled);
-      }
-      const portLabel = document.getElementById('createNodePortLabel');
-      if (portLabel) {
-        portLabel.textContent = enabled ? '落地机端口 (Sing-box 监听端口)' : '服务端口 (Sing-box 监听端口)';
-      }
-      populateServerSelectForNode();
-      updateCreateNodeDefaultName();
-      initLucide();
+      // Compatibility stub
     }
 
     function updateCreateNodeIpHint() {
@@ -5566,73 +5583,22 @@
       const sel = document.getElementById('createNodeServerSelect');
       const srvUuid = sel ? sel.value : '';
       const srv = state.servers.find(s => s.uuid === srvUuid);
-      const serverName = srv ? srv.name : '';
-      const serverIp = srv ? (srv.custom_ip || srv.ipv4 || srv.ipv6 || '') : '';
-
-      const isRelay = document.getElementById('createNodeEnableRelay')?.checked ? 1 : 0;
-      let finalServerUuid = srvUuid;
-      let finalServerName = serverName;
-      let finalServerIp = serverIp;
-      let relayServerUuid = '';
-      let relayServerName = '';
-      let relayServerIp = '';
-      let relayPort = 0;
-
-      if (isRelay) {
-        if (!srvUuid) {
-          showToast('请选择已安装 Realm 的中转线路机', 'warn');
-          return;
-        }
-        const srvObj = state.servers.find(s => s.uuid === srvUuid);
-        if (srvObj && !srvObj.has_realm && !srvObj.realm_installed && !srvObj.realm_online) {
-          showToast(`服务器【${srvObj.name}】未安装 Realm 转发组件，无法作为中转线路机`, 'error');
-          return;
-        }
-
-        const landingSel = document.getElementById('createNodeLandingServerSelect');
-        const landingUuid = landingSel ? landingSel.value : '';
-        const landingSrv = state.servers.find(s => s.uuid === landingUuid);
-
-        if (!landingUuid) {
-          showToast('启用中转模式时，必须选择目标海外落地机', 'warn');
-          return;
-        }
-        if (landingUuid === srvUuid) {
-          showToast('中转线路机与目标海外落地机不能是同一台服务器', 'warn');
-          return;
-        }
-
-        // Sing-box decrypts and exits on Landing VPS!
-        finalServerUuid = landingUuid;
-        finalServerName = landingSrv ? landingSrv.name : '';
-        finalServerIp = landingSrv ? (landingSrv.custom_ip || landingSrv.ipv4 || landingSrv.ipv6 || '') : '';
-
-        // Realm port forwarder runs on Relay VPS!
-        relayServerUuid = srvUuid;
-        relayServerName = serverName;
-        relayServerIp = serverIp;
-        const rPortVal = document.getElementById('createNodeRelayPort')?.value;
-        relayPort = rPortVal ? parseInt(rPortVal) : 0;
+      if (!srvUuid || !srv) {
+        showToast('请选择所属落地服务器', 'warn');
+        return;
       }
-
+      const serverName = srv.name || '';
+      const serverIp = srv.custom_ip || srv.ipv4 || srv.ipv6 || '';
       const port = parseInt(document.getElementById('createNodePort').value) || 20082;
+      const proto = document.getElementById('createNodeProtocol')?.value || 'vless_reality';
 
-      // Anti-collision check: Ensure relay port does not conflict with existing native Sing-box node or another relay node on relay server
-      if (isRelay) {
-        const effectiveRelayPort = relayPort || port;
-        const conflictNative = state.nodes.find(n => n.server_uuid === relayServerUuid && n.port === effectiveRelayPort && !n.is_relay);
-        if (conflictNative) {
-          showToast(`端口冲突！中转机【${relayServerName}】上的 Sing-box 节点【${conflictNative.name}】已占用端口 ${effectiveRelayPort}。请在【中转机开放端口】中填入不同的独立端口（如 11102 / 20082）！`, 'warn');
-          return;
-        }
-        const conflictRelay = state.nodes.find(n => n.relay_server_uuid === relayServerUuid && (n.relay_port || n.port) === effectiveRelayPort);
-        if (conflictRelay) {
-          showToast(`端口冲突！中转机【${relayServerName}】上已存在使用端口 ${effectiveRelayPort} 的中转节点【${conflictRelay.name}】。请填入不同的中转机端口！`, 'warn');
-          return;
-        }
+      // Anti-collision check on landing server
+      const conflictNative = state.nodes.find(n => n.server_uuid === srvUuid && n.port === port && !n.is_relay);
+      if (conflictNative) {
+        showToast(`端口冲突！落地机【${serverName}】上已存在使用端口 ${port} 的直连节点【${conflictNative.name}】。请更换端口！`, 'warn');
+        return;
       }
 
-      const proto = document.getElementById('createNodeProtocol')?.value || 'vless_reality';
       const protoLabels = {
         'vless_reality': 'Reality',
         'hysteria2': 'Hysteria 2',
@@ -5641,31 +5607,23 @@
         'vmess_ws': 'VMess'
       };
       const protoLabel = protoLabels[proto] || 'Reality';
-      const landingFlag = getRegionFlag(finalServerName);
-      const mainFlag = getRegionFlag(relayServerName || finalServerName);
-
-      const defaultNodeName = isRelay 
-        ? `${landingFlag} ${relayServerName || '中转'} 🛩 ${finalServerName || '落地'}`
-        : `${mainFlag} ${finalServerName || '自建'} - ${protoLabel}`;
+      const mainFlag = getRegionFlag(srv);
+      const defaultNodeName = `${mainFlag} ${serverName} - ${protoLabel} [直连]`;
 
       const nameInput = document.getElementById('createNodeName');
       const inputName = nameInput ? nameInput.value.trim() : '';
       const finalName = inputName || defaultNodeName;
 
       const payload = {
-        server_uuid: finalServerUuid,
-        server_name: finalServerName,
-        server_ip: finalServerIp,
+        server_uuid: srvUuid,
+        server_name: serverName,
+        server_ip: serverIp,
         protocol: proto,
         name: finalName,
         port: port,
         sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
         enabled: 1,
-        is_relay: isRelay,
-        relay_server_uuid: relayServerUuid,
-        relay_server_name: relayServerName,
-        relay_server_ip: relayServerIp,
-        relay_port: relayPort || port
+        is_relay: 0
       };
 
       try {
@@ -5675,7 +5633,7 @@
           body: JSON.stringify(payload)
         }).then(r => r.json());
         if (res.ok) {
-          showToast(isRelay ? '🎉 中转落地节点创建成功！Realm 转发与 Sing-box 配置已同步。' : '🎉 自建节点创建成功！核心配置已自动下发。', 'success');
+          showToast('🎉 自建落地节点创建成功！核心配置已自动下发。如需挂载中转，点击该节点卡片上的【+中转】即可。', 'success');
           closeModal('modalCreateNode');
           loadNodes();
         } else {
@@ -5683,6 +5641,249 @@
         }
       } catch(e) {
         showToast('创建失败: ' + e.message, 'error');
+      }
+    }
+
+    // ==========================================
+    // Realm 端口中转挂载功能 (Decoupled Relay Workflow)
+    // ==========================================
+    let currentAddRelayLandingNode = null;
+
+    function openAddRelayModalForNode(nodeId) {
+      const node = state.nodes.find(n => n.id === nodeId);
+      if (!node) {
+        showToast('未找到该落地节点', 'error');
+        return;
+      }
+      currentAddRelayLandingNode = node;
+      state.addRelaySourceLandingUuid = node.server_uuid;
+
+      // Populate Landing Node Card Info
+      document.getElementById('addRelaySourceNodeId').value = node.id;
+      document.getElementById('addRelayLandingServerUuid').value = node.server_uuid || '';
+      document.getElementById('addRelayLandingServerIp').value = node.server_ip || '';
+      document.getElementById('addRelayLandingPort').value = node.port || '';
+      document.getElementById('addRelayLandingNodeName').textContent = node.name || '落地节点';
+      document.getElementById('addRelayLandingDetail').textContent = `${node.server_name || '落地服务器'} · ${node.server_ip || '-'}:${node.port || '-'}`;
+      
+      const protoLabels = {
+        vless_reality: 'VLESS Reality',
+        hysteria2: 'Hysteria 2',
+        tuic: 'TUIC',
+        trojan: 'Trojan',
+        vmess_ws: 'VMess WS'
+      };
+      document.getElementById('addRelayLandingProtoBadge').textContent = protoLabels[node.protocol] || (node.protocol || 'CUSTOM').toUpperCase();
+
+      // Populate Relay Server candidates (exclude landing server)
+      const candidateRelays = state.servers.filter(srv => 
+        srv.uuid !== node.server_uuid && (srv.realm_online || srv.realm_installed || srv.has_realm || srv.server_online || srv.probe_online)
+      );
+
+      const relayUuidInput = document.getElementById('addRelayServerUuid');
+      const relayDisplayName = document.getElementById('addRelayServerSelectName');
+      const relayIpHint = document.getElementById('addRelayServerIpHint');
+
+      if (candidateRelays.length > 0) {
+        const defaultRelay = candidateRelays.find(s => s.realm_online || s.realm_installed) || candidateRelays[0];
+        relayUuidInput.value = defaultRelay.uuid;
+        relayDisplayName.textContent = `${getRegionFlag(defaultRelay)} ${defaultRelay.name}`;
+        relayIpHint.textContent = defaultRelay.custom_ip || defaultRelay.ipv4 || defaultRelay.ipv6 || '';
+      } else {
+        relayUuidInput.value = '';
+        relayDisplayName.textContent = '⚠️ 暂无可用中转服务器';
+        relayIpHint.textContent = '';
+      }
+
+      // Suggest unused port on this relay machine & default name
+      autoSuggestRelayPort();
+      resetAddRelayDefaultName();
+      updateAddRelayPreview();
+
+      openModal('modalAddRelayToNode');
+    }
+
+    function selectRelayServerForAddRelay(uuid) {
+      const srv = state.servers.find(s => s.uuid === uuid);
+      if (!srv) return;
+      document.getElementById('addRelayServerUuid').value = uuid;
+      document.getElementById('addRelayServerSelectName').textContent = `${getRegionFlag(srv)} ${srv.name}`;
+      document.getElementById('addRelayServerIpHint').textContent = srv.custom_ip || srv.ipv4 || srv.ipv6 || '';
+
+      autoSuggestRelayPort();
+      resetAddRelayDefaultName();
+      updateAddRelayPreview();
+    }
+
+    function autoSuggestRelayPort() {
+      const relayUuid = document.getElementById('addRelayServerUuid')?.value;
+      const landingPort = parseInt(document.getElementById('addRelayLandingPort')?.value) || 20082;
+      
+      // Find ports used on this relay server
+      const usedPorts = new Set();
+      state.nodes.forEach(n => {
+        if (n.server_uuid === relayUuid && !n.is_relay && n.port) usedPorts.add(n.port);
+        if (n.relay_server_uuid === relayUuid && (n.relay_port || n.port)) usedPorts.add(n.relay_port || n.port);
+      });
+
+      // Common relay ports sequence
+      const candidates = [11101, 11102, 11103, 11104, 11105, 20082, 22202, 25776, 30082, 40082];
+      let recommended = candidates.find(p => !usedPorts.has(p));
+      if (!recommended) {
+        for (let p = 11100; p < 11300; p++) {
+          if (!usedPorts.has(p)) {
+            recommended = p;
+            break;
+          }
+        }
+      }
+
+      const portInput = document.getElementById('addRelayPort');
+      if (portInput) portInput.value = recommended || 11102;
+      onAddRelayPortChange();
+    }
+
+    function onAddRelayPortChange() {
+      const relayUuid = document.getElementById('addRelayServerUuid')?.value;
+      const port = parseInt(document.getElementById('addRelayPort')?.value);
+      const statusEl = document.getElementById('addRelayPortStatus');
+      if (!statusEl) return;
+
+      if (!port || port <= 0 || port > 65535) {
+        statusEl.innerHTML = '<span class="text-rose-500 font-semibold">⚠️ 请输入有效端口范围 (1 - 65535)</span>';
+        return;
+      }
+
+      if (relayUuid) {
+        const conflictDirect = state.nodes.find(n => n.server_uuid === relayUuid && !n.is_relay && n.port === port);
+        const conflictRelay = state.nodes.find(n => n.relay_server_uuid === relayUuid && (n.relay_port || n.port) === port);
+        if (conflictDirect) {
+          statusEl.innerHTML = `<span class="text-rose-500 font-bold">⚠️ 端口冲突！中转机上的直连节点【${escapeHtml(conflictDirect.name)}】已占用端口 ${port}</span>`;
+          return;
+        }
+        if (conflictRelay) {
+          statusEl.innerHTML = `<span class="text-rose-500 font-bold">⚠️ 端口冲突！中转机上已存在使用端口 ${port} 的中转节点【${escapeHtml(conflictRelay.name)}】</span>`;
+          return;
+        }
+      }
+
+      statusEl.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400 font-semibold">✓ 端口 ${port} 在当前中转机上空闲可用</span>`;
+      updateAddRelayPreview();
+    }
+
+    function resetAddRelayDefaultName() {
+      if (!currentAddRelayLandingNode) return;
+      const relayUuid = document.getElementById('addRelayServerUuid')?.value;
+      const relaySrv = state.servers.find(s => s.uuid === relayUuid);
+      const relayName = relaySrv ? relaySrv.name : '中转';
+      const relayFlag = relaySrv ? getRegionFlag(relaySrv) : '✈️';
+      
+      const relayCity = getCityKeyword(relayName);
+      const landingCleanName = (currentAddRelayLandingNode.name || '海外落地')
+        .replace(/\[直连\]/g, '')
+        .replace(/\[自建\]/g, '')
+        .trim();
+
+      const generatedName = `${relayFlag} ${relayCity} ➔ ${landingCleanName} [${relayName}中转]`;
+      const nameInput = document.getElementById('addRelayNodeName');
+      if (nameInput) nameInput.value = generatedName;
+      updateAddRelayPreview();
+    }
+
+    function getCityKeyword(name) {
+      if (!name) return '中转';
+      if (name.includes('JPL') || name.includes('日本') || name.includes('东京')) return '东京';
+      if (name.includes('HKL') || name.includes('香港')) return '香港';
+      if (name.includes('SG') || name.includes('狮城') || name.includes('新加坡')) return '狮城';
+      if (name.includes('AWS')) return 'AWS';
+      if (name.includes('甲骨文')) return '甲骨文';
+      return name;
+    }
+
+    function updateAddRelayPreview() {
+      const relayUuid = document.getElementById('addRelayServerUuid')?.value;
+      const relaySrv = state.servers.find(s => s.uuid === relayUuid);
+      const rPort = document.getElementById('addRelayPort')?.value || '11102';
+      const lPort = document.getElementById('addRelayLandingPort')?.value || '20082';
+
+      const previewRelay = document.getElementById('addRelayPreviewRelay');
+      const previewLanding = document.getElementById('addRelayPreviewLanding');
+
+      if (previewRelay) previewRelay.textContent = `${relaySrv ? relaySrv.name : '中转机'}:${rPort}`;
+      if (previewLanding) previewLanding.textContent = `${currentAddRelayLandingNode ? currentAddRelayLandingNode.server_name : '落地机'}:${lPort}`;
+    }
+
+    async function submitAddRelayNode() {
+      if (!currentAddRelayLandingNode) {
+        showToast('未选择落地节点', 'error');
+        return;
+      }
+      const relayUuid = document.getElementById('addRelayServerUuid')?.value;
+      const relaySrv = state.servers.find(s => s.uuid === relayUuid);
+      if (!relayUuid || !relaySrv) {
+        showToast('请选择中转服务器', 'warn');
+        return;
+      }
+
+      const relayPort = parseInt(document.getElementById('addRelayPort')?.value);
+      if (!relayPort || relayPort <= 0 || relayPort > 65535) {
+        showToast('请输入有效的中转机开放端口', 'warn');
+        return;
+      }
+
+      // Conflict check
+      const conflictDirect = state.nodes.find(n => n.server_uuid === relayUuid && !n.is_relay && n.port === relayPort);
+      const conflictRelay = state.nodes.find(n => n.relay_server_uuid === relayUuid && (n.relay_port || n.port) === relayPort);
+      if (conflictDirect) {
+        showToast(`端口冲突！中转机上的直连节点【${conflictDirect.name}】已占用端口 ${relayPort}`, 'error');
+        return;
+      }
+      if (conflictRelay) {
+        showToast(`端口冲突！中转机上已存在使用端口 ${relayPort} 的中转节点【${conflictRelay.name}】`, 'error');
+        return;
+      }
+
+      const nameInput = document.getElementById('addRelayNodeName');
+      const finalName = nameInput?.value.trim() || `${getRegionFlag(relaySrv)} ${relaySrv.name} ➔ ${currentAddRelayLandingNode.name}`;
+
+      const payload = {
+        source_node_id: currentAddRelayLandingNode.id,
+        server_uuid: currentAddRelayLandingNode.server_uuid,
+        server_name: currentAddRelayLandingNode.server_name,
+        server_ip: currentAddRelayLandingNode.server_ip,
+        port: currentAddRelayLandingNode.port,
+        protocol: currentAddRelayLandingNode.protocol,
+        name: finalName,
+        sni: currentAddRelayLandingNode.sni,
+        uuid_or_passwd: currentAddRelayLandingNode.uuid_or_passwd,
+        public_key: currentAddRelayLandingNode.public_key,
+        private_key: currentAddRelayLandingNode.private_key,
+        short_id: currentAddRelayLandingNode.short_id,
+        flow: currentAddRelayLandingNode.flow,
+        enabled: 1,
+        is_relay: 1,
+        relay_server_uuid: relaySrv.uuid,
+        relay_server_name: relaySrv.name,
+        relay_server_ip: relaySrv.custom_ip || relaySrv.ipv4 || relaySrv.ipv6 || '',
+        relay_port: relayPort
+      };
+
+      try {
+        const res = await fetch('/api/node-mgr/nodes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        if (res.ok) {
+          showToast(`🎉 Realm 中转节点【${finalName}】创建成功！中转机将自动下发转发规则。`, 'success');
+          closeModal('modalAddRelayToNode');
+          loadNodes();
+        } else {
+          showToast(res.error || '创建中转节点失败', 'error');
+        }
+      } catch(e) {
+        showToast('创建中转节点失败: ' + e.message, 'error');
       }
     }
 
