@@ -2814,18 +2814,24 @@ restart_sing_box() {
 }
 
 restart_realm() {
-  if command -v systemctl >/dev/null 2>&1; then
-    systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
-  elif command -v rc-service >/dev/null 2>&1 && [ -f /etc/init.d/realm ]; then
-    rc-service realm restart >/dev/null 2>&1 || {
-      killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
-      rc-service realm zap >/dev/null 2>&1 || true
-      rc-service realm start >/dev/null 2>&1 || true
-    }
+  if [ -x /usr/local/bin/realm ]; then
+    if [ "$INIT_SYSTEM" = "openrc" ] || (command -v rc-service >/dev/null 2>&1 && ! command -v systemctl >/dev/null 2>&1); then
+      if [ -f /etc/init.d/realm ]; then
+        rc-service realm restart >/dev/null 2>&1 || {
+          killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
+          rc-service realm zap >/dev/null 2>&1 || true
+          rc-service realm start >/dev/null 2>&1 || true
+        }
+      fi
+    elif command -v systemctl >/dev/null 2>&1; then
+      if [ -f /etc/systemd/system/realm.service ]; then
+        systemctl restart realm.service >/dev/null 2>&1 || systemctl start realm.service >/dev/null 2>&1 || true
+      fi
+    fi
   fi
   if ! is_process_running realm && [ -x /usr/local/bin/realm ] && [ -f /etc/realm/config.toml ]; then
     killall -9 realm >/dev/null 2>&1 || pkill -9 -f "realm -c" >/dev/null 2>&1 || true
-    nohup /usr/local/bin/realm -c /etc/realm/config.toml >/dev/null 2>&1 &
+    (/usr/local/bin/realm -c /etc/realm/config.toml >/dev/null 2>&1 &)
   fi
 }
 
@@ -3146,23 +3152,75 @@ if deltas:
     # Sync Realm port forward rules
     REALM_RES=$(curl -k -s -m 10 "$MASTER_URL/api/node-mgr/agent/realm-config?token=$TOKEN" 2>/dev/null || true)
     if [ -n "$REALM_RES" ] && echo "$REALM_RES" | grep -q '\[network\]'; then
+      ARCH=$(uname -m)
+      case "$ARCH" in
+        x86_64|amd64) REALM_BIN="realm-x86_64"; REALM_ARCH="x86_64-unknown-linux-musl" ;;
+        aarch64|arm64) REALM_BIN="realm-aarch64"; REALM_ARCH="aarch64-unknown-linux-musl" ;;
+        *) REALM_BIN="realm-x86_64"; REALM_ARCH="x86_64-unknown-linux-musl" ;;
+      esac
+
       if [ ! -x /usr/local/bin/realm ]; then
-        ARCH=$(uname -m)
-        case "$ARCH" in
-          x86_64|amd64) REALM_ARCH="x86_64-unknown-linux-musl" ;;
-          aarch64|arm64) REALM_ARCH="aarch64-unknown-linux-musl" ;;
-          *) REALM_ARCH="x86_64-unknown-linux-musl" ;;
-        esac
-        mkdir -p /etc/realm
-        curl -fsSL "https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH}.tar.gz" -o /tmp/realm.tar.gz 2>/dev/null || \
-        wget -qO /tmp/realm.tar.gz "https://github.com/zhboner/realm/releases/latest/download/realm-${REALM_ARCH}.tar.gz" 2>/dev/null
-        tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm 2>/dev/null
-        chmod +x /usr/local/bin/realm 2>/dev/null
-        rm -f /tmp/realm.tar.gz
+        mkdir -p /etc/realm /usr/local/bin
+        # 1. Download pre-compiled binary from Master VPS mirror first
+        curl -fsSL -k -m 15 "$MASTER_URL/api/node-mgr/dl/$REALM_BIN" -o /usr/local/bin/realm 2>/dev/null || \
+        wget -qO /usr/local/bin/realm --no-check-certificate -T 15 "$MASTER_URL/api/node-mgr/dl/$REALM_BIN" 2>/dev/null || true
+
+        # 2. Fallback to GitHub release if mirror download is missing/too small
+        if [ ! -s /usr/local/bin/realm ] || [ $(wc -c < /usr/local/bin/realm 2>/dev/null || echo 0) -lt 100000 ]; then
+          curl -fsSL -k -m 20 "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" -o /tmp/realm.tar.gz 2>/dev/null || \
+          wget -qO /tmp/realm.tar.gz --no-check-certificate -T 20 "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" 2>/dev/null || true
+          if [ -s /tmp/realm.tar.gz ]; then
+            tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm 2>/dev/null || true
+            rm -f /tmp/realm.tar.gz
+          fi
+        fi
+        chmod 755 /usr/local/bin/realm 2>/dev/null || true
       fi
+
+      # Ensure service unit exists
+      if [ -x /usr/local/bin/realm ]; then
+        if [ "$INIT_SYSTEM" = "openrc" ] || (command -v rc-service >/dev/null 2>&1 && ! command -v systemctl >/dev/null 2>&1); then
+          if [ ! -f /etc/init.d/realm ]; then
+            cat << 'REOF' > /etc/init.d/realm
+#!/sbin/openrc-run
+name="Realm Forwarder"
+description="Realm Port Forwarding Service"
+command="/usr/local/bin/realm"
+command_args="-c /etc/realm/config.toml"
+pidfile="/run/realm.pid"
+supervisor=supervise-daemon
+supervise_daemon_args="--respawn-max 0 --respawn-delay 5"
+depend() { need net; after network; }
+REOF
+            chmod +x /etc/init.d/realm
+            rc-update add realm default >/dev/null 2>&1 || true
+          fi
+        elif command -v systemctl >/dev/null 2>&1; then
+          if [ ! -f /etc/systemd/system/realm.service ]; then
+            cat << 'REOF' > /etc/systemd/system/realm.service
+[Unit]
+Description=Realm Port Forwarding Service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/realm -c /etc/realm/config.toml
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+REOF
+            systemctl daemon-reload >/dev/null 2>&1 || true
+            systemctl enable realm.service >/dev/null 2>&1 || true
+          fi
+        fi
+      fi
+
       REALM_MD5=$(echo "$REALM_RES" | md5sum | awk '{print $1}')
       OLD_REALM_MD5=$(cat /etc/realm/config.md5 2>/dev/null || true)
-      if [ "$REALM_MD5" != "$OLD_REALM_MD5" ]; then
+      if [ "$REALM_MD5" != "$OLD_REALM_MD5" ] || ! is_process_running realm; then
         mkdir -p /etc/realm
         echo "$REALM_RES" > /etc/realm/config.toml
         echo "$REALM_MD5" > /etc/realm/config.md5
@@ -3170,6 +3228,8 @@ if deltas:
         for rp in $R_PORTS; do
           iptables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
           iptables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT 1 -p tcp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
+          ip6tables -I INPUT 1 -p udp --dport ${rp} -j ACCEPT >/dev/null 2>&1 || true
         done
         restart_realm
         echo "[RealmSync] Realm forwarded endpoints updated and service reloaded!"
@@ -4433,6 +4493,26 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(content_bytes)
                 return
+
+        if path.startswith("/dl/") or path.startswith("/api/node-mgr/dl/") or path.startswith("/api/dl/"):
+            fname = path.split("/dl/")[-1].strip("/")
+            fpath = os.path.join(DATA_DIR, "dl", fname)
+            if not os.path.exists(fpath):
+                fpath = os.path.join("/opt/komari/data/dl", fname)
+            if not os.path.exists(fpath):
+                fpath = os.path.join("/opt/komari-pro/data/dl", fname)
+            if os.path.exists(fpath) and os.path.isfile(fpath):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/octet-stream")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Content-Length", str(os.path.getsize(fpath)))
+                self.end_headers()
+                with open(fpath, "rb") as f:
+                    while chunk := f.read(65536):
+                        self.wfile.write(chunk)
+                return
+            self._send_text("Not Found", 404)
+            return
 
         if path in ["/install-node.sh", "/install-node-pro.sh"]:
             req_host = self.headers.get("Host", DOMAIN).split(":")[0]
@@ -6648,6 +6728,43 @@ rules:
                 except Exception as e:
                     print(f"Error resolving relay client info: {e}")
                 
+            # Strict Host Port Collision Guard (prevent direct and relay nodes from stealing each other's ports)
+            conn_port = sqlite3.connect(NODES_DB)
+            c_port = conn_port.cursor()
+            if is_relay:
+                chk_srv = relay_server_uuid
+                chk_port = relay_port or port
+                c_port.execute("""
+                    SELECT name, is_relay FROM nodes 
+                    WHERE enabled = 1 AND (
+                        (server_uuid = ? AND is_relay = 0 AND port = ?) OR
+                        (relay_server_uuid = ? AND is_relay = 1 AND (relay_port = ? OR port = ?))
+                    ) LIMIT 1
+                """, (chk_srv, chk_port, chk_srv, chk_port, chk_port))
+                conflict = c_port.fetchone()
+                if conflict:
+                    conn_port.close()
+                    node_type = "中转节点" if conflict[1] else "直连节点"
+                    self._send_json({"error": f"端口冲突！主机【{relay_server_name or '目标主机'}】上的 {node_type}【{conflict[0]}】已占用端口 {chk_port}。同一台主机上端口严禁重复占用！"}, 400)
+                    return
+            else:
+                chk_srv = server_uuid
+                chk_port = port
+                c_port.execute("""
+                    SELECT name, is_relay FROM nodes 
+                    WHERE enabled = 1 AND (
+                        (server_uuid = ? AND is_relay = 0 AND port = ?) OR
+                        (relay_server_uuid = ? AND is_relay = 1 AND (relay_port = ? OR port = ?))
+                    ) LIMIT 1
+                """, (chk_srv, chk_port, chk_srv, chk_port, chk_port))
+                conflict = c_port.fetchone()
+                if conflict:
+                    conn_port.close()
+                    node_type = "中转节点" if conflict[1] else "直连节点"
+                    self._send_json({"error": f"端口冲突！主机【{server_name or '目标主机'}】上的 {node_type}【{conflict[0]}】已占用端口 {chk_port}。同一台主机上端口严禁重复占用！"}, 400)
+                    return
+            conn_port.close()
+
             is_landing = 1 if body.get("is_landing") else 0
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()

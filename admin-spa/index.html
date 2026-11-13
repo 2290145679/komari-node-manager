@@ -6023,10 +6023,15 @@
       const port = parseInt(document.getElementById('createNodePort').value) || 20082;
       const proto = document.getElementById('createNodeProtocol')?.value || 'vless_reality';
 
-      // Anti-collision check on server
+      // Anti-collision check on server (both direct and relay nodes)
       const conflictNative = state.nodes.find(n => n.server_uuid === srvUuid && n.port === port && !n.is_relay);
       if (conflictNative) {
-        showToast(`端口冲突！主机【${serverName}】上已存在使用端口 ${port} 的节点【${conflictNative.name}】。请更换端口！`, 'warn');
+        showToast(`端口冲突！主机【${serverName}】上已存在使用端口 ${port} 的直连节点【${conflictNative.name}】。请更换端口！`, 'warn');
+        return;
+      }
+      const conflictRelay = state.nodes.find(n => n.relay_server_uuid === srvUuid && (n.relay_port || n.port) === port);
+      if (conflictRelay) {
+        showToast(`端口冲突！主机【${serverName}】上已存在使用端口 ${port} 的中转节点【${conflictRelay.name}】。同一台主机上的直连节点与中转端口不能重复！`, 'warn');
         return;
       }
 
