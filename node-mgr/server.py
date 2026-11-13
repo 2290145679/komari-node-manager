@@ -1022,6 +1022,104 @@ def ping_node_handshake(server_ip, port, protocol="", sni="", timeout=3.5):
             err_msg = "网络不可达 (IPv6路由缺失或网络阻断)"
         return {"success": False, "latency_ms": None, "error": err_msg}
 
+def check_ip_port_reachability(server_ip, port, timeout=2.0):
+    """
+    智能诊断目标服务器IP与端口连通性 (公网暴露/NAT端口映射/防火墙放行判定)
+    1. 判定 TCP 端口是否通畅，以及是否收到远程主机响应 (SYN-ACK / RST / Timeout / ICMP Reject)
+    2. 兼容 IPv4 与 IPv6 (socket.getaddrinfo)
+    """
+    if not server_ip or not port:
+        return {"ok": False, "reachable": False, "status": "invalid", "message": "缺少目标服务器 IP 或端口"}
+
+    host = str(server_ip).strip("[] \t\r\n")
+    try:
+        port = int(port)
+        if port <= 0 or port > 65535:
+            raise ValueError()
+    except Exception:
+        return {"ok": False, "reachable": False, "status": "invalid_port", "message": "端口号无效 (必须为 1 - 65535)"}
+
+    t0 = time.perf_counter()
+    sock = None
+    try:
+        infos = socket.getaddrinfo(host, port, socket.AF_UNSPEC, socket.SOCK_STREAM)
+        if not infos:
+            return {"ok": False, "reachable": False, "status": "dns_error", "message": "无法解析目标服务器 IP 地址"}
+
+        family, socktype, proto_num, canonname, sockaddr = infos[0]
+        sock = socket.socket(family, socktype, proto_num)
+        sock.settimeout(timeout)
+        sock.connect(sockaddr)
+        rtt = round((time.perf_counter() - t0) * 1000, 1)
+        sock.close()
+        return {
+            "ok": True,
+            "reachable": True,
+            "status": "listening",
+            "rtt_ms": rtt,
+            "message": f"✓ 端口完全通畅！已有服务在监听响应 (延迟: {rtt}ms)",
+            "detail": "TCP 三次握手成功 (SYN-ACK)，该端口已成功对外提供网络服务。"
+        }
+    except ConnectionRefusedError:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        rtt = round((time.perf_counter() - t0) * 1000, 1)
+        return {
+            "ok": True,
+            "reachable": True,
+            "status": "reachable_idle",
+            "rtt_ms": rtt,
+            "message": f"✓ 端口映射通畅！数据包成功到达主机 (延迟: {rtt}ms，当前空闲)",
+            "detail": "成功收到目标主机内核返回的 RST 响应，说明光猫/路由器 NAT 映射与云安全组畅通，端口空闲可分配！"
+        }
+    except socket.timeout:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        return {
+            "ok": False,
+            "reachable": False,
+            "status": "timeout_blocked",
+            "rtt_ms": None,
+            "message": "❌ 连接超时 (2秒无响应)！端口不通或未做映射",
+            "detail": "数据包被光猫/路由器 NAT 或云服务商安全组直接丢弃，请检查光猫/路由器端口转发规则或云控制台安全组入站规则。"
+        }
+    except OSError as e:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        err_msg = str(e)
+        if "No route to host" in err_msg or "113" in err_msg:
+            return {
+                "ok": False,
+                "reachable": False,
+                "status": "firewall_rejected",
+                "rtt_ms": None,
+                "message": "❌ 防火墙拒绝！主机安全组或 iptables 拦截了此端口",
+                "detail": "目标主机拒绝了该端口的入站连接 (No route to host)。请检查主机防火墙 (ufw/iptables)。"
+            }
+        return {
+            "ok": False,
+            "reachable": False,
+            "status": "error",
+            "rtt_ms": None,
+            "message": f"❌ 连接异常: {err_msg}",
+            "detail": err_msg
+        }
+    except Exception as e:
+        if sock:
+            try: sock.close()
+            except Exception: pass
+        return {
+            "ok": False,
+            "reachable": False,
+            "status": "error",
+            "rtt_ms": None,
+            "message": f"❌ 探测失败: {str(e)}",
+            "detail": str(e)
+        }
+
 def get_reality_keypair():
     try:
         res = subprocess.run(["sing-box", "generate", "reality-keypair"], capture_output=True, text=True, check=True)
@@ -5048,6 +5146,32 @@ rules:
             self._send_json(p_data)
             return
 
+        # Real-time port reachability probe endpoint
+        if path in ["/api/nodes/check-port", "/api/node-mgr/nodes/check-port"]:
+            ip = query.get("ip", [""])[0].strip()
+            port_str = query.get("port", [""])[0].strip()
+            server_uuid = query.get("server_uuid", [""])[0].strip()
+
+            if not ip and server_uuid:
+                servers = get_servers()
+                matched = next((s for s in servers if s.get("uuid") == server_uuid), None)
+                if matched:
+                    ip = matched.get("custom_ip") or matched.get("ipv4") or matched.get("ipv6") or ""
+
+            if not ip:
+                self._send_json({"ok": False, "reachable": False, "status": "no_ip", "message": "无法获取目标服务器 IP 地址"}, 400)
+                return
+
+            try:
+                port = int(port_str)
+            except Exception:
+                self._send_json({"ok": False, "reachable": False, "status": "invalid_port", "message": "端口号无效 (必须为 1 - 65535)"}, 400)
+                return
+
+            res = check_ip_port_reachability(ip, port, timeout=2.0)
+            self._send_json(res)
+            return
+
         if path in ["/api/sub/title", "/api/node-mgr/sub/title"]:
             rules = get_subscription_rules()
             self._send_json({"ok": True, "sub_title": rules.get("sub_title", "Komari Pro 优质节点")})
@@ -6539,6 +6663,32 @@ rules:
             conn.close()
 
             self._send_json({"ok": True, "id": node_id})
+            return
+
+        # Real-time port reachability probe endpoint (POST)
+        if path in ["/api/nodes/check-port", "/api/node-mgr/nodes/check-port"]:
+            ip = str(body.get("ip") or (query.get("ip", [""])[0] if isinstance(query.get("ip"), list) else "")).strip()
+            port_str = body.get("port") or (query.get("port", [""])[0] if isinstance(query.get("port"), list) else "")
+            server_uuid = str(body.get("server_uuid") or (query.get("server_uuid", [""])[0] if isinstance(query.get("server_uuid"), list) else "")).strip()
+
+            if not ip and server_uuid:
+                servers = get_servers()
+                matched = next((s for s in servers if s.get("uuid") == server_uuid), None)
+                if matched:
+                    ip = matched.get("custom_ip") or matched.get("ipv4") or matched.get("ipv6") or ""
+
+            if not ip:
+                self._send_json({"ok": False, "reachable": False, "status": "no_ip", "message": "无法获取目标服务器 IP 地址"}, 400)
+                return
+
+            try:
+                port = int(port_str)
+            except Exception:
+                self._send_json({"ok": False, "reachable": False, "status": "invalid_port", "message": "端口号无效 (必须为 1 - 65535)"}, 400)
+                return
+
+            res = check_ip_port_reachability(ip, port, timeout=2.0)
+            self._send_json(res)
             return
 
         if path in ["/api/nodes/toggle", "/api/node-mgr/nodes/toggle"] or ((path.startswith("/api/nodes/") or path.startswith("/api/node-mgr/nodes/")) and path.endswith("/toggle")):
