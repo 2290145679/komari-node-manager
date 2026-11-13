@@ -356,6 +356,8 @@ def init_db():
         c.execute("ALTER TABLE nodes ADD COLUMN relay_server_ip TEXT DEFAULT ''")
     if 'relay_port' not in cols:
         c.execute("ALTER TABLE nodes ADD COLUMN relay_port INTEGER DEFAULT 0")
+    if 'is_landing' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN is_landing INTEGER DEFAULT 0")
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -6513,15 +6515,16 @@ rules:
                 except Exception as e:
                     print(f"Error resolving relay client info: {e}")
                 
+            is_landing = 1 if body.get("is_landing") else 0
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
             c.execute('''
                 INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
                                   uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled,
-                                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1, ?, ?, ?, ?, ?)
+                                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port, is_landing)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', 0, 1, ?, ?, ?, ?, ?, ?)
             ''', (server_uuid, server_name, server_ip, name, protocol, port, u, sni, pub_key, priv_key, short_id, flow, ws_path,
-                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port))
+                  is_relay, relay_server_uuid, relay_server_name, relay_server_ip, relay_port, is_landing))
             node_id = c.lastrowid
             conn.commit()
             conn.close()
