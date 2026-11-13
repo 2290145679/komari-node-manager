@@ -3127,7 +3127,7 @@
                   ${n.is_relay 
                     ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40 shrink-0">✈️ 中转</span>' 
                     : (n.is_landing || (n.name && n.name.includes('[落地]')))
-                      ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-300 border border-pink-200/60 dark:border-pink-800/40 shrink-0">🎯 落地底座</span>'
+                      ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-pink-50 dark:bg-pink-950/40 text-pink-600 dark:text-pink-300 border border-pink-200/60 dark:border-pink-800/40 shrink-0" title="该节点仅作为出网底座运行，不推送到用户客户端订阅">🎯 落地底座 (不入订阅)</span>'
                       : '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40 shrink-0">🟢 直连</span>'
                   }
                   ${n.name.includes('[IPv6]') ? '<span class="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 shrink-0">IPv6</span>' : ''}
@@ -5647,9 +5647,9 @@
         secRelay?.classList.add('hidden');
 
         if (modalIcon) modalIcon.innerHTML = '🎯';
-        if (modalTitle) modalTitle.textContent = '新建自建落地节点 (底座)';
-        if (modalSub) modalSub.textContent = '部署海外解锁/家宽出网底座，可供多台线路机挂载 Realm 中转';
-        if (hintText) hintText.textContent = '🎯 落地模式：专为海外解锁/家宽服务器（如 BigLobe）打造。创建核心出网底座，后续可由任意线路机通过【中转接落地】挂载访问。';
+        if (modalTitle) modalTitle.textContent = '新建自建落地节点 (出网底座)';
+        if (modalSub) modalSub.textContent = '部署海外解锁/家宽出网底座（仅供中转机转发，不推送到客户端订阅）';
+        if (hintText) hintText.textContent = '🎯 落地模式：专为海外解锁/家宽出网服务器（如 BigLobe）打造。仅作为出网底座运行，不会出现在用户客户端订阅中。后续请通过【✈️ 中转接落地】挂载并分发给客户端。';
         if (serverSelectTitle) serverSelectTitle.textContent = '所属海外落地服务器 (Sing-box 核心运行主机)';
         if (submitBtn) submitBtn.textContent = '一键生成并部署落地底座节点';
 

@@ -4109,7 +4109,7 @@ def get_user_portal_payload(token):
         st = "normal"
         st_text = "正常使用中"
 
-    c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+    c.execute("SELECT * FROM nodes WHERE enabled = 1 AND is_landing = 0 ORDER BY is_external ASC, id DESC")
     cols = [d[0] for d in c.description]
     raw_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
     conn.close()
@@ -4123,6 +4123,9 @@ def get_user_portal_payload(token):
 
     user_nodes = []
     for n in raw_nodes:
+        # Strictly exclude pure landing base nodes from subscriber view
+        if n.get("is_landing") or (n.get("name") and "[落地]" in n.get("name")):
+            continue
         if not n.get("is_external") and n.get("server_uuid") != "external":
             if n.get("server_uuid") not in all_server_uuids:
                 continue
@@ -4445,10 +4448,16 @@ rules:
                     self._send_text(b64, 200, "text/plain; charset=utf-8", extra_headers=extra_hdrs)
                 return
 
-            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            c.execute("SELECT * FROM nodes WHERE enabled = 1 AND is_landing = 0 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
             all_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
             conn.close()
+
+            # Strictly exclude pure landing base nodes from subscriber export
+            all_nodes = [
+                n for n in all_nodes
+                if not n.get("is_landing") and not (n.get("name") and "[落地]" in n.get("name"))
+            ]
 
             # Personalize nodes with this user's dedicated UUID
             if sub_uuid:
@@ -4503,8 +4512,8 @@ rules:
         if path in ["/api/sub/rules/presets", "/api/node-mgr/sub/rules/presets"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT id, name, protocol FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
-            nodes = [{"id": r[0], "name": r[1], "protocol": r[2]} for r in c.fetchall()]
+            c.execute("SELECT id, name, protocol FROM nodes WHERE enabled = 1 AND is_landing = 0 ORDER BY is_external ASC, id DESC")
+            nodes = [{"id": r[0], "name": r[1], "protocol": r[2]} for r in c.fetchall() if "[落地]" not in (r[1] or "")]
             conn.close()
             self._send_json({"ok": True, "nodes": nodes})
             return
@@ -4512,9 +4521,9 @@ rules:
         if path in ["/api/sub/rules/preview", "/api/node-mgr/sub/rules/preview"]:
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
-            c.execute("SELECT * FROM nodes WHERE enabled = 1 ORDER BY is_external ASC, id DESC")
+            c.execute("SELECT * FROM nodes WHERE enabled = 1 AND is_landing = 0 ORDER BY is_external ASC, id DESC")
             cols = [d[0] for d in c.description]
-            all_nodes = [dict(zip(cols, row)) for row in c.fetchall()]
+            all_nodes = [dict(zip(cols, row)) for row in c.fetchall() if not (dict(zip(cols, row)).get("name") and "[落地]" in dict(zip(cols, row))["name"])]
             conn.close()
 
             servers_data = get_cached_servers_with_stats()
