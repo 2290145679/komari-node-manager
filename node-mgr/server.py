@@ -19,6 +19,7 @@ import io
 import zipfile
 import shutil
 import html
+import gzip
 from datetime import datetime, timezone
 from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -38,7 +39,210 @@ KOMARI_DB = os.path.join(DATA_DIR, "komari.db") if os.path.exists(os.path.join(D
 METRICS_DB = os.path.join(DATA_DIR, "metrics.db") if os.path.exists(os.path.join(DATA_DIR, "metrics.db")) else "/opt/komari/data/metrics.db"
 CERT_DIR = os.path.join(DATA_DIR, "certs")
 PORT = 25775
-DOMAIN = "jgw2.yohoo.xyz"
+
+def get_system_domain():
+    env_dom = os.environ.get("KOMARI_DOMAIN", "").strip()
+    if env_dom:
+        return env_dom
+    for conf_p in ["/etc/nginx/sites-available/komari.conf", "/etc/nginx/conf.d/komari.conf"]:
+        if os.path.exists(conf_p):
+            try:
+                with open(conf_p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith("server_name ") and not line.endswith("_;"):
+                            names = line.replace("server_name", "").replace(";", "").split()
+                            for n in names:
+                                n = n.strip()
+                                if n and n != "_" and not re.match(r"^\d+\.\d+\.\d+\.\d+$", n):
+                                    return n
+            except Exception:
+                pass
+    return "127.0.0.1"
+
+DOMAIN = get_system_domain()
+
+# Security & Sanitization Helpers
+def sanitize_node_field(val, max_len=128):
+    if not val:
+        return ""
+    val_str = str(val).strip()
+    val_str = re.sub(r"[\r\n\x00-\x1f\x7f]", "", val_str)
+    val_str = val_str.replace('"', '\\"').replace("'", "")
+    return val_str[:max_len].strip()
+
+# Smart Failover Tracker (node_id -> failure_count)
+_failover_blocked_nodes = set()
+_failover_lock = threading.Lock()
+
+def mark_node_failover_status(node_id, is_failed):
+    global _failover_blocked_nodes
+    with _failover_lock:
+        if is_failed:
+            _failover_blocked_nodes.add(node_id)
+        else:
+            _failover_blocked_nodes.discard(node_id)
+
+def is_node_in_failover(node_id):
+    with _failover_lock:
+        return node_id in _failover_blocked_nodes
+
+# Admin Authentication System
+_ADMIN_API_KEY = None
+
+def get_or_create_admin_key():
+    global _ADMIN_API_KEY
+    if _ADMIN_API_KEY:
+        return _ADMIN_API_KEY
+    env_key = os.environ.get("KOMARI_ADMIN_TOKEN", "").strip()
+    if env_key:
+        _ADMIN_API_KEY = env_key
+        return _ADMIN_API_KEY
+
+    try:
+        conn = sqlite3.connect(NODES_DB)
+        c = conn.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS notification_states (state_key TEXT PRIMARY KEY, state_val TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("SELECT state_val FROM notification_states WHERE state_key = 'admin_api_token'")
+        row = c.fetchone()
+        if row and row[0]:
+            _ADMIN_API_KEY = row[0].strip()
+        else:
+            _ADMIN_API_KEY = secrets.token_hex(24)
+            c.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES ('admin_api_token', ?, CURRENT_TIMESTAMP)", (_ADMIN_API_KEY,))
+            conn.commit()
+        conn.close()
+    except Exception:
+        if not _ADMIN_API_KEY:
+            _ADMIN_API_KEY = secrets.token_hex(24)
+    return _ADMIN_API_KEY
+
+def check_admin_auth(request_handler):
+    """
+    Validates whether incoming request is from authorized admin:
+    1. Checks Cookie for active session in komari.db 'sessions' table
+    2. Checks Authorization: Bearer <token>
+    3. Checks X-Admin-Token
+    4. Checks ?admin_token=<token>
+    5. Allows setup wizard if no users exist in komari.db yet
+    """
+    headers = request_handler.headers
+    admin_key = get_or_create_admin_key()
+
+    auth_header = headers.get("Authorization", "").strip()
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if secrets.compare_digest(token, admin_key):
+            return True
+
+    x_admin_token = headers.get("X-Admin-Token", "").strip()
+    if x_admin_token and secrets.compare_digest(x_admin_token, admin_key):
+        return True
+
+    parsed = urlparse(request_handler.path)
+    query = parse_qs(parsed.query)
+    q_token = query.get("admin_token", [""])[0].strip() or query.get("token", [""])[0].strip()
+    if q_token and secrets.compare_digest(q_token, admin_key):
+        return True
+
+    cookie_hdr = headers.get("Cookie", "")
+    if cookie_hdr and os.path.exists(KOMARI_DB):
+        cookies = {}
+        for item in cookie_hdr.split(";"):
+            item = item.strip()
+            if "=" in item:
+                k, v = item.split("=", 1)
+                cookies[k.strip()] = v.strip()
+
+        session_token = cookies.get("session") or cookies.get("komari_session") or cookies.get("auth")
+        if session_token:
+            try:
+                conn_k = sqlite3.connect(KOMARI_DB)
+                ck = conn_k.cursor()
+                ck.execute("SELECT 1 FROM sessions WHERE session = ? LIMIT 1", (session_token,))
+                if ck.fetchone():
+                    conn_k.close()
+                    return True
+                conn_k.close()
+            except Exception:
+                pass
+
+    if os.path.exists(KOMARI_DB):
+        try:
+            conn_k = sqlite3.connect(KOMARI_DB)
+            ck = conn_k.cursor()
+            ck.execute("SELECT count(*) FROM users")
+            user_count = ck.fetchone()[0]
+            conn_k.close()
+            if user_count == 0:
+                return True
+        except Exception:
+            pass
+    else:
+        return True
+
+    return False
+
+def record_subscription_access(token, client_ip, user_agent, sub_format, sub_name):
+    try:
+        conn = sqlite3.connect(NODES_DB)
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS subscription_access_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                token TEXT NOT NULL,
+                sub_name TEXT DEFAULT '',
+                client_ip TEXT NOT NULL,
+                user_agent TEXT DEFAULT '',
+                format TEXT DEFAULT '',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        c.execute("""
+            INSERT INTO subscription_access_logs (token, sub_name, client_ip, user_agent, format, created_at)
+            VALUES (?, ?, ?, ?, ?, datetime('now', 'localtime'))
+        """, (token, sub_name or 'default', client_ip, (user_agent or '')[:200], sub_format or 'auto'))
+        c.execute("DELETE FROM subscription_access_logs WHERE id NOT IN (SELECT id FROM subscription_access_logs ORDER BY id DESC LIMIT 500)")
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def send_file_to_telegram(bot_token, chat_id, file_path, caption=""):
+    """Sends a document file (e.g. backup gzip) to Telegram chat via multipart/form-data without external libs"""
+    if not bot_token or not chat_id or not os.path.exists(file_path):
+        return False
+    try:
+        filename = os.path.basename(file_path)
+        boundary = "----KomariBoundary" + secrets.token_hex(8)
+        body = bytearray()
+
+        def add_field(name, value):
+            body.extend(f"--{boundary}\r\n".encode("utf-8"))
+            body.extend(f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode("utf-8"))
+            body.extend(f"{value}\r\n".encode("utf-8"))
+
+        add_field("chat_id", chat_id)
+        if caption:
+            add_field("caption", caption)
+
+        body.extend(f"--{boundary}\r\n".encode("utf-8"))
+        body.extend(f'Content-Disposition: form-data; name="document"; filename="{filename}"\r\n'.encode("utf-8"))
+        body.extend(b"Content-Type: application/octet-stream\r\n\r\n")
+        with open(file_path, "rb") as f:
+            body.extend(f.read())
+        body.extend(b"\r\n")
+        body.extend(f"--{boundary}--\r\n".encode("utf-8"))
+
+        url = f"https://api.telegram.org/bot{bot_token}/sendDocument"
+        req = urllib.request.Request(url, data=bytes(body), headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}"
+        })
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status == 200
+    except Exception as e:
+        print(f"[TelegramBackup] Error sending file: {e}")
+        return False
 
 os.makedirs(CERT_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
@@ -358,6 +562,8 @@ def init_db():
         c.execute("ALTER TABLE nodes ADD COLUMN relay_port INTEGER DEFAULT 0")
     if 'is_landing' not in cols:
         c.execute("ALTER TABLE nodes ADD COLUMN is_landing INTEGER DEFAULT 0")
+    if 'is_failover' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN is_failover INTEGER DEFAULT 0")
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -594,6 +800,27 @@ def init_db():
             description = '通过真实 TCP/TLS 握手定期实测各节点端口连通性，当端口无法连通 (疑似被墙) 时即时告警，恢复时推送解除通知'
         WHERE rule_key = 'network_block'
     """)
+
+    # Ensure subscription_access_logs table exists
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS subscription_access_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT NOT NULL,
+            sub_name TEXT DEFAULT '',
+            client_ip TEXT NOT NULL,
+            user_agent TEXT DEFAULT '',
+            format TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Create high-performance indexes
+    c.execute("CREATE INDEX IF NOT EXISTS idx_nodes_server_uuid ON nodes(server_uuid)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_nodes_enabled ON nodes(enabled)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_subscriptions_token ON subscriptions(token)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sub_access_logs_created ON subscription_access_logs(created_at)")
+    c.execute("CREATE INDEX IF NOT EXISTS idx_sub_access_logs_token ON subscription_access_logs(token)")
 
     # Ensure default subscription
     c.execute("SELECT token FROM subscriptions LIMIT 1")
@@ -1593,18 +1820,22 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
 
     proxies = []
     names = []
-    for n in nodes:
+    # If failover filtering leaves zero nodes, fallback to including all enabled nodes
+    active_nodes = [n for n in nodes if not is_node_in_failover(n.get("id"))]
+    target_nodes = active_nodes if active_nodes else nodes
+
+    for n in target_nodes:
         proto = n.get("protocol")
-        name = n.get("name")
+        name = sanitize_node_field(n.get("name") or "Node")
         is_relay = n.get("is_relay")
         if is_relay and n.get("relay_server_ip"):
-            ip = n["relay_server_ip"]
+            ip = sanitize_node_field(n["relay_server_ip"])
             port = n.get("relay_port") or n.get("port")
         else:
-            ip = n.get("server_ip")
+            ip = sanitize_node_field(n.get("server_ip"))
             port = n.get("port")
-        u = n.get("uuid_or_passwd")
-        sni = n.get("sni") or "addons.mozilla.org"
+        u = sanitize_node_field(n.get("uuid_or_passwd"))
+        sni = sanitize_node_field(n.get("sni") or "addons.mozilla.org")
 
         if not ip or not port:
             continue
@@ -1866,18 +2097,22 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
     outbounds = []
     node_tags = []
 
-    for n in nodes:
+    # Failover filter with fallback
+    active_nodes = [n for n in nodes if not is_node_in_failover(n.get("id"))]
+    target_nodes = active_nodes if active_nodes else nodes
+
+    for n in target_nodes:
         proto = n.get("protocol")
-        name = n.get("name") or f"Node-{n.get('id')}"
+        name = sanitize_node_field(n.get("name") or f"Node-{n.get('id')}")
         is_relay = n.get("is_relay")
         if is_relay and n.get("relay_server_ip"):
-            ip = n["relay_server_ip"]
+            ip = sanitize_node_field(n["relay_server_ip"])
             port = n.get("relay_port") or n.get("port")
         else:
-            ip = n.get("server_ip")
+            ip = sanitize_node_field(n.get("server_ip"))
             port = n.get("port")
-        u = n.get("uuid_or_passwd")
-        sni = n.get("sni") or "addons.mozilla.org"
+        u = sanitize_node_field(n.get("uuid_or_passwd"))
+        sni = sanitize_node_field(n.get("sni") or "addons.mozilla.org")
 
         if not ip or not port:
             continue
@@ -3908,6 +4143,12 @@ def check_and_notify_events():
                     if not res.get("success"):
                         fail_cnt += 1
                         set_state(f"node_tcp_fail:{nid}", str(fail_cnt))
+                        if fail_cnt >= fail_threshold:
+                            mark_node_failover_status(nid, True)
+                            try:
+                                c_n.execute("UPDATE nodes SET is_failover = 1 WHERE id = ?", (nid,))
+                                conn_n.commit()
+                            except Exception: pass
                         if fail_cnt >= fail_threshold and last_tcp_st != "blocked":
                             set_state(f"node_tcp_st:{nid}", "blocked")
                             set_state(f"node_tcp_block_time:{nid}", str(now))
@@ -3920,7 +4161,7 @@ def check_and_notify_events():
                                     f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
                                     f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
                                     f"<b>检测结果</b>: <b>TCP 握手失败</b> ({err_msg})\n"
-                                    f"<b>判定说明</b>: 端口连续 {fail_cnt} 次握手失败，疑似该 IP 或端口已被 GFW 阻断/被墙。\n"
+                                    f"<b>判定说明</b>: 端口连续 {fail_cnt} 次握手失败，该节点已自动从订阅中临时熔断下线，防范客户端卡死。\n"
                                     f"<i>建议检查服务器运行状态或更换监听端口。</i>"
                                 ),
                                 level="danger",
@@ -3928,6 +4169,11 @@ def check_and_notify_events():
                             )
                     else:
                         set_state(f"node_tcp_fail:{nid}", "0")
+                        mark_node_failover_status(nid, False)
+                        try:
+                            c_n.execute("UPDATE nodes SET is_failover = 0 WHERE id = ?", (nid,))
+                            conn_n.commit()
+                        except Exception: pass
                         if last_tcp_st == "blocked":
                             set_state(f"node_tcp_st:{nid}", "ok")
                             if notify_recovery:
@@ -3955,6 +4201,94 @@ def check_and_notify_events():
             print("Check node TCP block error:", e)
 
     conn_n.close()
+    check_monthly_traffic_auto_reset()
+    run_auto_backup_job()
+
+def check_monthly_traffic_auto_reset():
+    now_dt = datetime.now()
+    cur_ym = now_dt.strftime("%Y-%m")
+    if now_dt.day == 1 and now_dt.hour == 0 and now_dt.minute < 30:
+        try:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("CREATE TABLE IF NOT EXISTS notification_states (state_key TEXT PRIMARY KEY, state_val TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            c.execute("SELECT state_val FROM notification_states WHERE state_key = ?", (f"traffic_auto_reset:{cur_ym}",))
+            row = c.fetchone()
+            if not row:
+                c.execute("UPDATE subscriptions SET traffic_used_bytes = 0")
+                c.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)", (f"traffic_auto_reset:{cur_ym}",))
+                conn.commit()
+                print(f"[TrafficAutoReset] Successfully auto-reset monthly traffic for cycle {cur_ym}")
+                dispatch_notification(
+                    title=f"📅 月度流量配额自动清零完成 ({cur_ym})",
+                    message="新月份已到达，系统已自动重置所有用户的当月流量配额！",
+                    level="info",
+                    rule_key="traffic_threshold"
+                )
+            conn.close()
+        except Exception as e:
+            print(f"[TrafficAutoReset] Error: {e}")
+
+def run_auto_backup_job():
+    now_dt = datetime.now()
+    today_str = now_dt.strftime("%Y%m%d")
+    # Run once per day around 03:00 to 04:00 AM
+    if now_dt.hour != 3:
+        return
+    try:
+        conn = sqlite3.connect(NODES_DB)
+        c = conn.cursor()
+        c.execute("CREATE TABLE IF NOT EXISTS notification_states (state_key TEXT PRIMARY KEY, state_val TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        c.execute("SELECT state_val FROM notification_states WHERE state_key = ?", (f"auto_backup:{today_str}",))
+        if c.fetchone():
+            conn.close()
+            return
+
+        backup_dir = os.path.join(BASE_DIR, "backups")
+        os.makedirs(backup_dir, exist_ok=True)
+        raw_bak = os.path.join(backup_dir, f"nodes_{today_str}.db")
+        gz_bak = f"{raw_bak}.gz"
+
+        # Clean non-locking snapshot using SQLite backup API
+        src = sqlite3.connect(NODES_DB)
+        dst = sqlite3.connect(raw_bak)
+        src.backup(dst)
+        dst.close()
+        src.close()
+
+        with open(raw_bak, 'rb') as f_in, gzip.open(gz_bak, 'wb') as f_out:
+            shutil.copyfileobj(f_in, f_out)
+        try: os.remove(raw_bak)
+        except Exception: pass
+
+        c.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)", (f"auto_backup:{today_str}",))
+        conn.commit()
+
+        # Clean rolling backups older than 7 days
+        for f in os.listdir(backup_dir):
+            fp = os.path.join(backup_dir, f)
+            if os.path.isfile(fp) and (time.time() - os.path.getmtime(fp)) > 7 * 86400:
+                try: os.remove(fp)
+                except Exception: pass
+
+        # Send to Telegram if configured
+        c.execute("SELECT config FROM notification_channels WHERE type = 'telegram' AND enabled = 1 LIMIT 1")
+        tg_ch = c.fetchone()
+        conn.close()
+
+        if tg_ch:
+            try:
+                tg_cfg = json.loads(tg_ch[0])
+                b_tok = tg_cfg.get("bot_token", "").strip()
+                c_id = tg_cfg.get("chat_id", "").strip()
+                if b_tok and c_id and os.path.exists(gz_bak):
+                    send_file_to_telegram(b_tok, c_id, gz_bak, caption=f"📦 Komari Pro 每日数据库自动快照备份 ({today_str})")
+            except Exception as e:
+                print(f"[AutoBackup] Telegram send failed: {e}")
+
+        print(f"[AutoBackup] Daily backup completed: {gz_bak}")
+    except Exception as e:
+        print(f"[AutoBackup] Error during backup: {e}")
 
 def run_notification_engine():
     time.sleep(15)
@@ -4298,6 +4632,8 @@ def get_user_portal_payload(token):
                 not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
             )
         ))
+        if is_node_in_failover(n.get("id")) or bool(n.get("is_failover")):
+            is_on = False
         user_nodes.append({
             "id": n.get("id"),
             "name": n.get("name"),
@@ -4405,7 +4741,44 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        
+        # Public endpoints that bypass admin authentication
+        is_public = (
+            path.startswith("/sub/") or
+            path in ["/install-node.sh", "/install-node-pro.sh", "/user", "/user/", "/portal", "/portal/", "/pro/user", "/pro/user/"] or
+            path.startswith("/user/assets/") or
+            path.startswith("/dl/") or
+            path.startswith("/api/node-mgr/agent/") or
+            path.startswith("/api/agent/") or
+            path.startswith("/api/user/") or
+            path.startswith("/api/node-mgr/user/") or
+            path == "/api/node-mgr/theme/preview"
+        )
+
+        if not is_public and (path.startswith("/api/") or path.startswith("/api/node-mgr/")):
+            if not check_admin_auth(self):
+                self._send_json({"ok": False, "error": "未授权访问：请先登录管理员账号或携带有效 Admin Token"}, 401)
+                return
+
+        # Subscription access logs endpoint (Admin only)
+        if path in ["/api/subscriptions/access-logs", "/api/node-mgr/subscriptions/access-logs"]:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("SELECT id, token, sub_name, client_ip, user_agent, format, created_at FROM subscription_access_logs ORDER BY id DESC LIMIT 100")
+            logs = []
+            for r in c.fetchall():
+                logs.append({
+                    "id": r[0],
+                    "token": r[1][:6] + "***" if len(r[1]) > 6 else r[1],
+                    "sub_name": r[2],
+                    "client_ip": r[3],
+                    "user_agent": r[4],
+                    "format": r[5],
+                    "created_at": str(r[6])
+                })
+            conn.close()
+            self._send_json({"ok": True, "logs": logs})
+            return
+
         # Notifications API endpoints
         if path in ["/api/notifications/config", "/api/node-mgr/notifications/config"]:
             conn = sqlite3.connect(NODES_DB)
@@ -4571,6 +4944,9 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
 
             is_singbox_req = (fmt in ["singbox", "sing-box", "json", "sb"] or singbox_flag == "1" or sb_flag == "1" or any(k in ua for k in ["sing-box", "singbox", "sfa", "sfi"]))
             is_clash_req = (fmt in ["clash", "meta"] or clash_flag == "1" or any(k in ua for k in ["clash", "mihomo", "meta", "stash", "verge"]))
+
+            detected_format = "singbox" if is_singbox_req else ("clash" if is_clash_req else (fmt or "raw"))
+            record_subscription_access(token, self.get_client_ip(), ua, detected_format, sub_name)
 
             ext = "json" if is_singbox_req else ("txt" if fmt == "raw" else "yaml")
             extra_hdrs = {
@@ -5050,6 +5426,12 @@ rules:
                         n["probe_online"] = bool(srv.get("probe_online"))
                         n["node_status"] = "online"
                         n["status_text"] = "正常在线"
+
+                is_fail = is_node_in_failover(n["id"]) or bool(n.get("is_failover"))
+                n["is_failover"] = is_fail
+                if is_fail and n.get("node_status") == "online":
+                    n["node_status"] = "failover"
+                    n["status_text"] = "⚠️ 故障熔断中"
 
             self._send_json({"ok": True, "nodes": nodes})
             return
@@ -5599,6 +5981,20 @@ rules:
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        # Public endpoints that bypass admin check
+        is_public = (
+            path.startswith("/api/node-mgr/agent/") or
+            path.startswith("/api/agent/") or
+            path.startswith("/api/user/") or
+            path.startswith("/api/node-mgr/user/")
+        )
+
+        if not is_public and (path.startswith("/api/") or path.startswith("/api/node-mgr/")):
+            if not check_admin_auth(self):
+                self._send_json({"ok": False, "error": "未授权访问：请先登录管理员账号或携带有效 Admin Token"}, 401)
+                return
+
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
 
@@ -6968,6 +7364,10 @@ rules:
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
+
+        if not check_admin_auth(self):
+            self._send_json({"ok": False, "error": "未授权访问：请先登录管理员账号或携带有效 Admin Token"}, 401)
+            return
 
         if path.startswith("/api/servers/") or path.startswith("/api/node-mgr/servers/"):
             server_uuid = path.rstrip("/").split("/")[-1]

@@ -21,7 +21,9 @@ CREATE TABLE IF NOT EXISTS nodes (
     relay_server_uuid TEXT DEFAULT '',
     relay_server_name TEXT DEFAULT '',
     relay_server_ip TEXT DEFAULT '',
-    relay_port INTEGER DEFAULT 0
+    relay_port INTEGER DEFAULT 0,
+    is_landing INTEGER DEFAULT 0,
+    is_failover INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS subscriptions (
@@ -117,4 +119,22 @@ CREATE TABLE IF NOT EXISTS notification_states (
     state_val TEXT,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS subscription_access_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL,
+    sub_name TEXT DEFAULT '',
+    client_ip TEXT NOT NULL,
+    user_agent TEXT DEFAULT '',
+    format TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 高频查询优化索引
+CREATE INDEX IF NOT EXISTS idx_nodes_server_uuid ON nodes(server_uuid);
+CREATE INDEX IF NOT EXISTS idx_nodes_enabled ON nodes(enabled);
+CREATE INDEX IF NOT EXISTS idx_subscriptions_token ON subscriptions(token);
+CREATE INDEX IF NOT EXISTS idx_notification_logs_created ON notification_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_sub_access_logs_created ON subscription_access_logs(created_at);
+CREATE INDEX IF NOT EXISTS idx_sub_access_logs_token ON subscription_access_logs(token);
 

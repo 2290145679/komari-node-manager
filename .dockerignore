@@ -1,0 +1,12 @@
+.git
+.github
+*.log
+*.tar.gz
+bin/*.gz
+backups/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/certs/
+__pycache__/
+*.pyc

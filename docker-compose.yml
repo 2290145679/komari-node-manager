@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  komari-node-mgr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: komari-node-mgr
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TZ=Asia/Shanghai
+      - KOMARI_DOMAIN=${KOMARI_DOMAIN:-127.0.0.1}
+      - KOMARI_ADMIN_TOKEN=${KOMARI_ADMIN_TOKEN:-}
+    volumes:
+      - ./data:/opt/komari-pro/data
+      - ./backups:/opt/komari-pro/backups
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:25775/install-node.sh || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
