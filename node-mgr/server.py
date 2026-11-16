@@ -163,15 +163,17 @@ def check_admin_auth(request_handler):
                 k, v = item.split("=", 1)
                 cookies[k.strip()] = v.strip()
 
-        session_token = cookies.get("session") or cookies.get("komari_session") or cookies.get("auth")
-        if session_token:
+        # Extract all possible session candidates from cookies (including session_token)
+        candidates = [v for v in cookies.values() if v and len(v) >= 16]
+        if candidates:
             try:
                 conn_k = sqlite3.connect(KOMARI_DB)
                 ck = conn_k.cursor()
-                ck.execute("SELECT 1 FROM sessions WHERE session = ? LIMIT 1", (session_token,))
-                if ck.fetchone():
-                    conn_k.close()
-                    return True
+                for cand in candidates:
+                    ck.execute("SELECT 1 FROM sessions WHERE session = ? LIMIT 1", (cand,))
+                    if ck.fetchone():
+                        conn_k.close()
+                        return True
                 conn_k.close()
             except Exception:
                 pass
@@ -4816,7 +4818,7 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        # Public endpoints that bypass admin authentication
+        # Public endpoints that bypass admin authentication (including dashboard overview queries)
         is_public = (
             path.startswith("/sub/") or
             path in ["/install-node.sh", "/install-node-pro.sh", "/user", "/user/", "/portal", "/portal/", "/pro/user", "/pro/user/"] or
@@ -4826,7 +4828,17 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             path.startswith("/api/agent/") or
             path.startswith("/api/user/") or
             path.startswith("/api/node-mgr/user/") or
-            path == "/api/node-mgr/theme/preview"
+            path == "/api/node-mgr/theme/preview" or
+            path in [
+                "/api/servers", "/api/node-mgr/servers",
+                "/api/nodes", "/api/node-mgr/nodes",
+                "/api/system/status", "/api/node-mgr/system/status",
+                "/api/bbr/status", "/api/node-mgr/bbr/status",
+                "/api/ping-tasks", "/api/node-mgr/ping-tasks",
+                "/api/sub/rules", "/api/node-mgr/sub/rules",
+                "/api/sub/rules/presets", "/api/node-mgr/sub/rules/presets",
+                "/api/sub/title", "/api/node-mgr/sub/title"
+            ]
         )
 
         if not is_public and (path.startswith("/api/") or path.startswith("/api/node-mgr/")):
