@@ -120,6 +120,7 @@ def get_or_create_admin_key():
 def check_admin_auth(request_handler):
     """
     Validates whether incoming request is from authorized admin:
+    0. Allows local CLI requests directly made to 127.0.0.1 (not proxied through Nginx from outside)
     1. Checks Cookie for active session in komari.db 'sessions' table
     2. Checks Authorization: Bearer <token>
     3. Checks X-Admin-Token
@@ -127,6 +128,14 @@ def check_admin_auth(request_handler):
     5. Allows setup wizard if no users exist in komari.db yet
     """
     headers = request_handler.headers
+
+    # Local internal loopback call check (CLI tools like hhub running locally)
+    client_ip = request_handler.client_address[0] if hasattr(request_handler, "client_address") else ""
+    x_forwarded_for = headers.get("X-Forwarded-For", "").strip()
+    x_real_ip = headers.get("X-Real-IP", "").strip()
+    if client_ip in ("127.0.0.1", "::1") and not x_forwarded_for and not x_real_ip:
+        return True
+
     admin_key = get_or_create_admin_key()
 
     auth_header = headers.get("Authorization", "").strip()
@@ -2033,6 +2042,18 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
         rules_list.append("  - DOMAIN-KEYWORD,torrent,DIRECT")
         rules_list.append("  - DOMAIN-KEYWORD,peer,DIRECT")
 
+    # 7.5 Microsoft & Apple System Update Direct (防偷跑节点珍贵流量)
+    rules_list.append("  # === 🍎 微软/苹果国内大流量系统更新直连 (防跑量) ===")
+    rules_list.append("  - DOMAIN-SUFFIX,windowsupdate.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,update.microsoft.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,msftconnecttest.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,apple.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,aaplimg.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,mzstatic.com,DIRECT")
+    rules_list.append("  - DOMAIN-SUFFIX,icloud-content.com,DIRECT")
+    rules_list.append("  - GEOSITE,apple@cn,DIRECT")
+    rules_list.append("  - GEOSITE,microsoft@cn,DIRECT")
+
     # 3. LAN Direct rule
     if rules_cfg.get("direct_lan", True):
         rules_list.append("  # === 本地局域网与私有 IP 直连 ===")
@@ -2364,6 +2385,15 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
             ],
             "outbound": t_games
         })
+
+    # 9.5 Microsoft & Apple System Update Direct (防偷跑节点珍贵流量)
+    route_rules.append({
+        "domain_suffix": [
+            "windowsupdate.com", "update.microsoft.com", "msftconnecttest.com",
+            "apple.com", "aaplimg.com", "mzstatic.com", "icloud-content.com"
+        ],
+        "outbound": "direct"
+    })
 
     # 10. China Direct
     if rules_cfg.get("direct_cn", True):
@@ -2932,15 +2962,23 @@ if [ ! -f /usr/local/bin/sing-box ] || ! /usr/local/bin/sing-box version >/dev/n
   echo "Downloading Sing-box binary (${SING_ARCH}${MUSL_SUFFIX})..."
   mkdir -p /usr/local/bin
   TAR_URL="https://github.com/SagerNet/sing-box/releases/download/v1.14.4/sing-box-1.14.4-linux-${SING_ARCH}${MUSL_SUFFIX}.tar.gz"
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL "$TAR_URL" -o /tmp/sing-box.tar.gz
-  elif command -v wget >/dev/null 2>&1; then
-    wget -qO /tmp/sing-box.tar.gz "$TAR_URL"
+  rm -f /tmp/sing-box.tar.gz
+
+  for dl_url in "https://ghfast.top/${TAR_URL}" "${TAR_URL}" "${MASTER_URL}/api/node-mgr/dl/sing-box-1.14.4-linux-${SING_ARCH}${MUSL_SUFFIX}.tar.gz"; do
+    echo "[Info] Trying Sing-box download from: ${dl_url}"
+    if command -v curl >/dev/null 2>&1; then
+      curl -fsSL -k -m 25 "$dl_url" -o /tmp/sing-box.tar.gz 2>/dev/null && [ -s /tmp/sing-box.tar.gz ] && break
+    elif command -v wget >/dev/null 2>&1; then
+      wget -qO /tmp/sing-box.tar.gz --no-check-certificate -T 25 "$dl_url" 2>/dev/null && [ -s /tmp/sing-box.tar.gz ] && break
+    fi
+  done
+
+  if [ -s /tmp/sing-box.tar.gz ]; then
+    tar -xzf /tmp/sing-box.tar.gz -C /tmp
+    cp /tmp/sing-box-*/sing-box /usr/local/bin/sing-box
+    chmod +x /usr/local/bin/sing-box
+    rm -rf /tmp/sing-box*
   fi
-  tar -xzf /tmp/sing-box.tar.gz -C /tmp
-  cp /tmp/sing-box-*/sing-box /usr/local/bin/sing-box
-  chmod +x /usr/local/bin/sing-box
-  rm -rf /tmp/sing-box*
 fi
 
 # Ensure base empty config
@@ -2997,15 +3035,28 @@ if [ "$INSTALL_PROBE" -eq 1 ]; then
   echo "[4/5] Installing Komari Monitor Agent..."
 DOWNLOADER=""
 if command -v curl >/dev/null 2>&1; then
-  DOWNLOADER="curl -fsSL"
+  DOWNLOADER="curl -fsSL -k -m 20"
 elif command -v wget >/dev/null 2>&1; then
-  DOWNLOADER="wget -qO-"
+  DOWNLOADER="wget -qO- --no-check-certificate -T 20"
 fi
 PROBE_ARGS=("-e" "$MASTER_URL" "-t" "$TOKEN")
 if [ -n "$CUSTOM_IP" ]; then
   PROBE_ARGS+=("--custom-ipv4" "$CUSTOM_IP")
 fi
-$DOWNLOADER https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh | bash -s -- "${PROBE_ARGS[@]}" "${EXTRA_ARGS[@]}"
+
+RAW_AGENT_URL="https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh"
+AGENT_SCRIPT=""
+if [ -n "$DOWNLOADER" ]; then
+  AGENT_SCRIPT=$($DOWNLOADER "https://ghfast.top/${RAW_AGENT_URL}" 2>/dev/null || true)
+  if [ -z "$AGENT_SCRIPT" ] || ! echo "$AGENT_SCRIPT" | grep -q "komari"; then
+    AGENT_SCRIPT=$($DOWNLOADER "${RAW_AGENT_URL}" 2>/dev/null || true)
+  fi
+fi
+if [ -n "$AGENT_SCRIPT" ]; then
+  echo "$AGENT_SCRIPT" | bash -s -- "${PROBE_ARGS[@]}" "${EXTRA_ARGS[@]}"
+else
+  $DOWNLOADER "${RAW_AGENT_URL}" | bash -s -- "${PROBE_ARGS[@]}" "${EXTRA_ARGS[@]}" || true
+fi
 
 fi
 
@@ -3402,7 +3453,9 @@ if deltas:
 
         # 2. Fallback to GitHub release if mirror download is missing/too small
         if [ ! -s /usr/local/bin/realm ] || [ $(wc -c < /usr/local/bin/realm 2>/dev/null || echo 0) -lt 100000 ]; then
+          curl -fsSL -k -m 20 "https://ghfast.top/https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" -o /tmp/realm.tar.gz 2>/dev/null || \
           curl -fsSL -k -m 20 "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" -o /tmp/realm.tar.gz 2>/dev/null || \
+          wget -qO /tmp/realm.tar.gz --no-check-certificate -T 20 "https://ghfast.top/https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" 2>/dev/null || \
           wget -qO /tmp/realm.tar.gz --no-check-certificate -T 20 "https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}.tar.gz" 2>/dev/null || true
           if [ -s /tmp/realm.tar.gz ]; then
             tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm 2>/dev/null || true
@@ -3601,14 +3654,20 @@ EOF
 
     echo "Downloading Realm binary (realm-${REALM_ARCH}-unknown-linux-musl.tar.gz)..."
     REALM_URL="https://github.com/zhboner/realm/releases/download/v2.9.6/realm-${REALM_ARCH}-unknown-linux-musl.tar.gz"
-    if command -v curl >/dev/null 2>&1; then
-      curl -fsSL "$REALM_URL" -o /tmp/realm.tar.gz
-    elif command -v wget >/dev/null 2>&1; then
-      wget -qO /tmp/realm.tar.gz "$REALM_URL"
-    fi
-    tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm
-    chmod +x /usr/local/bin/realm
     rm -f /tmp/realm.tar.gz
+    for r_dl in "https://ghfast.top/${REALM_URL}" "${REALM_URL}" "${MASTER_URL}/api/node-mgr/dl/realm-${REALM_ARCH}"; do
+      echo "[Info] Trying Realm download from: ${r_dl}"
+      if command -v curl >/dev/null 2>&1; then
+        curl -fsSL -k -m 25 "$r_dl" -o /tmp/realm.tar.gz 2>/dev/null && [ -s /tmp/realm.tar.gz ] && break
+      elif command -v wget >/dev/null 2>&1; then
+        wget -qO /tmp/realm.tar.gz --no-check-certificate -T 25 "$r_dl" 2>/dev/null && [ -s /tmp/realm.tar.gz ] && break
+      fi
+    done
+    if [ -s /tmp/realm.tar.gz ]; then
+      tar -xzf /tmp/realm.tar.gz -C /usr/local/bin/ realm 2>/dev/null || cp /tmp/realm.tar.gz /usr/local/bin/realm
+      chmod +x /usr/local/bin/realm
+      rm -f /tmp/realm.tar.gz
+    fi
 
     # Fetch and apply initial Realm rules immediately
     echo "Fetching initial Realm forwarding configuration..."
@@ -4229,24 +4288,27 @@ def check_monthly_traffic_auto_reset():
         except Exception as e:
             print(f"[TrafficAutoReset] Error: {e}")
 
-def run_auto_backup_job():
+def run_auto_backup_job(force=False):
     now_dt = datetime.now()
     today_str = now_dt.strftime("%Y%m%d")
-    # Run once per day around 03:00 to 04:00 AM
-    if now_dt.hour != 3:
-        return
+    ts_str = now_dt.strftime("%Y%m%d_%H%M%S")
+    # Run once per day around 03:00 to 04:00 AM unless forced
+    if not force and now_dt.hour != 3:
+        return {"ok": False, "msg": "Skipped (not scheduled hour)"}
     try:
         conn = sqlite3.connect(NODES_DB)
         c = conn.cursor()
         c.execute("CREATE TABLE IF NOT EXISTS notification_states (state_key TEXT PRIMARY KEY, state_val TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-        c.execute("SELECT state_val FROM notification_states WHERE state_key = ?", (f"auto_backup:{today_str}",))
-        if c.fetchone():
-            conn.close()
-            return
+        if not force:
+            c.execute("SELECT state_val FROM notification_states WHERE state_key = ?", (f"auto_backup:{today_str}",))
+            if c.fetchone():
+                conn.close()
+                return {"ok": False, "msg": "Already backed up today"}
 
         backup_dir = os.path.join(BASE_DIR, "backups")
         os.makedirs(backup_dir, exist_ok=True)
-        raw_bak = os.path.join(backup_dir, f"nodes_{today_str}.db")
+        bak_name = f"nodes_manual_{ts_str}.db" if force else f"nodes_{today_str}.db"
+        raw_bak = os.path.join(backup_dir, bak_name)
         gz_bak = f"{raw_bak}.gz"
 
         # Clean non-locking snapshot using SQLite backup API
@@ -4261,8 +4323,9 @@ def run_auto_backup_job():
         try: os.remove(raw_bak)
         except Exception: pass
 
-        c.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)", (f"auto_backup:{today_str}",))
-        conn.commit()
+        if not force:
+            c.execute("INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES (?, '1', CURRENT_TIMESTAMP)", (f"auto_backup:{today_str}",))
+            conn.commit()
 
         # Clean rolling backups older than 7 days
         for f in os.listdir(backup_dir):
@@ -4276,19 +4339,24 @@ def run_auto_backup_job():
         tg_ch = c.fetchone()
         conn.close()
 
+        tg_sent = False
         if tg_ch:
             try:
                 tg_cfg = json.loads(tg_ch[0])
                 b_tok = tg_cfg.get("bot_token", "").strip()
                 c_id = tg_cfg.get("chat_id", "").strip()
                 if b_tok and c_id and os.path.exists(gz_bak):
-                    send_file_to_telegram(b_tok, c_id, gz_bak, caption=f"📦 Komari Pro 每日数据库自动快照备份 ({today_str})")
+                    tag_str = "即时手动快照备份" if force else "每日数据库自动快照备份"
+                    tg_sent = send_file_to_telegram(b_tok, c_id, gz_bak, caption=f"📦 Komari Pro {tag_str} ({now_dt.strftime('%Y-%m-%d %H:%M:%S')})")
             except Exception as e:
                 print(f"[AutoBackup] Telegram send failed: {e}")
 
-        print(f"[AutoBackup] Daily backup completed: {gz_bak}")
+        file_size = os.path.getsize(gz_bak) if os.path.exists(gz_bak) else 0
+        print(f"[AutoBackup] Backup completed: {gz_bak} (size={file_size}, tg_sent={tg_sent})")
+        return {"ok": True, "file": os.path.basename(gz_bak), "size": file_size, "tg_sent": tg_sent}
     except Exception as e:
         print(f"[AutoBackup] Error during backup: {e}")
+        return {"ok": False, "error": str(e)}
 
 def run_notification_engine():
     time.sleep(15)
@@ -5134,6 +5202,11 @@ rules:
                 "ssl": has_ssl,
                 "master_url": f"https://{DOMAIN}" if has_ssl else f"http://{DOMAIN}"
             })
+            return
+
+        if path in ["/api/system/backup-now", "/api/node-mgr/system/backup-now"]:
+            res = run_auto_backup_job(force=True)
+            self._send_json(res)
             return
 
         if path in ["/api/ping-tasks", "/api/node-mgr/ping-tasks"]:
@@ -7007,6 +7080,11 @@ rules:
                     print(f"Hot update failed: {e}")
             threading.Thread(target=_async_hot_update, daemon=True).start()
             self._send_json({"ok": True, "msg": "热更新已在后台触发，约 3 秒后重载生效（主控监控零停机）"})
+            return
+
+        if path in ["/api/system/backup-now", "/api/node-mgr/system/backup-now"]:
+            res = run_auto_backup_job(force=True)
+            self._send_json(res)
             return
 
         if path == "/api/nodes" or path == "/api/node-mgr/nodes":

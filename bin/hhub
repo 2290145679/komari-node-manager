@@ -227,7 +227,8 @@ show_dashboard() {
     echo -e "  ${BOLD}[4]${PLAIN} 查看实时运行日志     ${BOLD}[5]${PLAIN} 更改绑定域名         ${BOLD}[6]${PLAIN} 不使用域名(纯IP访问)"
     echo -e "  ${BOLD}[7]${PLAIN} 更改 Web 访问端口    ${BOLD}[8]${PLAIN} 重新申请/续签 SSL     ${BOLD}[9]${PLAIN} 一键平滑热更新系统"
     echo -e "  ${BOLD}[10]${PLAIN} 全量数据备份与还原   ${BOLD}[11]${PLAIN} 👥 多用户订阅管理     ${BOLD}[12]${PLAIN} 重置管理员密码"
-    echo -e "  ${BOLD}[13]${PLAIN} 🚀 开启/管理 TCP BBR ${BOLD}[14]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
+    echo -e "  ${BOLD}[13]${PLAIN} 🚀 开启/管理 TCP BBR ${BOLD}[14]${PLAIN} 📋 订阅访问审计日志   ${BOLD}[15]${PLAIN} 🔐 Admin Token 管理"
+    echo -e "  ${BOLD}[16]${PLAIN} 完全卸载主控系统     ${BOLD}[0]${PLAIN} 退出控制中心"
     echo -e "${PURPLE}==================================================================${PLAIN}"
 }
 
@@ -486,12 +487,19 @@ renew_ssl() {
         fi
     fi
 
+    mkdir -p /var/www/html
     echo -e "${CYAN}[INFO] 正在尝试签发/续签证书...${PLAIN}"
     if certbot --nginx -d "${domain}" --agree-tos --register-unsafely-without-email --redirect --force-renewal; then
         echo -e "${GREEN}[OK] 🎉 SSL 证书已成功申请并重载！${PLAIN}"
         systemctl reload nginx
     else
-        echo -e "${RED}[ERROR] 证书申请失败，请检查域名解析是否生效以及 80/443 端口是否可通。${PLAIN}"
+        echo -e "${YELLOW}[WARN] certbot --nginx 模式失败，正在尝试 webroot 模式续签...${PLAIN}"
+        if certbot certonly --webroot -w /var/www/html -d "${domain}" --agree-tos --register-unsafely-without-email --force-renewal; then
+            echo -e "${GREEN}[OK] 🎉 Webroot 模式证书续签成功！${PLAIN}"
+            systemctl reload nginx
+        else
+            echo -e "${RED}[ERROR] 证书申请失败，请检查域名解析是否生效以及 80/443 端口是否可通。${PLAIN}"
+        fi
     fi
 }
 
@@ -542,10 +550,11 @@ backup_restore_db() {
     echo -e "\n${BOLD}${CYAN}=== 数据备份、全量导出与还原 ===${PLAIN}"
     echo -e "  1. 一键导出全量数据 JSON (包含所有服务器、延迟检测任务、节点配置、分流规则、订阅)"
     echo -e "  2. 打包全量 SQLite 数据库压缩包 (.tar.gz)"
-    echo -e "  3. 还原/导入数据备份 (支持 .json 或 .tar.gz)"
+    echo -e "  3. 立即触发 SQLite 快照备份并推送到 Telegram (若已配置 TG Bot)"
+    echo -e "  4. 还原/导入数据备份 (支持 .json 或 .tar.gz)"
     echo -e "  0. 返回上级菜单"
     echo ""
-    read -r -p "请选择操作 [0-3]: " br_choice
+    read -r -p "请选择操作 [0-4]: " br_choice
     case "$br_choice" in
         1)
             mkdir -p "${BACKUP_DIR}"
@@ -575,6 +584,25 @@ backup_restore_db() {
             echo -e "${GREEN}[OK] 备份成功！文件存放在: ${BOLD}${backup_file}${PLAIN} (${b_size})"
             ;;
         3)
+            echo -e "${CYAN}[INFO] 正在触发即时 SQLite 快照备份...${PLAIN}"
+            local res
+            res=$(curl -s http://127.0.0.1:25775/api/system/backup-now 2>/dev/null || echo '{"ok":false}')
+            if echo "$res" | grep -q '"ok":\s*true'; then
+                local b_file b_tg
+                b_file=$(echo "$res" | grep -o '"file":\s*"[^"]*"' | cut -d'"' -f4)
+                b_tg=$(echo "$res" | grep -o '"tg_sent":\s*true')
+                echo -e "${GREEN}[OK] 🎉 数据库快照备份成功完成！${PLAIN}"
+                echo -e "备份文件: ${BOLD}${CYAN}${BACKUP_DIR}/${b_file}${PLAIN}"
+                if [ -n "$b_tg" ]; then
+                    echo -e "${GREEN}[OK] 📱 备份文件已成功推送到 Telegram Bot！${PLAIN}"
+                else
+                    echo -e "${YELLOW}[INFO] 未检测到生效的 Telegram 通知机器人，文件已在本地安全归档。${PLAIN}"
+                fi
+            else
+                echo -e "${RED}[ERROR] 触发备份失败: ${res}${PLAIN}"
+            fi
+            ;;
+        4)
             echo -e "\n${CYAN}请选择要还原的数据源:${PLAIN}"
             echo -e "  1. 从历史备份目录 (${BACKUP_DIR}) 中选择文件还原"
             echo -e "  2. 手动输入服务器本地备份文件的绝对路径"
@@ -826,7 +854,84 @@ manage_bbr() {
     fi
 }
 
-# 14. 完全卸载
+# 14. 订阅访问审计日志
+view_audit_logs() {
+    echo -e "\n${BOLD}${CYAN}=== 📋 客户端订阅访问审计日志 (最近 25 条) ===${PLAIN}"
+    if [ ! -f "${DATA_DIR}/nodes.db" ]; then
+        echo -e "${RED}[ERROR] 未找到数据库文件: ${DATA_DIR}/nodes.db${PLAIN}"
+        return
+    fi
+
+    python3 - "${DATA_DIR}/nodes.db" << 'PYEOF'
+import sqlite3, sys
+db_path = sys.argv[1]
+try:
+    conn = sqlite3.connect(db_path)
+    c = conn.cursor()
+    c.execute("CREATE TABLE IF NOT EXISTS subscription_access_logs (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL, sub_name TEXT, client_ip TEXT, user_agent TEXT, format TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c.execute("SELECT created_at, client_ip, format, user_agent, token FROM subscription_access_logs ORDER BY id DESC LIMIT 25")
+    rows = c.fetchall()
+    conn.close()
+    if not rows:
+        print("  \033[0;33m(暂无客户端订阅访问记录)\033[0m")
+    else:
+        print(f"  \033[1m{'时间':<20} {'客户端 IP':<16} {'格式':<10} {'客户端类型 (User-Agent)':<30}\033[0m")
+        print("  " + "-" * 78)
+        for r in rows:
+            created_at, ip, fmt, ua, tok = str(r[0]), str(r[1] or "-"), str(r[2] or "clash"), str(r[3] or "unknown"), str(r[4] or "")
+            short_ua = (ua[:27] + "...") if len(ua) > 30 else ua
+            print(f"  {created_at:<20} {ip:<16} {fmt:<10} {short_ua:<30}")
+except Exception as e:
+    print("读取日志失败:", e)
+PYEOF
+
+    echo ""
+    echo -e "提示: 如需查看全部原始日志，可访问 API: ${CYAN}http://127.0.0.1:25775/api/subscriptions/access-logs${PLAIN}"
+}
+
+# 15. Admin Token 管理 (查看 / 重置)
+manage_admin_token() {
+    echo -e "\n${BOLD}${CYAN}=== 🔐 后台安全管理令牌 (Admin API Token) ===${PLAIN}"
+    echo -e "说明: Admin Token 用于保护节点管理与订阅敏感接口（如通知配置、审计日志、快照备份）。"
+    echo -e "      可通过 Header (X-Admin-Token / Bearer) 或 URL 参数 (?admin_token=xxx) 认证。\n"
+
+    if [ ! -f "${DATA_DIR}/nodes.db" ]; then
+        echo -e "${RED}[ERROR] 未找到数据库文件: ${DATA_DIR}/nodes.db${PLAIN}"
+        return
+    fi
+
+    local cur_token
+    cur_token=$(sqlite3 "${DATA_DIR}/nodes.db" "SELECT state_val FROM notification_states WHERE state_key = 'admin_api_token';" 2>/dev/null || echo "")
+
+    if [ -z "$cur_token" ]; then
+        cur_token="未初始化 (系统自动生成)"
+    fi
+
+    echo -e "当前 Admin Token: ${BOLD}${GREEN}${cur_token}${PLAIN}"
+    echo ""
+    echo -e "  1. 重新生成并轮换全新的 Admin Token"
+    echo -e "  0. 返回上级菜单"
+    echo ""
+    read -r -p "请选择操作 [0-1]: " tok_choice
+    case "$tok_choice" in
+        1)
+            read -r -p "确认轮换全新的 Admin Token 吗？旧 Token 将立即失效！[y/N]: " conf_tok
+            if [[ "$conf_tok" =~ ^[Yy]$ ]]; then
+                local new_tok
+                new_tok=$(python3 -c "import secrets; print(secrets.token_hex(24))")
+                sqlite3 "${DATA_DIR}/nodes.db" "CREATE TABLE IF NOT EXISTS notification_states (state_key TEXT PRIMARY KEY, state_val TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+                sqlite3 "${DATA_DIR}/nodes.db" "INSERT OR REPLACE INTO notification_states (state_key, state_val, updated_at) VALUES ('admin_api_token', '${new_tok}', CURRENT_TIMESTAMP);"
+                systemctl restart komari-node-mgr
+                echo -e "\n${GREEN}[OK] 🎉 Admin Token 轮换成功！${PLAIN}"
+                echo -e "新 Admin Token: ${BOLD}${GREEN}${new_tok}${PLAIN}"
+            fi
+            ;;
+        *)
+            ;;
+    esac
+}
+
+# 16. 完全卸载
 uninstall_system() {
     echo -e "\n${BOLD}${RED}==================================================================${PLAIN}"
     echo -e "${BOLD}${RED}                 ⚠️  危险操作：完全卸载主控端系统${PLAIN}"
@@ -876,7 +981,7 @@ main() {
     check_root
     while true; do
         show_dashboard
-        read -r -p "请输入对应功能编号 [0-14]: " choice
+        read -r -p "请输入对应功能编号 [0-16]: " choice
         case "$choice" in
             1)  restart_all_services ;;
             2)  stop_all_services ;;
@@ -891,7 +996,9 @@ main() {
             11) manage_sub_token ;;
             12) reset_admin_password ;;
             13) manage_bbr ;;
-            14) uninstall_system ;;
+            14) view_audit_logs ;;
+            15) manage_admin_token ;;
+            16) uninstall_system ;;
             0)  echo -e "\n${GREEN}已退出 Komari 管理控制中心。随时输入 ${BOLD}${YELLOW}hhub${PLAIN}${GREEN} 再次唤起。${PLAIN}\n"; exit 0 ;;
             *)  echo -e "${RED}[ERROR] 选项输入无效，请重新输入！${PLAIN}"; sleep 1 ;;
         esac
