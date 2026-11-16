@@ -73,7 +73,7 @@ DEFAULT_THEME_PREVIEW_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="
     <text x="608" y="27" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF">全网在线 9/9</text>
     <rect x="0" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
     <circle cx="24" cy="88" r="5" fill="#10B981" />
-    <text x="38" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">HKcloudx AMD 1号鸡</text>
+    <text x="38" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">香港优化 BGP 01</text>
     <text x="24" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 28%  RAM 35%</text>
     <rect x="24" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
     <rect x="24" y="124" width="55" height="6" rx="3" fill="#34D399" />
@@ -81,7 +81,7 @@ DEFAULT_THEME_PREVIEW_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="
     <text x="24" y="172" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">连通率 100.0% · 32ms</text>
     <rect x="233" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
     <circle cx="257" cy="88" r="5" fill="#10B981" />
-    <text x="271" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">甲骨文 ARM 韩国首尔</text>
+    <text x="271" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">韩国首尔 ARM 02</text>
     <text x="257" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 14%  RAM 22%</text>
     <rect x="257" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
     <rect x="257" y="124" width="40" height="6" rx="3" fill="#60A5FA" />
@@ -89,7 +89,7 @@ DEFAULT_THEME_PREVIEW_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="
     <text x="257" y="172" font-family="sans-serif" font-size="10" fill="rgba(255,255,255,0.6)">连通率 100.0% · 48ms</text>
     <rect x="467" y="62" width="213" height="135" rx="16" fill="url(#cardBg)" stroke="rgba(255,255,255,0.25)" stroke-width="1" />
     <circle cx="491" cy="88" r="5" fill="#10B981" />
-    <text x="505" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">懒猫 JPL 日本东京</text>
+    <text x="505" y="92" font-family="sans-serif" font-size="13" font-weight="bold" fill="#FFFFFF">日本东京 专线 03</text>
     <text x="491" y="112" font-family="sans-serif" font-size="11" fill="rgba(255,255,255,0.7)">CPU 45%  RAM 50%</text>
     <rect x="491" y="124" width="165" height="6" rx="3" fill="rgba(255,255,255,0.2)" />
     <rect x="491" y="124" width="90" height="6" rx="3" fill="#FBBF24" />
