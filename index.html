@@ -3406,7 +3406,7 @@
 
           // 1. Desktop Table Row
           const isV6Node = Boolean(node.server_ip && node.server_ip.includes(':'));
-          const canCreateV6 = !isExt && srv && srv.ipv6 && !isV6Node;
+          const canCreateV6 = !isExt && !isV6Node;
           const v6Badge = isV6Node 
             ? `<span class="ml-1.5 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">IPv6</span>` 
             : '';
@@ -3615,7 +3615,7 @@
       const isAlreadyV6 = Boolean(node.server_ip && node.server_ip.includes(':'));
       const sheetIpv6Bar = document.getElementById('sheetIpv6Bar');
       if (sheetIpv6Bar) {
-        if (!isExt && srv && srv.ipv6 && !isAlreadyV6) {
+        if (!isExt && !isAlreadyV6) {
           sheetIpv6Bar.classList.remove('hidden');
         } else {
           sheetIpv6Bar.classList.add('hidden');
@@ -3814,8 +3814,18 @@
                 </div>
               </td>
               <td class="py-3.5 px-4">
-                <div class="font-mono text-xs text-slate-700 dark:text-slate-200">${escapeHtml(server.ipv4 || server.ipv6 || '-')}</div>
-                <div class="text-[11px] text-slate-400 mt-0.5">${escapeHtml(server.os || 'Linux')} · ${escapeHtml(server.arch || 'amd64')}</div>
+                <div class="font-mono text-xs text-slate-700 dark:text-slate-200">
+                  <div class="flex items-center gap-1">
+                    <span class="text-[10px] text-slate-400">v4:</span>
+                    <span>${escapeHtml(server.ipv4 || '-')}</span>
+                  </div>
+                  <div class="flex items-center gap-1 text-[11px] text-purple-600 dark:text-purple-400 mt-0.5">
+                    <span class="text-[10px] opacity-70">v6:</span>
+                    <span>${escapeHtml(server.ipv6 || '未检测')}</span>
+                    <button onclick="promptEditServerIp('${server.uuid}', '${escapeHtml(server.name)}', '${escapeHtml(server.ipv4 || '')}', '${escapeHtml(server.ipv6 || '')}')" class="ml-1 text-[10px] hover:underline text-indigo-600 dark:text-indigo-400 font-sans" title="修改或设置 IP">[设置IP]</button>
+                  </div>
+                </div>
+                <div class="text-[11px] text-slate-400 mt-1">${escapeHtml(server.os || 'Linux')} · ${escapeHtml(server.arch || 'amd64')}</div>
               </td>
               <td class="py-3.5 px-4">
                 ${statusBadge}
@@ -3859,8 +3869,9 @@
                     <i data-lucide="server" class="w-4 h-4 text-indigo-500 shrink-0"></i>
                     <span>${escapeHtml(server.name)}</span>
                   </div>
-                  <div class="text-[11px] font-mono text-slate-400 mt-0.5">
-                    ${escapeHtml(server.ipv4 || server.ipv6 || '-')} · ${escapeHtml(server.os || 'Linux')} (${escapeHtml(server.arch || 'amd64')})
+                  <div class="text-[11px] font-mono text-slate-400 mt-0.5 space-y-0.5">
+                    <div>v4: ${escapeHtml(server.ipv4 || '-')} · v6: ${escapeHtml(server.ipv6 || '未检测')} <button onclick="promptEditServerIp('${server.uuid}', '${escapeHtml(server.name)}', '${escapeHtml(server.ipv4 || '')}', '${escapeHtml(server.ipv6 || '')}')" class="text-indigo-600 dark:text-indigo-400 font-bold ml-1 font-sans">[设置IP]</button></div>
+                    <div>${escapeHtml(server.os || 'Linux')} (${escapeHtml(server.arch || 'amd64')})</div>
                   </div>
                 </div>
                 <div>${statusBadgeShort}</div>
@@ -3958,6 +3969,30 @@
         }
       } catch (e) {
         showToast('请求失败: ' + e.message, 'error');
+      }
+    }
+
+    async function promptEditServerIp(uuid, name, curV4, curV6) {
+      const newV4 = prompt(`【${name}】公网 IPv4 地址：`, curV4);
+      if (newV4 === null) return;
+      const newV6 = prompt(`【${name}】公网 IPv6 地址（无则留空）：`, curV6);
+      if (newV6 === null) return;
+      
+      showToast('正在更新服务器 IP 配置...', 'info');
+      try {
+        const res = await fetch('/api/node-mgr/servers/set-ip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uuid: uuid, ip: newV4.trim(), ipv6: newV6.trim() })
+        }).then(r => r.json());
+        if (res.ok) {
+          showToast('✅ 服务器 IP 地址已成功更新！', 'success');
+          await loadData();
+        } else {
+          showToast(`更新失败: ${res.error || '未知错误'}`, 'error');
+        }
+      } catch (e) {
+        showToast(`请求失败: ${e.message}`, 'error');
       }
     }
 
@@ -4310,9 +4345,14 @@
       const node = currentNodes.find(n => n.id === nodeId);
       if (!node) return;
       const server = currentServers.find(s => s.uuid === node.server_uuid);
-      if (!server || !server.ipv6) {
-        showToast(`【${node.server_name || '服务器'}】未检测到有效 IPv6 地址，无法创建 IPv6 节点！`, 'error');
-        return;
+      let targetV6 = (server && server.ipv6) ? server.ipv6.trim() : '';
+      if (!targetV6) {
+        const inputV6 = prompt(`【${node.server_name || '服务器'}】当前尚未自动探测到有效 IPv6 地址。\n\n如果该服务器已配置公网 IPv6，请输入它的 IPv6 地址直接完成克隆（系统将同时为您保存该服务器的 IPv6 配置）：`);
+        if (!inputV6 || !inputV6.trim() || !inputV6.includes(':')) {
+          if (inputV6 !== null) showToast('输入的 IPv6 地址格式不正确（需包含冒号十六进制）！', 'error');
+          return;
+        }
+        targetV6 = inputV6.trim();
       }
 
       const cloneName = node.name.includes('[IPv6]') ? node.name : `${node.name} [IPv6]`;
@@ -4322,13 +4362,14 @@
         return;
       }
 
-      if (!confirm(`确定为【${node.name}】自动衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${server.ipv6}\n端口将复用原节点端口: ${node.port}`)) return;
+      if (!confirm(`确定为【${node.name}】自动衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${targetV6}\n端口将复用原节点端口: ${node.port}`)) return;
 
       showToast('正在创建 IPv6 节点...', 'info');
       try {
         const res = await fetch(`/api/node-mgr/nodes/${nodeId}/clone-ipv6`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ipv6: targetV6 })
         }).then(r => r.json());
 
         if (res.ok) {
@@ -4340,7 +4381,7 @@
           const fallbackPayload = {
             server_uuid: node.server_uuid,
             server_name: node.server_name,
-            server_ip: server.ipv6,
+            server_ip: targetV6,
             name: cloneName,
             protocol: node.protocol,
             port: node.port,

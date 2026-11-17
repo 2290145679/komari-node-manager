@@ -1079,21 +1079,24 @@ def sync_ping_tasks_all_clients():
         return 0
 
 def set_authoritative_server_ip(token, custom_ip):
-    """Lock authoritative IP for a server and sync across komari.db, nodes.db and all nodes (永恒防错机制)"""
-    if not token or not custom_ip:
+    """Lock authoritative IP (IPv4 and/or IPv6) for a server and sync across komari.db, nodes.db and all nodes (永恒防错机制)"""
+    if not token or (not custom_ip and not custom_ipv6):
         return False, "missing token or ip", None
     token = str(token).strip()
-    custom_ip = str(custom_ip).strip()
+    custom_ip = str(custom_ip or "").strip()
+    custom_ipv6 = str(custom_ipv6 or "").strip()
     suuid = None
     if os.path.exists(KOMARI_DB):
         try:
             conn_k = sqlite3.connect(KOMARI_DB)
             c_k = conn_k.cursor()
-            c_k.execute("SELECT uuid FROM clients WHERE token = ? OR uuid = ?", (token, token))
+            c_k.execute("SELECT uuid, ipv4, ipv6 FROM clients WHERE token = ? OR uuid = ?", (token, token))
             row_k = c_k.fetchone()
             if row_k:
                 suuid = row_k[0]
-                c_k.execute("UPDATE clients SET ipv4 = ?, updated_at = ? WHERE uuid = ?", (custom_ip, datetime.now().isoformat(), suuid))
+                cur_v4 = custom_ip if custom_ip else (row_k[1] or "")
+                cur_v6 = custom_ipv6 if custom_ipv6 else (row_k[2] or "")
+                c_k.execute("UPDATE clients SET ipv4 = ?, ipv6 = ?, updated_at = ? WHERE uuid = ?", (cur_v4, cur_v6, datetime.now().isoformat(), suuid))
                 conn_k.commit()
             conn_k.close()
         except Exception as e:
@@ -1115,14 +1118,36 @@ def set_authoritative_server_ip(token, custom_ip):
         try:
             conn_r = sqlite3.connect(NODES_DB)
             c_r = conn_r.cursor()
-            c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-            c_r.execute("SELECT has_realm, is_landing FROM server_realm_configs WHERE uuid = ?", (suuid,))
+            c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, custom_ipv6 TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+            try:
+                c_r.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ipv6 TEXT DEFAULT ''")
+            except Exception:
+                pass
+            c_r.execute("SELECT has_realm, custom_ip, is_landing, custom_ipv6 FROM server_realm_configs WHERE uuid = ?", (suuid,))
             row_r = c_r.fetchone()
             hr = row_r[0] if row_r else 0
-            land = row_r[1] if row_r else 0
-            c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)", (suuid, hr, custom_ip, land))
-            # Also update all nodes attached to this server
-            c_r.execute("UPDATE nodes SET server_ip = ? WHERE server_uuid = ?", (custom_ip, suuid))
+            cur_ip = custom_ip if custom_ip else (row_r[1] if row_r and row_r[1] else "")
+            land = row_r[2] if row_r else 0
+            cur_v6 = custom_ipv6 if custom_ipv6 else (row_r[3] if row_r and len(row_r) > 3 and row_r[3] else "")
+            c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, custom_ipv6, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)", (suuid, hr, cur_ip, land, cur_v6))
+            
+            # Update IPv4 nodes ONLY (never overwrite IPv6 nodes with IPv4)
+            if cur_ip:
+                c_r.execute("""
+                    UPDATE nodes SET server_ip = ? 
+                    WHERE server_uuid = ? 
+                      AND (server_ip NOT LIKE '%:%' OR server_ip IS NULL OR server_ip = '')
+                      AND name NOT LIKE '%[IPv6]%'
+                """, (cur_ip, suuid))
+            
+            # Update IPv6 nodes
+            if cur_v6:
+                c_r.execute("""
+                    UPDATE nodes SET server_ip = ? 
+                    WHERE server_uuid = ? 
+                      AND (server_ip LIKE '%:%' OR name LIKE '%[IPv6]%')
+                """, (cur_v6, suuid))
+                
             conn_r.commit()
             conn_r.close()
             # Invalidate stats cache so UI updates immediately
@@ -1135,41 +1160,62 @@ def set_authoritative_server_ip(token, custom_ip):
 
 def auto_repair_node_ips():
     """Automatically resolve missing server_ip and server_name for native nodes from komari clients table,
-    and enforce authoritative custom_ip from server_realm_configs to prevent WARP / NAT overwrite."""
+    and enforce authoritative custom_ip / custom_ipv6 from server_realm_configs to prevent WARP / NAT overwrite."""
     if not os.path.exists(KOMARI_DB) or not os.path.exists(NODES_DB):
         return 0
     try:
-        # 1. Load custom_ip overrides (authoritative locks)
+        # 1. Load custom_ip & custom_ipv6 overrides (authoritative locks)
         conn_n = sqlite3.connect(NODES_DB)
         c_n = conn_n.cursor()
-        c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-        c_n.execute("SELECT uuid, custom_ip FROM server_realm_configs WHERE custom_ip != '' AND custom_ip IS NOT NULL")
-        custom_ips = {r[0]: str(r[1]).strip() for r in c_n.fetchall() if r[1] and str(r[1]).strip()}
+        c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, custom_ipv6 TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+        try:
+            c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ipv6 TEXT DEFAULT ''")
+        except Exception:
+            pass
+        c_n.execute("SELECT uuid, custom_ip, custom_ipv6 FROM server_realm_configs")
+        custom_rows = c_n.fetchall()
+        custom_ips = {r[0]: str(r[1]).strip() for r in custom_rows if r[1] and str(r[1]).strip()}
+        custom_ipv6s = {r[0]: str(r[2]).strip() for r in custom_rows if len(r) > 2 and r[2] and str(r[2]).strip()}
 
         # 2. Sync with komari.db clients table
         conn_k = sqlite3.connect(KOMARI_DB)
         c_k = conn_k.cursor()
         c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
-        clients_map = {r[0]: {"name": r[1] or "", "ip": r[2] or r[3] or ""} for r in c_k.fetchall() if r[0]}
+        clients_map = {r[0]: {"name": r[1] or "", "ipv4": r[2] or "", "ipv6": r[3] or ""} for r in c_k.fetchall() if r[0]}
 
-        # If a server has an authoritative custom_ip, ensure komari.db clients.ipv4 is locked to it
+        # If a server has an authoritative custom_ip / custom_ipv6, ensure komari.db clients is locked to it
         for suuid, cip in custom_ips.items():
-            if suuid in clients_map:
-                clients_map[suuid]["ip"] = cip
+            if suuid in clients_map and cip:
+                clients_map[suuid]["ipv4"] = cip
                 c_k.execute("UPDATE clients SET ipv4 = ? WHERE uuid = ? AND (ipv4 != ? OR ipv4 IS NULL)", (cip, suuid, cip))
+        for suuid, cip6 in custom_ipv6s.items():
+            if suuid in clients_map and cip6:
+                clients_map[suuid]["ipv6"] = cip6
+                c_k.execute("UPDATE clients SET ipv6 = ? WHERE uuid = ? AND (ipv6 != ? OR ipv6 IS NULL)", (cip6, suuid, cip6))
         conn_k.commit()
         conn_k.close()
 
         # 3. Enforce authoritative IP on all nodes bound to self-hosted servers
-        c_n.execute("SELECT id, server_uuid, server_name, server_ip FROM nodes WHERE is_external = 0")
+        c_n.execute("SELECT id, server_uuid, server_name, server_ip, name FROM nodes WHERE is_external = 0")
         rows = c_n.fetchall()
         repaired = 0
-        for nid, suuid, sname, sip in rows:
+        for nid, suuid, sname, sip, nname in rows:
             if suuid in clients_map:
                 cinfo = clients_map[suuid]
                 new_name = sname if sname else cinfo["name"]
-                new_ip = custom_ips.get(suuid) or sip or cinfo["ip"]
-                if (not sname and new_name) or (sip != new_ip):
+                
+                # Check whether node is IPv6 or IPv4
+                is_v6_node = bool((sip and ":" in sip) or (nname and "[IPv6]" in nname))
+                if is_v6_node:
+                    # IPv6 node: strictly protect and prefer IPv6
+                    auth_v6 = custom_ipv6s.get(suuid) or cinfo.get("ipv6")
+                    new_ip = auth_v6 if auth_v6 else sip
+                else:
+                    # IPv4 node: prefer IPv4
+                    auth_v4 = custom_ips.get(suuid) or cinfo.get("ipv4")
+                    new_ip = auth_v4 if auth_v4 else sip
+                
+                if (not sname and new_name) or (sip != new_ip and new_ip):
                     c_n.execute("UPDATE nodes SET server_name = ?, server_ip = ? WHERE id = ?", (new_name, new_ip, nid))
                     repaired += 1
         if repaired > 0:
@@ -1549,7 +1595,7 @@ def get_servers_with_stats():
     c_n.execute("CREATE TABLE IF NOT EXISTS realm_heartbeats (token TEXT PRIMARY KEY, last_seen INTEGER)")
     c_n.execute("SELECT token, last_seen FROM realm_heartbeats")
     realm_heartbeats = dict(c_n.fetchall())
-    c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c_n.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, custom_ipv6 TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
     try:
         c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ip TEXT DEFAULT ''")
     except Exception:
@@ -1558,8 +1604,12 @@ def get_servers_with_stats():
         c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN is_landing INTEGER DEFAULT 0")
     except Exception:
         pass
-    c_n.execute("SELECT uuid, has_realm, custom_ip, is_landing FROM server_realm_configs")
-    realm_configs = {r[0]: (r[1], r[2] if len(r) > 2 else '', r[3] if len(r) > 3 else 0) for r in c_n.fetchall()}
+    try:
+        c_n.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ipv6 TEXT DEFAULT ''")
+    except Exception:
+        pass
+    c_n.execute("SELECT uuid, has_realm, custom_ip, is_landing, custom_ipv6 FROM server_realm_configs")
+    realm_configs = {r[0]: (r[1], r[2] if len(r) > 2 else '', r[3] if len(r) > 3 else 0, r[4] if len(r) > 4 else '') for r in c_n.fetchall()}
     c_n.execute("SELECT DISTINCT relay_server_uuid FROM nodes WHERE is_relay = 1")
     active_relay_uuids = set(r[0] for r in c_n.fetchall() if r[0])
     c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
@@ -1668,12 +1718,15 @@ def get_servers_with_stats():
 
         r_last_seen = realm_heartbeats.get(token, 0)
         is_realm_online = (now - r_last_seen) <= 90 if r_last_seen > 0 else False
-        r_conf = realm_configs.get(uuid_val, (0, '', 0))
+        r_conf = realm_configs.get(uuid_val, (0, '', 0, ''))
         is_realm_configured = bool(r_conf[0]) if isinstance(r_conf, (list, tuple)) else bool(r_conf)
         custom_ip = str(r_conf[1] if isinstance(r_conf, (list, tuple)) and len(r_conf) > 1 else '').strip()
         is_landing = bool(r_conf[2]) if isinstance(r_conf, (list, tuple)) and len(r_conf) > 2 else False
+        custom_ipv6 = str(r_conf[3] if isinstance(r_conf, (list, tuple)) and len(r_conf) > 3 else '').strip()
         if custom_ip:
             ip4 = custom_ip
+        if custom_ipv6:
+            ip6 = custom_ipv6
         is_relay_assigned = uuid_val in active_relay_uuids
         has_realm = is_realm_online or (r_last_seen > 0) or is_realm_configured or is_relay_assigned
 
@@ -1720,6 +1773,7 @@ def get_servers_with_stats():
             "ipv4": ip4 or "",
             "custom_ip": custom_ip or "",
             "ipv6": ip6 or "",
+            "custom_ipv6": custom_ipv6 or "",
             "os": os_name or "",
             "arch": arch or "",
             "token": token or "",
@@ -2874,9 +2928,25 @@ if [ -z "$CUSTOM_IP" ]; then
   fi
 fi
 
-if [ -n "$CUSTOM_IP" ]; then
-  echo "[Info] 本机公网入站 IP 锁定为: $CUSTOM_IP"
-  curl -s -k -m 6 "$MASTER_URL/api/node-mgr/agent/set-server-ip?token=$TOKEN&ip=$CUSTOM_IP" >/dev/null 2>&1 || true
+# Detect public IPv6 address
+CUSTOM_IPV6=""
+DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+if [ -n "$DEF_IF6" ]; then
+  NIC_IPV6=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+  if [ -n "$NIC_IPV6" ]; then
+    CUSTOM_IPV6="$NIC_IPV6"
+  fi
+fi
+if [ -z "$CUSTOM_IPV6" ]; then
+  EGRESS_IPV6=$(curl -s6 -m 3 https://api64.ipify.org 2>/dev/null || curl -s6 -m 3 https://ifconfig.me 2>/dev/null || curl -s6 -m 3 https://icanhazip.com 2>/dev/null || true)
+  if [[ "$EGRESS_IPV6" =~ : ]] && ! [[ "$EGRESS_IPV6" =~ ^(fd|fe80) ]]; then
+    CUSTOM_IPV6="$EGRESS_IPV6"
+  fi
+fi
+
+if [ -n "$CUSTOM_IP" ] || [ -n "$CUSTOM_IPV6" ]; then
+  echo "[Info] 本机公网入站 IPv4: ${CUSTOM_IP:-未分配}, IPv6: ${CUSTOM_IPV6:-未分配}"
+  curl -s -k -m 6 "$MASTER_URL/api/node-mgr/agent/set-server-ip?token=$TOKEN&ip=$CUSTOM_IP&ipv6=$CUSTOM_IPV6" >/dev/null 2>&1 || true
 fi
 
 echo "======================================================"
@@ -3543,6 +3613,21 @@ REOF
       if ! is_process_running realm; then
         echo "[AutoHeal] Realm down detected, restarting..."
         restart_realm
+      fi
+    fi
+
+    # Auto-detect and sync IPv6
+    if [ $TICK -eq 1 ] || [ $((TICK % 30)) -eq 0 ]; then
+      SYNC_IPV6=""
+      DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+      if [ -n "$DEF_IF6" ]; then
+        SYNC_IPV6=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+      fi
+      if [ -z "$SYNC_IPV6" ]; then
+        SYNC_IPV6=$(curl -s6 -m 3 https://api64.ipify.org 2>/dev/null || curl -s6 -m 3 https://ifconfig.me 2>/dev/null || true)
+      fi
+      if [[ "$SYNC_IPV6" =~ : ]] && ! [[ "$SYNC_IPV6" =~ ^(fd|fe80) ]]; then
+        curl -s -k -m 6 "$MASTER_URL/api/node-mgr/agent/set-server-ip?token=$TOKEN&ipv6=$SYNC_IPV6" >/dev/null 2>&1 || true
       fi
     fi
   fi
@@ -4229,15 +4314,25 @@ def check_and_notify_events():
                             set_state(f"node_tcp_st:{nid}", "blocked")
                             set_state(f"node_tcp_block_time:{nid}", str(now))
                             err_msg = res.get("error") or "连接超时 (Connection timed out)"
+                            is_refused = any(k in err_msg for k in ["拒绝", "refused", "Refused", "未监听", "未运行"])
+                            set_state(f"node_block_type:{nid}", "refused" if is_refused else "timeout")
+                            
+                            if is_refused:
+                                n_title = "⚠️ 节点 Sing-box 核心离线 / 端口未监听告警"
+                                n_desc = f"目标端口连接被拒绝 (Connection Refused)，说明宿主服务器上的 Sing-box 代理核心未在运行或端口未监听。"
+                            else:
+                                n_title = "🚫 节点 TCP 疑似被墙 / 网络丢包告警"
+                                n_desc = f"端口连续 {fail_cnt} 次握手超时失败，可能遭遇 GFW 阻断、机房网络波动或防火墙拦截。"
+
                             dispatch_notification(
-                                title="🚫 节点 TCP 疑似被墙 / 无法连通告警",
+                                title=n_title,
                                 message=(
                                     f"<b>节点名称</b>: <code>{nname}</code>\n"
                                     f"<b>归属主机</b>: <code>{sname}</code>\n"
                                     f"<b>目标节点</b>: <code>{ip}:{port}</code>\n"
                                     f"<b>节点协议</b>: <code>{(proto or 'TCP').upper()}</code>\n"
-                                    f"<b>检测结果</b>: <b>TCP 握手失败</b> ({err_msg})\n"
-                                    f"<b>判定说明</b>: 端口连续 {fail_cnt} 次握手失败，该节点已自动从订阅中临时熔断下线，防范客户端卡死。\n"
+                                    f"<b>检测结果</b>: <b>握手失败</b> ({err_msg})\n"
+                                    f"<b>判定说明</b>: {n_desc}\n"
                                     f"<i>建议检查服务器运行状态或更换监听端口。</i>"
                                 ),
                                 level="danger",
@@ -4252,13 +4347,15 @@ def check_and_notify_events():
                         except Exception: pass
                         if last_tcp_st == "blocked":
                             set_state(f"node_tcp_st:{nid}", "ok")
+                            b_type = get_state(f"node_block_type:{nid}", "timeout")
+                            rec_title = "🟢 节点 Sing-box 核心服务已恢复运行" if b_type == "refused" else "🟢 节点 TCP 阻断已恢复解除"
                             if notify_recovery:
                                 block_start = int(get_state(f"node_tcp_block_time:{nid}", str(now)))
                                 dur_s = max(0, now - block_start)
                                 dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
                                 lat = res.get("latency_ms", 0)
                                 dispatch_notification(
-                                    title="🟢 节点 TCP 阻断已恢复解除",
+                                    title=rec_title,
                                     message=(
                                         f"<b>节点名称</b>: <code>{nname}</code>\n"
                                         f"<b>归属主机</b>: <code>{sname}</code>\n"
@@ -5127,11 +5224,11 @@ rules:
                         personalized_all_nodes.append(n_copy)
                 all_nodes = personalized_all_nodes
 
-            # Dynamic health filter: omit self-hosted nodes whose server / Sing-box core is offline
+            # Dynamic health filter: strictly omit self-hosted nodes whose server or Sing-box core is offline
             servers_data = get_cached_servers_with_stats()
             online_server_uuids = set(
                 s["uuid"] for s in servers_data.get("servers", [])
-                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
+                if s.get("server_online") and s.get("singbox_online")
             )
             nodes = [
                 n for n in all_nodes
@@ -5489,8 +5586,12 @@ rules:
                     valid_nodes.append(n)
                 elif n.get("server_uuid") in servers_map:
                     srv = servers_map[n.get("server_uuid")]
+                    is_v6 = bool((n.get("server_ip") and ":" in n.get("server_ip")) or (n.get("name") and "[IPv6]" in n.get("name")))
                     if not n.get("server_ip"):
-                        n["server_ip"] = srv.get("ipv4") or srv.get("ipv6") or ""
+                        if is_v6:
+                            n["server_ip"] = srv.get("ipv6") or ""
+                        else:
+                            n["server_ip"] = srv.get("ipv4") or srv.get("ipv6") or ""
                     if not n.get("server_name"):
                         n["server_name"] = srv.get("name") or ""
                     if n.get("is_relay") and n.get("relay_server_uuid"):
@@ -5531,8 +5632,12 @@ rules:
                         n["server_online"] = is_srv
                         n["singbox_online"] = is_sb
                         n["probe_online"] = bool(srv.get("probe_online"))
-                        n["node_status"] = "online"
-                        n["status_text"] = "正常在线"
+                        if not is_sb:
+                            n["node_status"] = "core_offline"
+                            n["status_text"] = "⚠️ 核心离线 (Sing-box 未运行)"
+                        else:
+                            n["node_status"] = "online"
+                            n["status_text"] = "正常在线"
 
                 is_fail = is_node_in_failover(n["id"]) or bool(n.get("is_failover"))
                 n["is_failover"] = is_fail
@@ -6042,14 +6147,17 @@ rules:
             return
 
         # Agent Register/Lock Server IP Endpoint (永恒防错机制)
-        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip"]:
-            token = query.get("token", [""])[0]
+        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip", "/api/servers/set-ip", "/api/node-mgr/servers/set-ip"]:
+            token = query.get("token", [""])[0] or query.get("uuid", [""])[0]
             custom_ip = query.get("ip", [""])[0]
-            ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
+            custom_ipv6 = query.get("ipv6", [""])[0]
+            ok, err, suuid = set_authoritative_server_ip(token, custom_ip, custom_ipv6)
             if ok:
                 if custom_ip:
                     unblock_ip(custom_ip)
-                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
+                if custom_ipv6:
+                    unblock_ip(custom_ipv6)
+                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip, "custom_ipv6": custom_ipv6})
             else:
                 self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
             return
@@ -6106,14 +6214,17 @@ rules:
         body = json.loads(self.rfile.read(length).decode("utf-8")) if length > 0 else {}
 
         # Agent Register/Lock Server IP Endpoint (永恒防错机制 POST)
-        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip"]:
-            token = str(query.get("token", [""])[0] or body.get("token") or "")
-            custom_ip = str(query.get("ip", [""])[0] or body.get("ip") or "").strip()
-            ok, err, suuid = set_authoritative_server_ip(token, custom_ip)
+        if path in ["/api/agent/set-server-ip", "/api/node-mgr/agent/set-server-ip", "/api/servers/set-ip", "/api/node-mgr/servers/set-ip"]:
+            token = str(query.get("token", [""])[0] or query.get("uuid", [""])[0] or body.get("token") or body.get("uuid") or body.get("server_uuid") or "")
+            custom_ip = str(query.get("ip", [""])[0] or body.get("ip") or body.get("ipv4") or "").strip()
+            custom_ipv6 = str(query.get("ipv6", [""])[0] or body.get("ipv6") or "").strip()
+            ok, err, suuid = set_authoritative_server_ip(token, custom_ip, custom_ipv6)
             if ok:
                 if custom_ip:
                     unblock_ip(custom_ip)
-                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip})
+                if custom_ipv6:
+                    unblock_ip(custom_ipv6)
+                self._send_json({"ok": True, "uuid": suuid, "custom_ip": custom_ip, "custom_ipv6": custom_ipv6})
             else:
                 self._send_json({"ok": False, "error": err or "server not found"}, 400 if err != "server not found" else 404)
             return
@@ -7356,11 +7467,18 @@ rules:
             servers_data = get_servers_with_stats()
             servers = servers_data.get("servers", [])
             server = next((s for s in servers if s.get("uuid") == node.get("server_uuid")), None)
-            if not server or not server.get("ipv6"):
-                self._send_json({"error": "该节点所属服务器未检测到有效 IPv6 地址"}, 400)
+            
+            provided_ipv6 = str(body.get("ipv6") or query.get("ipv6", [""])[0] if isinstance(query.get("ipv6"), list) else "").strip()
+            server_ipv6 = str(server.get("ipv6") if server else "").strip()
+            ipv6 = provided_ipv6 or server_ipv6
+
+            if not ipv6 or ":" not in ipv6:
+                self._send_json({"error": "该节点所属服务器未检测到有效 IPv6 地址，请先在服务器填入或指定 IPv6 地址"}, 400)
                 return
 
-            ipv6 = server["ipv6"]
+            if provided_ipv6 and server:
+                set_authoritative_server_ip(server.get("token") or server.get("uuid"), "", provided_ipv6)
+
             clone_name = node["name"] if "[IPv6]" in node["name"] else f"{node['name']} [IPv6]"
 
             # Check duplicate clone name
