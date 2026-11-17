@@ -44,21 +44,32 @@ def get_system_domain():
     env_dom = os.environ.get("KOMARI_DOMAIN", "").strip()
     if env_dom:
         return env_dom
-    for conf_p in ["/etc/nginx/sites-available/komari.conf", "/etc/nginx/conf.d/komari.conf"]:
+    for conf_p in ["/etc/nginx/sites-available/komari.conf", "/etc/nginx/conf.d/komari.conf", "/etc/nginx/sites-enabled/komari.conf"]:
         if os.path.exists(conf_p):
             try:
                 with open(conf_p, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
-                        if line.startswith("server_name ") and not line.endswith("_;"):
+                        if line.startswith("server_name "):
                             names = line.replace("server_name", "").replace(";", "").split()
                             for n in names:
                                 n = n.strip()
                                 if n and n != "_" and not re.match(r"^\d+\.\d+\.\d+\.\d+$", n):
                                     return n
+                            for n in names:
+                                n = n.strip()
+                                if n and n != "_":
+                                    return n
             except Exception:
                 pass
-    return "127.0.0.1"
+    if os.path.exists("/etc/letsencrypt/live"):
+        try:
+            for d in os.listdir("/etc/letsencrypt/live"):
+                if d and d != "README" and not d.startswith("."):
+                    return d
+        except Exception:
+            pass
+    return "jgw2.yohoo.xyz"
 
 DOMAIN = get_system_domain()
 
@@ -5036,7 +5047,11 @@ def delete_server_fully(server_uuid):
 
     return len(deleted_names)
 
-def get_user_portal_payload(token):
+def get_user_portal_payload(token, domain=None, proto=None):
+    use_domain = domain if (domain and domain not in ["127.0.0.1", "localhost", "0.0.0.0"]) else DOMAIN
+    if not use_domain or use_domain in ["127.0.0.1", "localhost", "0.0.0.0"]:
+        use_domain = "jgw2.yohoo.xyz"
+    use_proto = proto or "https"
     conn = sqlite3.connect(NODES_DB)
     c = conn.cursor()
     c.execute("PRAGMA table_info(subscriptions)")
@@ -5160,9 +5175,9 @@ def get_user_portal_payload(token):
         "status": st,
         "status_text": st_text,
         "profile_title": p_title,
-        "sub_url": f"https://{DOMAIN}/sub/{tok}{frag}",
-        "clash_url": f"https://{DOMAIN}/sub/{tok}?clash=1{frag}",
-        "singbox_url": f"https://{DOMAIN}/sub/{tok}?singbox=1{frag}"
+        "sub_url": f"{use_proto}://{use_domain}/sub/{tok}{frag}",
+        "clash_url": f"{use_proto}://{use_domain}/sub/{tok}?clash=1{frag}",
+        "singbox_url": f"{use_proto}://{use_domain}/sub/{tok}?singbox=1{frag}"
     }
     return user_info, user_nodes
 
@@ -5177,6 +5192,21 @@ def build_node_sync_script(master_url, token):
     return raw_script.replace("__MASTER_URL__", master_url).replace("__TOKEN__", token)
 
 class NodeMgrHandler(BaseHTTPRequestHandler):
+    def get_req_domain(self):
+        host = self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or ""
+        host = host.split(":")[0].strip()
+        if host and host not in ["127.0.0.1", "localhost", "0.0.0.0"]:
+            return host
+        if DOMAIN and DOMAIN not in ["127.0.0.1", "localhost", "0.0.0.0"]:
+            return DOMAIN
+        return "jgw2.yohoo.xyz"
+
+    def get_req_proto(self):
+        proto = self.headers.get("X-Forwarded-Proto") or ""
+        if proto:
+            return proto.strip()
+        return "https"
+
     def get_client_ip(self):
         xff = self.headers.get("X-Forwarded-For")
         if xff:
@@ -6177,7 +6207,9 @@ rules:
             rules_cfg = get_subscription_rules()
             base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
             frag = f"#{urllib.parse.quote(base_title)}"
-            self._send_json({"ok": True, "token": token, "sub_url": f"https://{DOMAIN}/sub/{token}{frag}", "profile_title": base_title})
+            req_dom = self.get_req_domain()
+            req_proto = self.get_req_proto()
+            self._send_json({"ok": True, "token": token, "sub_url": f"{req_proto}://{req_dom}/sub/{token}{frag}", "profile_title": base_title})
             return
 
         # Public User Portal Info Endpoint
@@ -6186,7 +6218,7 @@ rules:
             if not token:
                 self._send_json({"ok": False, "error": "缺少订阅 Token 参数"}, 400)
                 return
-            user_info, user_nodes = get_user_portal_payload(token)
+            user_info, user_nodes = get_user_portal_payload(token, domain=self.get_req_domain(), proto=self.get_req_proto())
             if not user_info:
                 self._send_json({"ok": False, "error": "无效的订阅凭证 (用户不存在)"}, 404)
                 return
@@ -6249,6 +6281,8 @@ rules:
 
                 p_title = f"{base_title} - {uname}" if (uname and uname != "default") else base_title
                 frag = f"#{urllib.parse.quote(p_title)}"
+                req_dom = self.get_req_domain()
+                req_proto = self.get_req_proto()
 
                 users.append({
                     "id": uid,
@@ -6276,8 +6310,8 @@ rules:
                     "status": st,
                     "status_text": st_text,
                     "profile_title": p_title,
-                    "sub_url": f"https://{DOMAIN}/sub/{tok}{frag}",
-                    "portal_url": f"https://{DOMAIN}/user?token={tok}"
+                    "sub_url": f"{req_proto}://{req_dom}/sub/{tok}{frag}",
+                    "portal_url": f"{req_proto}://{req_dom}/user?token={tok}"
                 })
             conn.close()
             self._send_json({"ok": True, "users": users})
@@ -6610,7 +6644,7 @@ rules:
                 return
 
             token = row[0]
-            user_info, user_nodes = get_user_portal_payload(token)
+            user_info, user_nodes = get_user_portal_payload(token, domain=self.get_req_domain(), proto=self.get_req_proto())
             if not user_info:
                 self._send_json({"ok": False, "error": "用户账号异常或已被删除"}, 404)
                 return
@@ -6861,7 +6895,9 @@ rules:
             rules_cfg = get_subscription_rules()
             base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
             frag = f"#{urllib.parse.quote(base_title)}"
-            new_sub_url = f"https://{DOMAIN}/sub/{new_token}{frag}"
+            req_dom = self.get_req_domain()
+            req_proto = self.get_req_proto()
+            new_sub_url = f"{req_proto}://{req_dom}/sub/{new_token}{frag}"
             self._send_json({"ok": True, "token": new_token, "user_uuid": new_uuid, "sub_url": new_sub_url, "profile_title": base_title})
             return
 
@@ -6912,6 +6948,8 @@ rules:
             base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
             p_title = f"{base_title} - {name}" if (name and name != "default") else base_title
             frag = f"#{urllib.parse.quote(p_title)}"
+            req_dom = self.get_req_domain()
+            req_proto = self.get_req_proto()
             self._send_json({
                 "user": {
                     "id": new_id,
@@ -6927,8 +6965,8 @@ rules:
                     "traffic_used_bytes": 0,
                     "expire_time": expire_time,
                     "profile_title": p_title,
-                    "sub_url": f"https://{DOMAIN}/sub/{new_tok}{frag}",
-                    "portal_url": f"https://{DOMAIN}/user?token={new_tok}"
+                    "sub_url": f"{req_proto}://{req_dom}/sub/{new_tok}{frag}",
+                    "portal_url": f"{req_proto}://{req_dom}/user?token={new_tok}"
                 },
                 "ok": True
             })
@@ -7053,7 +7091,9 @@ rules:
             rules_cfg = get_subscription_rules()
             base_title = rules_cfg.get("sub_title") or "Komari Pro 优质节点"
             frag = f"#{urllib.parse.quote(base_title)}"
-            self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"https://{DOMAIN}/sub/{new_tok}{frag}", "profile_title": base_title})
+            req_dom = self.get_req_domain()
+            req_proto = self.get_req_proto()
+            self._send_json({"ok": True, "token": new_tok, "user_uuid": new_uuid, "sub_url": f"{req_proto}://{req_dom}/sub/{new_tok}{frag}", "profile_title": base_title})
             return
 
         if path in ["/api/sub/users/toggle", "/api/node-mgr/sub/users/toggle"]:

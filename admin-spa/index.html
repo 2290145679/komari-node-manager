@@ -3290,7 +3290,15 @@
           fetch('/api/node-mgr/sub/title').then(r => r.json()).catch(() => null)
         ]);
         if (usersRes && usersRes.ok && usersRes.users) {
-          state.users = usersRes.users;
+          state.users = usersRes.users.map(u => {
+            if (u.sub_url && (u.sub_url.includes('127.0.0.1') || u.sub_url.includes('localhost'))) {
+              u.sub_url = u.sub_url.replace(/https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, location.origin);
+            }
+            if (u.portal_url && (u.portal_url.includes('127.0.0.1') || u.portal_url.includes('localhost'))) {
+              u.portal_url = u.portal_url.replace(/https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, location.origin);
+            }
+            return u;
+          });
           renderUsersList();
           document.getElementById('badgeUserCount').textContent = usersRes.users.length;
         }
@@ -6374,7 +6382,10 @@
     // USER ACTIONS
     function copyUniversalSubUrl() {
       const defaultUser = (state.users && state.users.find(u => u.name === 'default')) || (state.users && state.users[0]);
-      const url = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      let url = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      if (url.includes('127.0.0.1') || url.includes('localhost')) {
+        url = url.replace(/https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, location.origin);
+      }
       copyText(url, '全能聚合订阅链接已复制到剪贴板！');
     }
 
@@ -6542,8 +6553,11 @@
 
     // QR & Import helpers
     function generateUniversalQr() {
-      const defaultUser = state.users.find(u => u.name === 'default') || state.users[0];
-      const url = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      const defaultUser = (state.users && state.users.find(u => u.name === 'default')) || (state.users && state.users[0]);
+      let url = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      if (url.includes('127.0.0.1') || url.includes('localhost')) {
+        url = url.replace(/https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, location.origin);
+      }
       document.getElementById('universalSubInput').value = url;
       const canvasBox = document.getElementById('subQrcodeCanvas');
       canvasBox.innerHTML = '';
@@ -6560,8 +6574,11 @@
     }
 
     function openClientScheme(type) {
-      const defaultUser = state.users.find(u => u.name === 'default') || state.users[0];
-      const subUrl = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      const defaultUser = (state.users && state.users.find(u => u.name === 'default')) || (state.users && state.users[0]);
+      let subUrl = defaultUser ? defaultUser.sub_url : `${location.origin}/sub/default`;
+      if (subUrl.includes('127.0.0.1') || subUrl.includes('localhost')) {
+        subUrl = subUrl.replace(/https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?/, location.origin);
+      }
       const title = encodeURIComponent(state.subTitle || 'Komari Pro 优质节点');
       const encoded = encodeURIComponent(subUrl);
 
