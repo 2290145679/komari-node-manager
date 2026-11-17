@@ -62,6 +62,77 @@ def get_system_domain():
 
 DOMAIN = get_system_domain()
 
+APP_VERSION = "1.0.0"
+APP_NAME = "Komari Node Manager"
+GITHUB_REPO = "2290145679/komari-node-manager"
+VERSION_CACHE = {
+    "ts": 0,
+    "data": None
+}
+
+def check_remote_version(force=False):
+    global VERSION_CACHE
+    now = time.time()
+    if not force and VERSION_CACHE["data"] and (now - VERSION_CACHE["ts"] < 300):
+        return VERSION_CACHE["data"]
+
+    urls = [
+        f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json",
+        f"https://ghfast.top/https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json"
+    ]
+    remote_info = None
+    for url in urls:
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Komari-Node-Manager"})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                if resp.status == 200:
+                    remote_info = json.loads(resp.read().decode('utf-8'))
+                    break
+        except Exception:
+            continue
+
+    if not remote_info:
+        res = {
+            "ok": True,
+            "current_version": APP_VERSION,
+            "latest_version": APP_VERSION,
+            "has_update": False,
+            "title": f"v{APP_VERSION}",
+            "description": "当前已是最新版本",
+            "release_date": datetime.now().strftime("%Y-%m-%d"),
+            "changelog": [],
+            "checked_at": datetime.now().isoformat()
+        }
+        return res
+
+    latest_ver = str(remote_info.get("version") or APP_VERSION).strip()
+
+    def parse_ver(v_str):
+        parts = []
+        for p in v_str.lstrip("v").split("."):
+            try: parts.append(int(p))
+            except: parts.append(0)
+        while len(parts) < 3:
+            parts.append(0)
+        return parts
+
+    has_update = (parse_ver(latest_ver) > parse_ver(APP_VERSION))
+
+    res = {
+        "ok": True,
+        "current_version": APP_VERSION,
+        "latest_version": latest_ver,
+        "has_update": has_update,
+        "title": remote_info.get("title") or f"v{latest_ver}",
+        "description": remote_info.get("description", ""),
+        "release_date": remote_info.get("release_date", ""),
+        "changelog": remote_info.get("changelog", []),
+        "checked_at": datetime.now().isoformat()
+    }
+    VERSION_CACHE["ts"] = now
+    VERSION_CACHE["data"] = res
+    return res
+
 # Security & Sanitization Helpers
 def sanitize_node_field(val, max_len=128):
     if not val:
@@ -5075,6 +5146,17 @@ class NodeMgrHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": True, "logs": logs})
             return
 
+        # System Version & Check Update Endpoints
+        if path in ["/api/system/version", "/api/node-mgr/system/version"]:
+            self._send_json({"ok": True, "version": APP_VERSION, "name": APP_NAME})
+            return
+
+        if path in ["/api/system/check-update", "/api/node-mgr/system/check-update"]:
+            force = (query.get("force", ["0"])[0] in ["1", "true"])
+            res = check_remote_version(force=force)
+            self._send_json(res)
+            return
+
         # User Portal SPA and Assets Route
         if path in ["/user", "/user/", "/portal", "/portal/", "/pro/user", "/pro/user/"]:
             portal_path = os.path.join(BASE_DIR, "user-portal", "index.html")
@@ -7262,22 +7344,44 @@ rules:
         if path in ["/api/system/hot-update", "/api/node-mgr/system/hot-update"]:
             def _async_hot_update():
                 try:
+                    time.sleep(0.5)
                     web_patch_dir = "/opt/komari/web-patch"
+                    node_mgr_dir = "/opt/komari/node-mgr"
                     cmd = f"""
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-index-BfURcdSr.js -o {web_patch_dir}/assets/chunk-index-BfURcdSr.js
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-_layout-KM9Ke-Y5.js -o {web_patch_dir}/assets/chunk-_layout-KM9Ke-Y5.js
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js -o {web_patch_dir}/assets/chunk-plugin_page-Xen4h3Tc.js
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/web-patch/assets/komari-singbox-helper.js -o {web_patch_dir}/assets/komari-singbox-helper.js
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/plugin/node-manager/panel/index.html -o /opt/komari/data/plugin/node-manager/panel/index.html
-                    curl -fsSL https://raw.githubusercontent.com/2290145679/komari-node-manager/main/bin/hhub -o /usr/local/bin/hhub && chmod +x /usr/local/bin/hhub
+                    set -e
+                    mkdir -p {web_patch_dir}/assets /opt/komari/data/plugin/node-manager/panel
+                    
+                    # 1. Update version.json & web assets
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/version.json -o /opt/komari/version.json 2>/dev/null || true
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/web-patch/assets/chunk-index-BfURcdSr.js -o {web_patch_dir}/assets/chunk-index-BfURcdSr.js
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/web-patch/assets/chunk-_layout-KM9Ke-Y5.js -o {web_patch_dir}/assets/chunk-_layout-KM9Ke-Y5.js
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/web-patch/assets/chunk-plugin_page-Xen4h3Tc.js -o {web_patch_dir}/assets/chunk-plugin_page-Xen4h3Tc.js
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/web-patch/assets/komari-singbox-helper.js -o {web_patch_dir}/assets/komari-singbox-helper.js
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/plugin/node-manager/panel/index.html -o /opt/komari/data/plugin/node-manager/panel/index.html
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/bin/hhub -o /usr/local/bin/hhub && chmod +x /usr/local/bin/hhub
                     chmod 644 {web_patch_dir}/assets/*
-                    nginx -s reload || systemctl reload nginx
+
+                    # 2. Update server.py safely with syntax validation
+                    curl -fsSL https://raw.githubusercontent.com/{GITHUB_REPO}/main/node-mgr/server.py -o /tmp/server.py.new
+                    if python3 -m py_compile /tmp/server.py.new >/dev/null 2>&1; then
+                        cp /tmp/server.py.new {node_mgr_dir}/server.py
+                        chmod +x {node_mgr_dir}/server.py
+                        rm -f /tmp/server.py.new
+                    fi
+
+                    # 3. Reload Nginx
+                    nginx -s reload || systemctl reload nginx || true
+
+                    # 4. Detached restart of komari-node-mgr
+                    (sleep 1 && systemctl restart komari-node-mgr) &
                     """
                     subprocess.run(cmd, shell=True, check=True)
+                    global VERSION_CACHE
+                    VERSION_CACHE["ts"] = 0
                 except Exception as e:
                     print(f"Hot update failed: {e}")
             threading.Thread(target=_async_hot_update, daemon=True).start()
-            self._send_json({"ok": True, "msg": "热更新已在后台触发，约 3 秒后重载生效（主控监控零停机）"})
+            self._send_json({"ok": True, "msg": "在线升级任务已在后台执行，服务与面板补丁将在 3 秒内平滑重载！", "current_version": APP_VERSION})
             return
 
         if path in ["/api/system/backup-now", "/api/node-mgr/system/backup-now"]:

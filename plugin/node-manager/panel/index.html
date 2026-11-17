@@ -159,7 +159,10 @@
           <div class="text-[10px] text-slate-400 font-medium">节点与监控管理中心</div>
         </div>
       </div>
-      <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300">v4.5</span>
+      <button onclick="switchTab('settings')" id="sidebarVersionBadge" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/50 transition flex items-center gap-1.5 btn-tap" title="当前版本: v1.0.0 · 点击前往更新设置">
+        <span id="versionText">v1.0.0</span>
+        <span id="updatePulseDot" class="hidden w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
+      </button>
     </div>
 
     <!-- Navigation Items -->
@@ -840,6 +843,56 @@
     <section id="tab-settings" class="tab-panel space-y-4 sm:space-y-6 hidden">
       <!-- System Info Cards -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <!-- Card -1: Version & Online Upgrade -->
+        <div class="bento-card p-5 space-y-4 bg-gradient-to-br from-indigo-50/60 via-white to-purple-50/50 dark:from-zinc-800 dark:via-zinc-800/90 dark:to-zinc-800/70 border border-indigo-200/80 dark:border-zinc-700 md:col-span-2">
+          <div class="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-indigo-100 dark:border-zinc-700/60">
+            <div class="flex items-center gap-3.5">
+              <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 text-white flex items-center justify-center text-xl shadow-lg shadow-indigo-500/20">
+                🚀
+              </div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <h3 class="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">系统版本与在线升级</h3>
+                  <span id="settingsVerBadge" class="px-2 py-0.5 text-[11px] font-extrabold rounded-full bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-300 border border-indigo-200/60 dark:border-indigo-800/40">v1.0.0</span>
+                  <span id="settingsStatusPill" class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400">稳定版</span>
+                </div>
+                <p class="text-xs text-slate-400 mt-0.5">全自动检测 GitHub 远程最新版本，一键无损零停机平滑在线升级</p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="checkSystemUpdate(true)" id="btnCheckUpdate" class="px-3.5 py-2 text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-zinc-700 hover:bg-slate-100 dark:hover:bg-zinc-800 rounded-xl transition btn-tap flex items-center gap-1.5">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-indigo-500"></i>
+                <span>检查更新</span>
+              </button>
+              <button onclick="triggerSystemHotUpdate()" id="btnTriggerUpgrade" class="px-4 py-2 text-xs font-bold text-white bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-500 hover:from-indigo-700 hover:to-pink-600 rounded-xl shadow-md shadow-indigo-500/20 transition btn-tap flex items-center gap-1.5">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                <span>立即在线升级</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Update Status & Changelog View -->
+          <div id="updateStatusBanner" class="p-3.5 rounded-2xl bg-white/80 dark:bg-zinc-900/60 border border-slate-200/80 dark:border-zinc-700/80 flex flex-col gap-2.5">
+            <div class="flex items-center justify-between flex-wrap gap-2 text-xs">
+              <div class="flex items-center gap-2">
+                <span id="updateIcon" class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <span id="updateSummaryText" class="font-bold text-slate-700 dark:text-slate-200">当前已是最新版本 (v1.0.0)</span>
+              </div>
+              <span id="lastCheckTimeText" class="text-[11px] text-slate-400">系统就绪</span>
+            </div>
+            <div id="updateChangelogBox" class="text-[11.5px] text-slate-500 dark:text-slate-400 space-y-1 pt-1 border-t border-slate-100 dark:border-zinc-800">
+              <div class="font-medium text-slate-600 dark:text-slate-300">当前版本特性 (v1.0.0 正式版)：</div>
+              <div class="pl-2 space-y-0.5">
+                <div>• 全面支持 VLESS-Reality、Hysteria 2、TUIC v5、Trojan 协议矩阵与多用户专属凭据</div>
+                <div>• 智能双栈支持：IPv4 / IPv6 自适应解析，一键克隆保护防覆写</div>
+                <div>• 原生免费逻辑校准：买断服务器自动联动为永久免费</div>
+                <div>• 全自动在线热更新体系，零停机秒级平滑生效</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Card 0: Theme Settings Shortcut -->
         <div class="bento-card p-5 space-y-3 bg-gradient-to-br from-fuchsia-50/50 via-white to-purple-50/40 dark:from-zinc-800 dark:to-zinc-800/80 border border-fuchsia-200 dark:border-zinc-700 md:col-span-2">
           <div class="flex items-center justify-between flex-wrap gap-2">
@@ -2146,6 +2199,7 @@
       }
       await checkAuthAndLoad();
       startRealtimePolling();
+      checkSystemUpdate(false);
     });
 
     function initLucide() {
@@ -6196,6 +6250,105 @@
     function escapeHtml(str) {
       if (!str) return '';
       return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    // Version & Online Update System
+    const CURRENT_APP_VERSION = "1.0.0";
+
+    async function checkSystemUpdate(manual = false) {
+      const btn = document.getElementById('btnCheckUpdate');
+      const summaryEl = document.getElementById('updateSummaryText');
+      const dotEl = document.getElementById('updateIcon');
+      const pulseDot = document.getElementById('updatePulseDot');
+      const timeEl = document.getElementById('lastCheckTimeText');
+      const changelogBox = document.getElementById('updateChangelogBox');
+      const upgradeBtn = document.getElementById('btnTriggerUpgrade');
+
+      if (manual && btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-indigo-500"></i><span>检查中...</span>`;
+        initLucide();
+      }
+
+      try {
+        const res = await fetch(`/api/node-mgr/system/check-update${manual ? '?force=1' : ''}`).then(r => r.json());
+        if (res && res.ok) {
+          if (timeEl) timeEl.textContent = `检测时间: ${new Date().toLocaleTimeString()}`;
+          if (res.has_update) {
+            if (summaryEl) summaryEl.innerHTML = `<span class="text-rose-600 dark:text-rose-400 font-extrabold">🔥 发现新版本: v${res.latest_version}</span> <span class="text-[11px] text-slate-400">(${res.title || ''})</span>`;
+            if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse";
+            if (pulseDot) pulseDot.classList.remove('hidden');
+            if (upgradeBtn) {
+              upgradeBtn.classList.remove('from-indigo-600', 'via-purple-600', 'to-pink-500');
+              upgradeBtn.classList.add('from-rose-600', 'via-pink-600', 'to-amber-500', 'animate-pulse');
+              upgradeBtn.innerHTML = `<i data-lucide="arrow-up-circle" class="w-3.5 h-3.5"></i><span>一键升级至 v${res.latest_version}</span>`;
+            }
+            if (changelogBox && res.changelog && res.changelog.length > 0) {
+              changelogBox.innerHTML = `
+                <div class="font-bold text-rose-600 dark:text-rose-400">新版本更新内容 (v${res.latest_version})：</div>
+                <div class="pl-2 space-y-0.5 text-slate-600 dark:text-slate-300">
+                  ${res.changelog.map(item => `<div>• ${escapeHtml(item)}</div>`).join('')}
+                </div>
+              `;
+            }
+            if (manual) showToast(`🎉 发现新版本 v${res.latest_version}，可立即点击升级！`, 'info');
+          } else {
+            if (summaryEl) summaryEl.textContent = `当前已是最新版本 (v${CURRENT_APP_VERSION})`;
+            if (dotEl) dotEl.className = "w-2.5 h-2.5 rounded-full bg-emerald-500";
+            if (pulseDot) pulseDot.classList.add('hidden');
+            if (upgradeBtn) {
+              upgradeBtn.classList.remove('from-rose-600', 'via-pink-600', 'to-amber-500', 'animate-pulse');
+              upgradeBtn.classList.add('from-indigo-600', 'via-purple-600', 'to-pink-500');
+              upgradeBtn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i><span>立即在线平滑重载</span>`;
+            }
+            if (manual) showToast(`✅ 当前已是最新版本 (v${CURRENT_APP_VERSION})！`, 'success');
+          }
+        }
+      } catch (err) {
+        if (manual) showToast(`检查更新失败: ${err.message}`, 'error');
+      } finally {
+        if (manual && btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-indigo-500"></i><span>检查更新</span>`;
+          initLucide();
+        }
+      }
+    }
+
+    async function triggerSystemHotUpdate() {
+      if (!confirm('确定执行一键在线平滑升级吗？\n\n系统将自动从官方仓库同步最新前端补丁与后端核心，并在后台平滑重载（服务零停机，数据安全无损）。')) {
+        return;
+      }
+      const upgradeBtn = document.getElementById('btnTriggerUpgrade');
+      if (upgradeBtn) {
+        upgradeBtn.disabled = true;
+        upgradeBtn.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>正在平滑升级中...</span>`;
+        initLucide();
+      }
+      showToast('正在平滑升级中，请稍候...', 'info');
+      try {
+        const res = await fetch('/api/node-mgr/system/hot-update', { method: 'POST' }).then(r => r.json());
+        if (res && res.ok) {
+          showToast(`🎉 ${res.msg || '升级完成，正在刷新生效...'}`, 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 3500);
+        } else {
+          showToast(`升级失败: ${(res && res.error) || '未知错误'}`, 'error');
+          if (upgradeBtn) {
+            upgradeBtn.disabled = false;
+            upgradeBtn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i><span>立即在线升级</span>`;
+            initLucide();
+          }
+        }
+      } catch (err) {
+        showToast(`升级异常: ${err.message}`, 'error');
+        if (upgradeBtn) {
+          upgradeBtn.disabled = false;
+          upgradeBtn.innerHTML = `<i data-lucide="sparkles" class="w-3.5 h-3.5"></i><span>立即在线升级</span>`;
+          initLucide();
+        }
+      }
     }
   </script>
 </body>

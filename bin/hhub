@@ -205,7 +205,7 @@ show_dashboard() {
     fi
 
     echo -e "${PURPLE}==================================================================${PLAIN}"
-    echo -e "${BOLD}${CYAN}        🌸 Komari Monitor & Node Manager 控制中心 (hhub)${PLAIN}"
+    echo -e "${BOLD}${CYAN}     🌸 Komari Monitor & Node Manager 控制中心 (hhub) v1.0.0${PLAIN}"
     echo -e "${PURPLE}==================================================================${PLAIN}"
     echo -e "  ${BOLD}核心服务状态:${PLAIN}"
     echo -e "  · Komari 监控核心:   ${komari_status}"

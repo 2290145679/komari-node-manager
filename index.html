@@ -432,6 +432,7 @@
               <i data-lucide="server" class="w-5 h-5 sm:w-6 sm:h-6"></i>
             </span>
             <span class="truncate">节点列表与管理</span>
+            <span onclick="triggerSystemHotUpdate()" class="cursor-pointer px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-300 hover:bg-purple-200 transition" title="当前版本 v1.0.0 · 点击在线升级">v1.0.0</span>
 
           </h1>
           <p class="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">自建 Sing-box 节点与外部节点统一管理 · 实时延时测速与一键导出</p>
@@ -5378,6 +5379,26 @@
         }
       };
       reader.readAsText(file);
+    }
+
+    async function triggerSystemHotUpdate() {
+      if (!confirm('确定执行一键在线平滑升级吗？\n\n系统将自动从官方仓库同步最新前端补丁与后端核心，并在后台平滑重载（服务零停机，数据安全无损）。')) {
+        return;
+      }
+      showToast('正在平滑升级中，请稍候...', 'info');
+      try {
+        const res = await fetch('/api/node-mgr/system/hot-update', { method: 'POST' }).then(r => r.json());
+        if (res && res.ok) {
+          showToast(`🎉 ${res.msg || '升级完成，正在刷新生效...'}`, 'success');
+          setTimeout(() => {
+            window.location.reload();
+          }, 3500);
+        } else {
+          showToast(`升级失败: ${(res && res.error) || '未知错误'}`, 'error');
+        }
+      } catch (err) {
+        showToast(`升级异常: ${err.message}`, 'error');
+      }
     }
 
   </script>
