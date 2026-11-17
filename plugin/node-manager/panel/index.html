@@ -1758,10 +1758,10 @@
             <div class="relative">
               <select onchange="applySniPreset(this.value, 'editNodeSni'); this.selectedIndex=0;" class="text-[11px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800/60 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-purple-100 transition-colors">
                 <option value="" disabled selected>⚡ 选择热门大厂域名...</option>
-                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org (默认推荐)</option>
+                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud 极速防封推荐)</option>
                 <option value="www.microsoft.com">微软 · www.microsoft.com</option>
-                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud)</option>
                 <option value="www.apple.com">苹果 · www.apple.com</option>
+                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org</option>
                 <option value="aws.amazon.com">亚马逊 · aws.amazon.com</option>
                 <option value="dl.google.com">谷歌 · dl.google.com</option>
                 <option value="www.speedtest.net">测速网 · www.speedtest.net</option>
@@ -1929,10 +1929,10 @@
             <div class="relative">
               <select onchange="applySniPreset(this.value, 'createNodeSni'); this.selectedIndex=0;" class="text-[11px] bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800/60 rounded-lg px-2 py-0.5 outline-none cursor-pointer hover:bg-purple-100 transition-colors">
                 <option value="" disabled selected>⚡ 选择热门大厂域名...</option>
-                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org (默认推荐)</option>
+                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud 极速防封推荐)</option>
                 <option value="www.microsoft.com">微软 · www.microsoft.com</option>
-                <option value="gateway.icloud.com">苹果 · gateway.icloud.com (iCloud)</option>
                 <option value="www.apple.com">苹果 · www.apple.com</option>
+                <option value="addons.mozilla.org">Mozilla · addons.mozilla.org</option>
                 <option value="aws.amazon.com">亚马逊 · aws.amazon.com</option>
                 <option value="dl.google.com">谷歌 · dl.google.com</option>
                 <option value="www.speedtest.net">测速网 · www.speedtest.net</option>
@@ -1940,7 +1940,7 @@
               </select>
             </div>
           </div>
-          <input type="text" id="createNodeSni" list="sniPresetList" placeholder="addons.mozilla.org" value="addons.mozilla.org" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+          <input type="text" id="createNodeSni" list="sniPresetList" placeholder="gateway.icloud.com" value="gateway.icloud.com" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           <datalist id="sniPresetList">
             <option value="addons.mozilla.org">Mozilla 插件中心</option>
             <option value="www.microsoft.com">微软官网</option>
@@ -2308,7 +2308,7 @@
       const rPort = document.getElementById('createNodeRelayPort');
       if (rPort) rPort.value = '';
       const sniInput = document.getElementById('createNodeSni');
-      if (sniInput && !sniInput.value) sniInput.value = 'addons.mozilla.org';
+      if (sniInput && !sniInput.value) sniInput.value = 'gateway.icloud.com';
       toggleCreateNodeRelayFields();
       populateServerSelectForNode();
       updateCreateNodeDefaultName();
@@ -4859,7 +4859,7 @@
       if (!link) {
         const ip = (node.is_relay && node.relay_server_ip) ? node.relay_server_ip : node.server_ip;
         const port = (node.is_relay && node.relay_port) ? node.relay_port : node.port;
-        link = `vless://${node.uuid_or_passwd}@${ip}:${port}?encryption=none&flow=${node.flow || 'xtls-rprx-vision'}&security=reality&sni=${node.sni || 'addons.mozilla.org'}&fp=chrome&pbk=${node.public_key || ''}&sid=${node.short_id || ''}&type=tcp#${encodeURIComponent(node.name)}`;
+        link = `vless://${node.uuid_or_passwd}@${ip}:${port}?encryption=none&flow=${node.flow || 'xtls-rprx-vision'}&security=reality&sni=${node.sni || 'gateway.icloud.com'}&fp=chrome&pbk=${node.public_key || ''}&sid=${node.short_id || ''}&type=tcp#${encodeURIComponent(node.name)}`;
       }
       copyText(link, '节点链接已成功复制到剪贴板！');
     }
@@ -5366,7 +5366,7 @@
         protocol: proto,
         name: finalName,
         port: port,
-        sni: document.getElementById('createNodeSni').value.trim() || 'addons.mozilla.org',
+        sni: document.getElementById('createNodeSni').value.trim() || 'gateway.icloud.com',
         enabled: 1,
         is_relay: isRelay,
         relay_server_uuid: relayServerUuid,

@@ -50,11 +50,12 @@ def get_system_domain():
                 with open(conf_p, "r", encoding="utf-8") as f:
                     for line in f:
                         line = line.strip()
-                        if line.startswith("server_name ") and not line.endswith("_;"):
-                            names = line.replace("server_name", "").replace(";", "").split()
+                        if line.startswith("server_name "):
+                            clean_line = line.replace("server_name", "").replace(";", "").replace("_", "")
+                            names = clean_line.split()
                             for n in names:
                                 n = n.strip()
-                                if n and n != "_" and not re.match(r"^\d+\.\d+\.\d+\.\d+$", n):
+                                if n and not re.match(r"^\d+\.\d+\.\d+\.\d+$", n):
                                     return n
             except Exception:
                 pass
@@ -1846,7 +1847,7 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
             ip = sanitize_node_field(n.get("server_ip"))
             port = n.get("port")
         u = sanitize_node_field(n.get("uuid_or_passwd"))
-        sni = sanitize_node_field(n.get("sni") or "addons.mozilla.org")
+        sni = sanitize_node_field(n.get("sni") or "gateway.icloud.com")
 
         if not ip or not port:
             continue
@@ -2135,7 +2136,7 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
             ip = sanitize_node_field(n.get("server_ip"))
             port = n.get("port")
         u = sanitize_node_field(n.get("uuid_or_passwd"))
-        sni = sanitize_node_field(n.get("sni") or "addons.mozilla.org")
+        sni = sanitize_node_field(n.get("sni") or "gateway.icloud.com")
 
         if not ip or not port:
             continue
@@ -2667,7 +2668,7 @@ def build_sing_box_config(nodes_for_server):
         seen_ports.add(port)
         tag = f"{proto}-{n.get('id')}"
         default_u = n.get("uuid_or_passwd")
-        sni = n.get("sni") or "addons.mozilla.org"
+        sni = n.get("sni") or "gateway.icloud.com"
 
         users_list = []
         active_uuids = set()
@@ -7141,7 +7142,7 @@ rules:
             protocol = body.get("protocol", "vless_reality")
             port = int(body.get("port") or secrets.randbelow(45000) + 15000)
             u = body.get("uuid_or_passwd") or str(uuid.uuid4())
-            sni = body.get("sni") or "addons.mozilla.org"
+            sni = body.get("sni") or "gateway.icloud.com"
             flow = body.get("flow", "xtls-rprx-vision") if protocol == "vless_reality" else ""
             ws_path = body.get("ws_path", "/vmess")
             
