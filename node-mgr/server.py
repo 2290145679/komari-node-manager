@@ -1180,6 +1180,12 @@ def auto_repair_node_ips():
         # 2. Sync with komari.db clients table
         conn_k = sqlite3.connect(KOMARI_DB)
         c_k = conn_k.cursor()
+        try:
+            # Auto-repair servers where billing_cycle is once/buyout (-1) and price is 0 or null -> set price to -1 for native Komari free display
+            c_k.execute("UPDATE clients SET price = -1 WHERE billing_cycle = -1 AND (price = 0 OR price IS NULL)")
+            conn_k.commit()
+        except Exception:
+            pass
         c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
         clients_map = {r[0]: {"name": r[1] or "", "ipv4": r[2] or "", "ipv6": r[3] or ""} for r in c_k.fetchall() if r[0]}
 
@@ -1766,6 +1772,7 @@ def get_servers_with_stats():
         total_traffic += delta_tot
 
         ip_flag = f" --ip {custom_ip}" if custom_ip else ""
+        ipv6_flag = f" --ipv6 {custom_ipv6 or ip6}" if (custom_ipv6 or ip6) else ""
         servers.append({
             "uuid": uuid_val,
             "name": name or ip4 or "Server-" + uuid_val[:6],
@@ -1777,8 +1784,8 @@ def get_servers_with_stats():
             "os": os_name or "",
             "arch": arch or "",
             "token": token or "",
-            "install_cmd_wget": f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}",
-            "install_cmd_curl": f"curl -fsSL https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}",
+            "install_cmd_wget": f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}{ipv6_flag}",
+            "install_cmd_curl": f"curl -fsSL https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {token}{ip_flag}{ipv6_flag}",
             "updated_at": str(rec_updated) if rec_updated else "",
             "price": float(price) if price is not None else 0.0,
             "billing_cycle": int(billing_cycle) if billing_cycle is not None else 0,
@@ -2868,6 +2875,7 @@ INSTALL_SINGBOX=1
 INSTALL_REALM=0
 ENABLE_BBR=1
 CUSTOM_IP=""
+CUSTOM_IPV6=""
 
 EXTRA_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -2882,6 +2890,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --ip|-ip|--custom-ipv4)
       CUSTOM_IP="$2"
+      shift 2
+      ;;
+    --ipv6|-ipv6|--custom-ipv6|-6)
+      CUSTOM_IPV6="$2"
       shift 2
       ;;
     --skip-probe)
@@ -2928,17 +2940,27 @@ if [ -z "$CUSTOM_IP" ]; then
   fi
 fi
 
-# Detect public IPv6 address
-CUSTOM_IPV6=""
-DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
-if [ -n "$DEF_IF6" ]; then
-  NIC_IPV6=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+# Detect public IPv6 address (Global unicast 2000::/3 or public API)
+if [ -z "$CUSTOM_IPV6" ]; then
+  # 1. Check all network interfaces for global unicast IPv6 starting with 2 or 3
+  NIC_IPV6=$(ip -6 -o addr show scope global 2>/dev/null | grep -v 'warp\|wgcf' | awk '{print $4}' | cut -d/ -f1 | grep -E '^[23][0-9a-fA-F]{3}:' | head -n1)
   if [ -n "$NIC_IPV6" ]; then
     CUSTOM_IPV6="$NIC_IPV6"
   fi
 fi
 if [ -z "$CUSTOM_IPV6" ]; then
-  EGRESS_IPV6=$(curl -s6 -m 3 https://api64.ipify.org 2>/dev/null || curl -s6 -m 3 https://ifconfig.me 2>/dev/null || curl -s6 -m 3 https://icanhazip.com 2>/dev/null || true)
+  # 2. Check default IPv6 route interface
+  DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+  if [ -n "$DEF_IF6" ]; then
+    NIC_IPV6_DEF=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+    if [ -n "$NIC_IPV6_DEF" ]; then
+      CUSTOM_IPV6="$NIC_IPV6_DEF"
+    fi
+  fi
+fi
+if [ -z "$CUSTOM_IPV6" ]; then
+  # 3. Query multiple external public IPv6 mirrors
+  EGRESS_IPV6=$(curl -s6 -m 4 https://api64.ipify.org 2>/dev/null || curl -s6 -m 4 https://ifconfig.me 2>/dev/null || curl -s6 -m 4 https://icanhazip.com 2>/dev/null || curl -s6 -m 4 https://ipv6.icanhazip.com 2>/dev/null || wget -6 -qO- https://api64.ipify.org 2>/dev/null || true)
   if [[ "$EGRESS_IPV6" =~ : ]] && ! [[ "$EGRESS_IPV6" =~ ^(fd|fe80) ]]; then
     CUSTOM_IPV6="$EGRESS_IPV6"
   fi
@@ -3120,6 +3142,9 @@ fi
 PROBE_ARGS=("-e" "$MASTER_URL" "-t" "$TOKEN")
 if [ -n "$CUSTOM_IP" ]; then
   PROBE_ARGS+=("--custom-ipv4" "$CUSTOM_IP")
+fi
+if [ -n "$CUSTOM_IPV6" ]; then
+  PROBE_ARGS+=("--custom-ipv6" "$CUSTOM_IPV6")
 fi
 
 RAW_AGENT_URL="https://raw.githubusercontent.com/komari-monitor/komari-agent/refs/heads/main/install.sh"
@@ -3616,15 +3641,27 @@ REOF
       fi
     fi
 
-    # Auto-detect and sync IPv6
+    # Auto-detect and sync IPv6 (Global unicast or external mirrors)
     if [ $TICK -eq 1 ] || [ $((TICK % 30)) -eq 0 ]; then
       SYNC_IPV6=""
-      DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
-      if [ -n "$DEF_IF6" ]; then
-        SYNC_IPV6=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+      # 1. Global unicast 2000::/3 on physical interfaces
+      NIC_V6_ALL=$(ip -6 -o addr show scope global 2>/dev/null | grep -v 'warp\|wgcf' | awk '{print $4}' | cut -d/ -f1 | grep -E '^[23][0-9a-fA-F]{3}:' | head -n1)
+      if [ -n "$NIC_V6_ALL" ]; then
+        SYNC_IPV6="$NIC_V6_ALL"
       fi
+      # 2. Default route interface
       if [ -z "$SYNC_IPV6" ]; then
-        SYNC_IPV6=$(curl -s6 -m 3 https://api64.ipify.org 2>/dev/null || curl -s6 -m 3 https://ifconfig.me 2>/dev/null || true)
+        DEF_IF6=$(ip -6 route show default 2>/dev/null | grep -v 'warp\|wgcf' | head -n1 | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}')
+        if [ -n "$DEF_IF6" ]; then
+          NIC_IPV6_DEF=$(ip -6 addr show dev "$DEF_IF6" scope global 2>/dev/null | grep -v 'fd..:' | grep -v 'fe80:' | grep -oE 'inet6 [0-9a-fA-F:]+' | head -n1 | awk '{print $2}')
+          if [ -n "$NIC_IPV6_DEF" ]; then
+            SYNC_IPV6="$NIC_IPV6_DEF"
+          fi
+        fi
+      fi
+      # 3. Public IPv6 mirrors
+      if [ -z "$SYNC_IPV6" ]; then
+        SYNC_IPV6=$(curl -s6 -m 4 https://api64.ipify.org 2>/dev/null || curl -s6 -m 4 https://ifconfig.me 2>/dev/null || curl -s6 -m 4 https://icanhazip.com 2>/dev/null || curl -s6 -m 4 https://ipv6.icanhazip.com 2>/dev/null || wget -6 -qO- https://api64.ipify.org 2>/dev/null || true)
       fi
       if [[ "$SYNC_IPV6" =~ : ]] && ! [[ "$SYNC_IPV6" =~ ^(fd|fe80) ]]; then
         curl -s -k -m 6 "$MASTER_URL/api/node-mgr/agent/set-server-ip?token=$TOKEN&ipv6=$SYNC_IPV6" >/dev/null 2>&1 || true
@@ -6759,33 +6796,41 @@ rules:
         if path in ["/api/servers/add", "/api/node-mgr/servers/add"]:
             name = str(body.get("name") or "New Server").strip()
             custom_ip = str(body.get("custom_ip") or body.get("ip") or "").strip()
+            custom_ipv6 = str(body.get("custom_ipv6") or body.get("ipv6") or "").strip()
             # If this IP was previously blocked, unblock it immediately so the re-added server connects smoothly
             if custom_ip:
                 unblock_ip(custom_ip)
+            if custom_ipv6:
+                unblock_ip(custom_ipv6)
             new_uuid = str(uuid.uuid4())
             new_token = secrets.token_hex(16)
             now_iso = datetime.now().isoformat()
             if os.path.exists(KOMARI_DB):
                 conn_k = sqlite3.connect(KOMARI_DB)
                 c_k = conn_k.cursor()
-                c_k.execute("INSERT INTO clients (uuid, token, name, created_at, updated_at, ipv4) VALUES (?, ?, ?, ?, ?, ?)",
-                            (new_uuid, new_token, name, now_iso, now_iso, custom_ip))
+                c_k.execute("INSERT INTO clients (uuid, token, name, created_at, updated_at, ipv4, ipv6) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (new_uuid, new_token, name, now_iso, now_iso, custom_ip, custom_ipv6))
                 conn_k.commit()
                 conn_k.close()
                 try:
                     sync_ping_tasks_all_clients()
                 except Exception:
                     pass
-            if custom_ip and os.path.exists(NODES_DB):
+            if (custom_ip or custom_ipv6) and os.path.exists(NODES_DB):
                 conn_r = sqlite3.connect(NODES_DB)
                 c_r = conn_r.cursor()
-                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
-                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, updated_at) VALUES (?, 0, ?, 0, CURRENT_TIMESTAMP)", (new_uuid, custom_ip))
+                c_r.execute("CREATE TABLE IF NOT EXISTS server_realm_configs (uuid TEXT PRIMARY KEY, has_realm INTEGER DEFAULT 0, custom_ip TEXT DEFAULT '', is_landing INTEGER DEFAULT 0, custom_ipv6 TEXT DEFAULT '', updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+                try:
+                    c_r.execute("ALTER TABLE server_realm_configs ADD COLUMN custom_ipv6 TEXT DEFAULT ''")
+                except Exception:
+                    pass
+                c_r.execute("INSERT OR REPLACE INTO server_realm_configs (uuid, has_realm, custom_ip, is_landing, custom_ipv6, updated_at) VALUES (?, 0, ?, 0, ?, CURRENT_TIMESTAMP)", (new_uuid, custom_ip, custom_ipv6))
                 conn_r.commit()
                 conn_r.close()
             ip_flag = f" --ip {custom_ip}" if custom_ip else ""
-            install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}{ip_flag}"
-            self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "custom_ip": custom_ip, "install_cmd": install_cmd})
+            ipv6_flag = f" --ipv6 {custom_ipv6}" if custom_ipv6 else ""
+            install_cmd = f"wget -qO- https://{DOMAIN}/install-node.sh | sudo bash -s -- -e https://{DOMAIN} -t {new_token}{ip_flag}{ipv6_flag}"
+            self._send_json({"ok": True, "uuid": new_uuid, "token": new_token, "name": name, "custom_ip": custom_ip, "custom_ipv6": custom_ipv6, "install_cmd": install_cmd})
             return
 
         if path in ["/api/servers/edit", "/api/node-mgr/servers/edit"]:
@@ -6793,6 +6838,14 @@ rules:
             if not suuid or not os.path.exists(KOMARI_DB):
                 self._send_json({"ok": False, "error": "invalid params"}, 400)
                 return
+
+            if body.get("billing_cycle") == -1 or body.get("billing_cycle") == "-1":
+                try:
+                    p_val = float(body.get("price", 0))
+                    if p_val == 0.0:
+                        body["price"] = -1.0
+                except:
+                    body["price"] = -1.0
 
             fields = []
             vals = []
@@ -7250,9 +7303,17 @@ rules:
                         if not server_name:
                             server_name = crow[0] or ""
                         if not server_ip:
-                            server_ip = crow[1] or crow[2] or ""
+                            if "[ipv6]" in name.lower():
+                                server_ip = crow[2] if crow[2] and ":" in crow[2] else ""
+                            else:
+                                server_ip = crow[1] or crow[2] or ""
                 except Exception as e:
                     print(f"Error resolving client info for new node: {e}")
+
+            # Strict guard against creating an [IPv6] node without IPv6 address
+            if "[ipv6]" in name.lower() and (not server_ip or ":" not in server_ip):
+                self._send_json({"error": f"【{server_name or '该服务器'}】尚未检测到有效 IPv6 地址，已拒绝创建以防止回退到 IPv4！请先在服务器填入或指定 IPv6 地址。"}, 400)
+                return
 
             # Duplicate name check
             conn_chk = sqlite3.connect(NODES_DB)
@@ -7470,10 +7531,11 @@ rules:
             
             provided_ipv6 = str(body.get("ipv6") or query.get("ipv6", [""])[0] if isinstance(query.get("ipv6"), list) else "").strip()
             server_ipv6 = str(server.get("ipv6") if server else "").strip()
-            ipv6 = provided_ipv6 or server_ipv6
+            custom_ipv6 = str(server.get("custom_ipv6") if server else "").strip()
+            ipv6 = provided_ipv6 or custom_ipv6 or server_ipv6
 
             if not ipv6 or ":" not in ipv6:
-                self._send_json({"error": "该节点所属服务器未检测到有效 IPv6 地址，请先在服务器填入或指定 IPv6 地址"}, 400)
+                self._send_json({"ok": False, "error": f"【{node.get('server_name') or '该服务器'}】尚未检测到有效 IPv6 地址，无法克隆 IPv6 节点！请在服务器设置中填入或通过部署指令指定 IPv6。"}, 400)
                 return
 
             if provided_ipv6 and server:

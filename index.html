@@ -4345,14 +4345,10 @@
       const node = currentNodes.find(n => n.id === nodeId);
       if (!node) return;
       const server = currentServers.find(s => s.uuid === node.server_uuid);
-      let targetV6 = (server && server.ipv6) ? server.ipv6.trim() : '';
-      if (!targetV6) {
-        const inputV6 = prompt(`【${node.server_name || '服务器'}】当前尚未自动探测到有效 IPv6 地址。\n\n如果该服务器已配置公网 IPv6，请输入它的 IPv6 地址直接完成克隆（系统将同时为您保存该服务器的 IPv6 配置）：`);
-        if (!inputV6 || !inputV6.trim() || !inputV6.includes(':')) {
-          if (inputV6 !== null) showToast('输入的 IPv6 地址格式不正确（需包含冒号十六进制）！', 'error');
-          return;
-        }
-        targetV6 = inputV6.trim();
+      let targetV6 = (server && (server.custom_ipv6 || server.ipv6)) ? (server.custom_ipv6 || server.ipv6).trim() : '';
+      if (!targetV6 || !targetV6.includes(':')) {
+        showToast(`【${node.server_name || '该服务器'}】尚未检测到有效 IPv6 地址，无法克隆 IPv6 节点！请在服务器列表设置或通过部署指令指定 IPv6。`, 'error');
+        return;
       }
 
       const cloneName = node.name.includes('[IPv6]') ? node.name : `${node.name} [IPv6]`;
@@ -4362,7 +4358,7 @@
         return;
       }
 
-      if (!confirm(`确定为【${node.name}】自动衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${targetV6}\n端口将复用原节点端口: ${node.port}`)) return;
+      if (!confirm(`确定为【${node.name}】衍生创建 IPv6 节点吗？\n\n新节点名称: ${cloneName}\n目标 IPv6: ${targetV6}\n端口将复用原节点端口: ${node.port}`)) return;
 
       showToast('正在创建 IPv6 节点...', 'info');
       try {
@@ -4377,34 +4373,7 @@
           if (typeof closeActionSheet === 'function') closeActionSheet();
           await loadData();
         } else {
-          // Fallback to standard creation POST if endpoint returns error
-          const fallbackPayload = {
-            server_uuid: node.server_uuid,
-            server_name: node.server_name,
-            server_ip: targetV6,
-            name: cloneName,
-            protocol: node.protocol,
-            port: node.port,
-            sni: node.sni || 'addons.mozilla.org',
-            uuid_or_passwd: node.uuid_or_passwd,
-            public_key: node.public_key,
-            private_key: node.private_key,
-            short_id: node.short_id,
-            flow: node.flow
-          };
-          const fbRes = await fetch('/api/node-mgr/nodes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fallbackPayload)
-          }).then(r => r.json());
-
-          if (fbRes.ok) {
-            showToast(`✅ IPv6 节点【${cloneName}】已成功创建！`, 'success');
-            if (typeof closeActionSheet === 'function') closeActionSheet();
-            await loadData();
-          } else {
-            showToast("创建失败: " + (fbRes.error || res.error || "未知错误"), 'error');
-          }
+          showToast("克隆失败: " + (res.error || "未知错误"), 'error');
         }
       } catch (err) {
         showToast("请求失败: " + err.message, 'error');

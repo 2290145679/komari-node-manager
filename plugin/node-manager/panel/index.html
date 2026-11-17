@@ -4692,11 +4692,18 @@
     }
 
     async function cloneIpv6Node(id) {
+      const node = state.nodes.find(n => n.id === id);
+      const server = node ? state.servers.find(s => s.uuid === node.server_uuid) : null;
+      const v6 = server ? (server.custom_ipv6 || server.ipv6 || '') : '';
+      if (!v6 || !v6.includes(':')) {
+        showToast(`【${(node && node.server_name) || '该服务器'}】尚未检测到有效 IPv6 地址，无法克隆 IPv6 节点！请在服务器设置中填入或通过部署指令指定 IPv6。`, 'error');
+        return;
+      }
       try {
         const res = await fetch('/api/node-mgr/nodes/ipv6', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id })
+          body: JSON.stringify({ id, ipv6: v6 })
         }).then(r => r.json());
         if (res.ok) {
           showToast('🎉 已成功基于该机器 IPv6 地址克隆新节点！', 'success');
