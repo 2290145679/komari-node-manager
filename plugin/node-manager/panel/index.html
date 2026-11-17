@@ -540,7 +540,7 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定出口 (智能排除香港)</label>
             <select id="target_ai" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
           </div>
         </div>
@@ -615,8 +615,18 @@
             <input type="checkbox" id="direct_bt" class="w-4 h-4 text-purple-600 rounded">
           </label>
           <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
-            <span class="text-xs font-semibold">国内 IP 与域名直连</span>
+            <div>
+              <span class="text-xs font-semibold block">国内域名与 IP 强制直连</span>
+              <span class="text-[10px] text-slate-400">基于 Geosite:cn + GeoIP:CN，其它国外走代理</span>
+            </div>
             <input type="checkbox" id="direct_cn" class="w-4 h-4 text-purple-600 rounded">
+          </label>
+          <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
+            <div>
+              <span class="text-xs font-semibold block">智能 DNS 分流 (防污染/直连加速)</span>
+              <span class="text-[10px] text-slate-400">国内走阿里/腾讯DNS，国外/AI走加密DoH代理</span>
+            </div>
+            <input type="checkbox" id="split_dns" class="w-4 h-4 text-purple-600 rounded">
           </label>
           <label class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40 cursor-pointer">
             <span class="text-xs font-semibold">局域网与私有地址直连</span>
@@ -3140,6 +3150,9 @@
       document.getElementById('direct_lan').checked = !!r.direct_lan;
       document.getElementById('block_ads').checked = !!r.block_ads;
       document.getElementById('enable_auto_group').checked = !!r.enable_auto_group;
+      if (document.getElementById('split_dns')) {
+        document.getElementById('split_dns').checked = r.split_dns !== undefined ? !!r.split_dns : true;
+      }
       if (r.final_match) document.getElementById('final_match').value = r.final_match;
       if (r.custom_rules !== undefined) document.getElementById('custom_rules').value = r.custom_rules;
     }
@@ -3149,15 +3162,28 @@
       keys.forEach(k => {
         const select = document.getElementById(k);
         if (!select) return;
-        const cur = state.rules[k] || (k === 'target_games' ? 'DIRECT' : 'PROXY');
+        const cur = state.rules[k] || (k === 'target_games' ? 'DIRECT' : (k === 'target_ai' ? '🤖 AI服务 (排除香港)' : 'PROXY'));
 
-        let html = `
-          <option value="PROXY" ${cur === 'PROXY' ? 'selected' : ''}>PROXY (智能代理节点池)</option>
-          <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
-        `;
-        nodes.forEach(n => {
-          html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})</option>`;
-        });
+        let html = '';
+        if (k === 'target_ai') {
+          html = `
+            <option value="🤖 AI服务 (排除香港)" ${cur === '🤖 AI服务 (排除香港)' || cur === 'PROXY' || !cur ? 'selected' : ''}>🤖 自动优选 (智能排除所有香港节点)</option>
+            <option value="PROXY" ${cur === 'PROXY' && cur !== '🤖 AI服务 (排除香港)' ? 'selected' : ''}>PROXY (通用代理节点池)</option>
+            <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
+          `;
+          nodes.forEach(n => {
+            const isHk = /香港|hk|hongkong|hkl|hkt/i.test(n.name);
+            html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})${isHk ? ' ⚠️ [香港节点:OpenAI受限]' : ' [推荐解锁]'}</option>`;
+          });
+        } else {
+          html = `
+            <option value="PROXY" ${cur === 'PROXY' ? 'selected' : ''}>PROXY (智能代理节点池)</option>
+            <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
+          `;
+          nodes.forEach(n => {
+            html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})</option>`;
+          });
+        }
         select.innerHTML = html;
       });
     }
@@ -3173,6 +3199,7 @@
         direct_lan: document.getElementById('direct_lan').checked,
         block_ads: document.getElementById('block_ads').checked,
         enable_auto_group: document.getElementById('enable_auto_group').checked,
+        split_dns: document.getElementById('split_dns') ? document.getElementById('split_dns').checked : true,
         final_match: document.getElementById('final_match').value,
         custom_rules: document.getElementById('custom_rules').value,
         target_ai: document.getElementById('target_ai').value,

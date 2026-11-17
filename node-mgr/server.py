@@ -767,11 +767,12 @@ def init_db():
         ("proxy_media", "INTEGER DEFAULT 0"),
         ("proxy_dev", "INTEGER DEFAULT 0"),
         ("direct_games", "INTEGER DEFAULT 0"),
-        ("target_ai", "TEXT DEFAULT 'PROXY'"),
+        ("target_ai", "TEXT DEFAULT '🤖 AI服务 (排除香港)'"),
         ("target_tg", "TEXT DEFAULT 'PROXY'"),
         ("target_media", "TEXT DEFAULT 'PROXY'"),
         ("target_dev", "TEXT DEFAULT 'PROXY'"),
         ("target_games", "TEXT DEFAULT 'DIRECT'"),
+        ("split_dns", "INTEGER DEFAULT 1"),
         ("sub_title", "TEXT DEFAULT 'Komari Pro 优质节点'")
     ]
     for col, ctype in extra_cols:
@@ -783,8 +784,8 @@ def init_db():
     c.execute("SELECT id FROM subscription_rules WHERE id = 1")
     if not c.fetchone():
         c.execute("""
-            INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules, proxy_ai, proxy_tg, proxy_media, proxy_dev, direct_games)
-            VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '', 0, 0, 0, 0, 0)
+            INSERT INTO subscription_rules (id, direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group, final_match, custom_rules, proxy_ai, proxy_tg, proxy_media, proxy_dev, direct_games, target_ai, split_dns)
+            VALUES (1, 1, 1, 1, 0, 1, 'PROXY', '', 1, 0, 0, 0, 0, '🤖 AI服务 (排除香港)', 1)
         """)
     
     c.execute('''
@@ -931,11 +932,17 @@ def get_subscription_rules():
             "enable_auto_group": True,
             "final_match": "PROXY",
             "custom_rules": "",
-            "proxy_ai": False,
+            "proxy_ai": True,
             "proxy_tg": False,
             "proxy_media": False,
             "proxy_dev": False,
             "direct_games": False,
+            "target_ai": "🤖 AI服务 (排除香港)",
+            "target_tg": "PROXY",
+            "target_media": "PROXY",
+            "target_dev": "PROXY",
+            "target_games": "DIRECT",
+            "split_dns": True,
             "sub_title": "Komari Pro 优质节点"
         }
     d = dict(row)
@@ -947,16 +954,17 @@ def get_subscription_rules():
         "enable_auto_group": bool(d.get("enable_auto_group", 1)),
         "final_match": d.get("final_match") or "PROXY",
         "custom_rules": d.get("custom_rules") or "",
-        "proxy_ai": bool(d.get("proxy_ai", 0)),
+        "proxy_ai": bool(d.get("proxy_ai", 1)),
         "proxy_tg": bool(d.get("proxy_tg", 0)),
         "proxy_media": bool(d.get("proxy_media", 0)),
         "proxy_dev": bool(d.get("proxy_dev", 0)),
         "direct_games": bool(d.get("direct_games", 0)),
-        "target_ai": d.get("target_ai") or "PROXY",
+        "target_ai": d.get("target_ai") or "🤖 AI服务 (排除香港)",
         "target_tg": d.get("target_tg") or "PROXY",
         "target_media": d.get("target_media") or "PROXY",
         "target_dev": d.get("target_dev") or "PROXY",
         "target_games": d.get("target_games") or "DIRECT",
+        "split_dns": bool(d.get("split_dns", 1)),
         "sub_title": d.get("sub_title") or "Komari Pro 优质节点"
     }
 
@@ -1961,6 +1969,18 @@ def build_node_share_link(node):
         return f"vmess://{b64}"
     return ""
 
+def is_hk_node(node_name):
+    if not node_name:
+        return False
+    name_lower = node_name.lower()
+    if "香港" in node_name or "🇭🇰" in node_name:
+        return True
+    hk_keywords = ["hk", "hongkong", "hong kong", "hkl", "hkt", "hkbn", "hk-", "hk_"]
+    for kw in hk_keywords:
+        if kw in name_lower:
+            return True
+    return False
+
 def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
     if rules_cfg is None:
         rules_cfg = get_subscription_rules()
@@ -2069,12 +2089,35 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
     proxies:
 {proxy_names}""")
 
+    # 3. AI Dedicated Group (Excluding Hong Kong nodes)
+    non_hk_names = [name for name in names if not is_hk_node(name)]
+    ai_candidates = non_hk_names if non_hk_names else names
+    ai_proxy_names = "\n".join([f'      - "{x}"' for x in ai_candidates]) if ai_candidates else '      - PROXY'
+
+    if rules_cfg.get("enable_auto_group") and non_hk_names:
+        proxy_groups.append(f"""  - name: 🤖 AI自动优选 (非香港)
+    type: url-test
+    url: https://api.openai.com/v1/models
+    interval: 300
+    tolerance: 50
+    proxies:
+{ai_proxy_names}""")
+
+    ai_auto_tag = "      - 🤖 AI自动优选 (非香港)\n" if rules_cfg.get("enable_auto_group") and non_hk_names else ""
+    proxy_groups.append(f"""  - name: 🤖 AI服务
+    type: select
+    proxies:
+{ai_auto_tag}{ai_proxy_names}
+      - PROXY""")
+
     groups_text = "\n".join(proxy_groups)
 
     # Valid targets whitelist for safe fallback
-    valid_targets = set(names) | {"PROXY", "DIRECT", "REJECT"}
+    valid_targets = set(names) | {"PROXY", "DIRECT", "REJECT", "🤖 AI服务", "🤖 AI服务 (排除香港)"}
     if rules_cfg.get("enable_auto_group") and names:
         valid_targets.add("自动优选")
+    if rules_cfg.get("enable_auto_group") and non_hk_names:
+        valid_targets.add("🤖 AI自动优选 (非香港)")
 
     def safe_target(t, default="PROXY"):
         if not t or t not in valid_targets:
@@ -2101,10 +2144,14 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
                         line = f"- {','.join(parts)}"
                 rules_list.append(f"  {line}")
 
-    # 2. AI services
-    if rules_cfg.get("proxy_ai"):
-        t_ai = safe_target(rules_cfg.get("target_ai"), "PROXY")
-        rules_list.append(f"  # === 🤖 AI 大模型服务 (ChatGPT / Claude / Gemini) -> {t_ai} ===")
+    # 2. AI services (OpenAI / Claude / Gemini / Perplexity etc. -> 智能排除香港节点)
+    if rules_cfg.get("proxy_ai", True):
+        raw_target_ai = rules_cfg.get("target_ai")
+        if not raw_target_ai or raw_target_ai in ["PROXY", "🤖 AI服务", "🤖 AI服务 (排除香港)"]:
+            t_ai = "🤖 AI服务"
+        else:
+            t_ai = safe_target(raw_target_ai, "🤖 AI服务")
+        rules_list.append(f"  # === 🤖 AI 大模型服务 (ChatGPT / Claude / Gemini) -> {t_ai} (智能排除香港节点) ===")
         rules_list.append(f"  - GEOSITE,openai,{t_ai}")
         rules_list.append(f"  - GEOSITE,anthropic,{t_ai}")
         rules_list.append(f"  - GEOSITE,google-gemini,{t_ai}")
@@ -2112,10 +2159,26 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
         rules_list.append(f"  - DOMAIN-SUFFIX,openai.com,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,oaistatic.com,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,oaiusercontent.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,auth0.openai.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,cdn.openai.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,challenges.cloudflare.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,ai.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,sora.com,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,anthropic.com,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,claude.ai,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,gemini.google.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,proactivebackend-pa.googleapis.com,{t_ai}")
         rules_list.append(f"  - DOMAIN-SUFFIX,copilot.microsoft.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,groq.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,cohere.ai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,cohere.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,mistral.ai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,perplexity.ai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,perplex.ai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-SUFFIX,poe.com,{t_ai}")
+        rules_list.append(f"  - DOMAIN-KEYWORD,openai,{t_ai}")
+        rules_list.append(f"  - DOMAIN-KEYWORD,anthropic,{t_ai}")
+        rules_list.append(f"  - DOMAIN-KEYWORD,claude,{t_ai}")
 
     # 3. Telegram
     if rules_cfg.get("proxy_tg"):
@@ -2194,9 +2257,9 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
     rules_list.append("  - GEOSITE,apple@cn,DIRECT")
     rules_list.append("  - GEOSITE,microsoft@cn,DIRECT")
 
-    # 3. LAN Direct rule
+    # 8. LAN Direct rule
     if rules_cfg.get("direct_lan", True):
-        rules_list.append("  # === 本地局域网与私有 IP 直连 ===")
+        rules_list.append("  # === 🏠 本地局域网与私有 IP 直连 ===")
         rules_list.append("  - GEOIP,LAN,DIRECT,no-resolve")
         rules_list.append("  - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve")
         rules_list.append("  - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve")
@@ -2206,23 +2269,68 @@ def build_clash_meta_yaml(nodes, rules_cfg=None, sub_title=None):
         rules_list.append("  - IP-CIDR6,fc00::/7,DIRECT,no-resolve")
         rules_list.append("  - IP-CIDR6,fe80::/10,DIRECT,no-resolve")
 
-    # 4. Ad blocking
+    # 9. Ad blocking
     if rules_cfg.get("block_ads", False):
-        rules_list.append("  # === 广告拦截 ===")
+        rules_list.append("  # === 🚫 广告拦截 ===")
         rules_list.append("  - GEOSITE,category-ads-all,REJECT")
 
-    # 5. China Direct rule
+    # 10. China Direct rule (国内域名规则集 + GeoIP CN 强制直连)
     if rules_cfg.get("direct_cn", True):
-        rules_list.append("  # === 中国大陆域名与 IP 直连 ===")
+        rules_list.append("  # === 🇨🇳 中国大陆域名规则集 (Geosite:cn) 与 IP (GeoIP:CN) 强制直连 ===")
+        rules_list.append("  - GEOSITE,cn,DIRECT")
         rules_list.append("  - DOMAIN-SUFFIX,cn,DIRECT")
         rules_list.append("  - GEOIP,CN,DIRECT,no-resolve")
 
-    # 6. Final match
+    # 11. Final match (除此以外全部走代理)
     final = rules_cfg.get("final_match") or "PROXY"
+    rules_list.append("  # === 🌐 其它国外与未匹配流量全部走代理 ===")
     rules_list.append(f"  - MATCH,{final}")
 
     rules_yaml = "\n".join(rules_list)
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    split_dns_enabled = rules_cfg.get("split_dns", True)
+    dns_block = ""
+    if split_dns_enabled:
+        dns_block = """
+dns:
+  enable: true
+  listen: 0.0.0.0:1053
+  ipv6: false
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "*.local"
+    - localhost.ptlogin2.qq.com
+    - "*.msftconnecttest.com"
+    - "*.msftncsi.com"
+    - "stun.*"
+    - "*.srv.nintendo.net"
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+  fallback:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+  fallback-filter:
+    geoip: true
+    geoip-code: CN
+    geosite:
+      - gfw
+    ipcidr:
+      - 240.0.0.0/4
+  nameserver-policy:
+    "geosite:cn,private":
+      - 223.5.5.5
+      - 119.29.29.29
+    "geosite:openai,anthropic,google-gemini":
+      - https://1.1.1.1/dns-query
+      - https://dns.google/dns-query
+    "geosite:geolocation-!cn":
+      - https://1.1.1.1/dns-query
+      - https://dns.google/dns-query
+"""
 
     return f"""# ========================================================
 # 🚀 订阅名称: {sub_title}
@@ -2240,7 +2348,7 @@ geox-url:
   geoip: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.dat"
   geosite: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat"
   mmdb: "https://testingcf.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/country.mmdb"
-
+{dns_block}
 proxies:
 {proxies_text}
 
@@ -2395,6 +2503,33 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
             "tolerance": 50
         })
 
+    # AI Dedicated Group (Excluding Hong Kong nodes)
+    non_hk_tags = [t for t in node_tags if not is_hk_node(t)]
+    ai_candidates = non_hk_tags if non_hk_tags else node_tags
+
+    if rules_cfg.get("enable_auto_group", True) and non_hk_tags:
+        group_outbounds.append({
+            "type": "urltest",
+            "tag": "🤖 AI自动优选 (非香港)",
+            "outbounds": list(non_hk_tags),
+            "url": "https://api.openai.com/v1/models",
+            "interval": "5m",
+            "tolerance": 50
+        })
+
+    ai_selector_tags = []
+    if rules_cfg.get("enable_auto_group", True) and non_hk_tags:
+        ai_selector_tags.append("🤖 AI自动优选 (非香港)")
+    ai_selector_tags.extend(ai_candidates)
+    ai_selector_tags.append("PROXY")
+
+    group_outbounds.append({
+        "type": "selector",
+        "tag": "🤖 AI服务",
+        "outbounds": ai_selector_tags,
+        "default": ai_selector_tags[0] if ai_selector_tags else "PROXY"
+    })
+
     group_outbounds.extend([
         {"type": "direct", "tag": "direct"},
         {"type": "block", "tag": "block"}
@@ -2411,6 +2546,8 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
             return "direct"
         if t in ["REJECT", "block"]:
             return "block"
+        if t in ["🤖 AI服务 (排除香港)", "🤖 AI服务"]:
+            return "🤖 AI服务"
         if t in valid_sb_tags:
             return t
         return default
@@ -2473,14 +2610,24 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
             "outbound": "block"
         })
 
-    # 5. AI Services
-    if rules_cfg.get("proxy_ai"):
-        t_ai = safe_sb_target(rules_cfg.get("target_ai"), "PROXY")
+    # 5. AI Services (OpenAI / Claude / Gemini / Perplexity -> 智能排除香港节点)
+    if rules_cfg.get("proxy_ai", True):
+        raw_t_ai = rules_cfg.get("target_ai")
+        if not raw_t_ai or raw_t_ai in ["PROXY", "🤖 AI服务", "🤖 AI服务 (排除香港)"]:
+            t_ai = "🤖 AI服务"
+        else:
+            t_ai = safe_sb_target(raw_t_ai, "🤖 AI服务")
         route_rules.append({
+            "geosite": ["openai", "anthropic", "google-gemini"],
             "domain_suffix": [
                 "chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com",
-                "anthropic.com", "claude.ai", "gemini.google.com", "copilot.microsoft.com"
+                "auth0.openai.com", "cdn.openai.com", "challenges.cloudflare.com",
+                "ai.com", "sora.com", "anthropic.com", "claude.ai",
+                "gemini.google.com", "proactivebackend-pa.googleapis.com",
+                "copilot.microsoft.com", "groq.com", "cohere.ai", "cohere.com",
+                "mistral.ai", "perplexity.ai", "perplex.ai", "poe.com"
             ],
+            "domain_keyword": ["openai", "anthropic", "claude"],
             "outbound": t_ai
         })
 
@@ -2535,22 +2682,68 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
         "outbound": "direct"
     })
 
-    # 10. China Direct
+    # 10. China Direct (Geosite:cn + GeoIP:CN 强制直连)
     if rules_cfg.get("direct_cn", True):
         route_rules.append({
+            "geosite": ["cn"],
             "domain_suffix": [
                 ".cn", "baidu.com", "qq.com", "163.com", "aliyun.com", "taobao.com", "jd.com", "bilibili.com",
                 "zhihu.com", "weibo.com", "sina.com.cn", "sohu.com", "douyin.com", "xiaohongshu.com"
             ],
             "outbound": "direct"
         })
+        route_rules.append({
+            "geoip": ["cn", "private"],
+            "outbound": "direct"
+        })
 
     final_match = rules_cfg.get("final_match") or "PROXY"
     final_outbound = "direct" if final_match == "DIRECT" else "PROXY"
 
-    return {
-        "log": {"level": "info", "timestamp": True},
-        "dns": {
+    split_dns_enabled = rules_cfg.get("split_dns", True)
+    if split_dns_enabled:
+        dns_config = {
+            "servers": [
+                {
+                    "tag": "dns-remote",
+                    "address": "https://1.1.1.1/dns-query",
+                    "address_resolver": "dns-direct",
+                    "strategy": "prefer_ipv4",
+                    "detour": "PROXY"
+                },
+                {
+                    "tag": "dns-ai",
+                    "address": "https://1.1.1.1/dns-query",
+                    "address_resolver": "dns-direct",
+                    "strategy": "prefer_ipv4",
+                    "detour": "🤖 AI服务"
+                },
+                {
+                    "tag": "dns-direct",
+                    "address": "223.5.5.5",
+                    "strategy": "prefer_ipv4",
+                    "detour": "direct"
+                },
+                {
+                    "tag": "dns-block",
+                    "address": "rcode://success"
+                }
+            ],
+            "rules": [
+                {"outbound": "any", "server": "dns-direct"},
+                {"clash_mode": "Global", "server": "dns-remote"},
+                {"clash_mode": "Direct", "server": "dns-direct"},
+                {"geosite": ["category-ads-all"], "server": "dns-block"},
+                {"geosite": ["openai", "anthropic", "google-gemini"], "server": "dns-ai"},
+                {"domain_suffix": ["chatgpt.com", "openai.com", "oaistatic.com", "oaiusercontent.com", "anthropic.com", "claude.ai", "gemini.google.com"], "server": "dns-ai"},
+                {"geosite": ["cn"], "server": "dns-direct"},
+                {"domain_suffix": [".cn", "baidu.com", "qq.com", "163.com", "aliyun.com", "taobao.com", "jd.com", "bilibili.com"], "server": "dns-direct"}
+            ],
+            "final": "dns-remote",
+            "strategy": "prefer_ipv4"
+        }
+    else:
+        dns_config = {
             "servers": [
                 {"tag": "dns-remote", "type": "tcp", "server": "1.1.1.1", "detour": "PROXY"},
                 {"tag": "dns-direct", "type": "udp", "server": "223.5.5.5", "detour": "direct"}
@@ -2560,7 +2753,11 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
                 {"clash_mode": "Direct", "server": "dns-direct"}
             ],
             "strategy": "prefer_ipv4"
-        },
+        }
+
+    return {
+        "log": {"level": "info", "timestamp": True},
+        "dns": dns_config,
         "inbounds": [
             {
                 "type": "mixed",
@@ -6527,14 +6724,15 @@ rules:
             direct_lan = 1 if body.get("direct_lan", True) else 0
             block_ads = 1 if body.get("block_ads", False) else 0
             enable_auto_group = 1 if body.get("enable_auto_group", True) else 0
+            split_dns = 1 if body.get("split_dns", True) else 0
             final_match = body.get("final_match") or "PROXY"
             custom_rules = body.get("custom_rules", "")
-            proxy_ai = 1 if body.get("proxy_ai", False) else 0
+            proxy_ai = 1 if body.get("proxy_ai", True) else 0
             proxy_tg = 1 if body.get("proxy_tg", False) else 0
             proxy_media = 1 if body.get("proxy_media", False) else 0
             proxy_dev = 1 if body.get("proxy_dev", False) else 0
             direct_games = 1 if body.get("direct_games", False) else 0
-            target_ai = body.get("target_ai") or "PROXY"
+            target_ai = body.get("target_ai") or "🤖 AI服务 (排除香港)"
             target_tg = body.get("target_tg") or "PROXY"
             target_media = body.get("target_media") or "PROXY"
             target_dev = body.get("target_dev") or "PROXY"
@@ -6542,6 +6740,10 @@ rules:
 
             conn = sqlite3.connect(NODES_DB)
             c = conn.cursor()
+            try:
+                c.execute("ALTER TABLE subscription_rules ADD COLUMN split_dns INTEGER DEFAULT 1")
+            except Exception:
+                pass
             if "sub_title" in body:
                 st = str(body.get("sub_title") or "").strip()
                 if st:
@@ -6551,15 +6753,15 @@ rules:
                 SET direct_bt=?, direct_cn=?, direct_lan=?, block_ads=?, enable_auto_group=?,
                     final_match=?, custom_rules=?, proxy_ai=?, proxy_tg=?, proxy_media=?,
                     proxy_dev=?, direct_games=?, target_ai=?, target_tg=?, target_media=?,
-                    target_dev=?, target_games=?, updated_at=CURRENT_TIMESTAMP
+                    target_dev=?, target_games=?, split_dns=?, updated_at=CURRENT_TIMESTAMP
                 WHERE id = 1
             """, (direct_bt, direct_cn, direct_lan, block_ads, enable_auto_group,
                   final_match, custom_rules, proxy_ai, proxy_tg, proxy_media,
                   proxy_dev, direct_games, target_ai, target_tg, target_media,
-                  target_dev, target_games))
+                  target_dev, target_games, split_dns))
             conn.commit()
             conn.close()
-            self._send_json({"ok": True, "msg": "订阅规则已保存生效"})
+            self._send_json({"ok": True, "msg": "分流与DNS规则已保存生效"})
             return
 
         if path in ["/api/sub/rules/fix-dangling", "/api/node-mgr/sub/rules/fix-dangling"]:
