@@ -6616,6 +6616,17 @@ rules:
             for line in lines:
                 parsed_node = parse_proxy_link(line)
                 if parsed_node:
+                    # Check duplicate name, auto-suffix (2), (3)... if duplicate
+                    candidate_name = parsed_node["name"]
+                    idx = 2
+                    while True:
+                        c.execute("SELECT id FROM nodes WHERE LOWER(TRIM(name)) = LOWER(?)", (candidate_name,))
+                        if not c.fetchone():
+                            break
+                        candidate_name = f"{parsed_node['name']} ({idx})"
+                        idx += 1
+                    parsed_node["name"] = candidate_name
+
                     c.execute('''
                         INSERT INTO nodes (server_uuid, server_name, server_ip, name, protocol, port,
                                           uuid_or_passwd, sni, public_key, private_key, short_id, flow, ws_path, raw_link, is_external, enabled)
@@ -7688,6 +7699,13 @@ rules:
                 return
 
             name = str(body.get("name") or "").strip()
+            if name:
+                c.execute("SELECT id FROM nodes WHERE LOWER(TRIM(name)) = LOWER(?) AND id != ?", (name, node_id))
+                if c.fetchone():
+                    conn.close()
+                    self._send_json({"ok": False, "error": f"已存在名为【{name}】的其他节点，请更换节点名称"}, 400)
+                    return
+
             server_ip = str(body.get("server_ip") or "").strip()
             port = int(body.get("port") or 0)
             uuid_or_passwd = str(body.get("uuid_or_passwd") or "").strip()

@@ -4753,6 +4753,11 @@
         showToast(`【${(node && node.server_name) || '该服务器'}】尚未检测到有效 IPv6 地址，无法克隆 IPv6 节点！请在服务器设置中填入或通过部署指令指定 IPv6。`, 'error');
         return;
       }
+      const cloneName = (node && node.name && node.name.includes('[IPv6]')) ? node.name : `${(node && node.name) || 'Node'} [IPv6]`;
+      if (state.nodes.some(n => n.name && n.name.trim().toLowerCase() === cloneName.toLowerCase())) {
+        showToast(`已存在名为【${cloneName}】的 IPv6 节点，无需重复创建！`, 'info');
+        return;
+      }
       try {
         const res = await fetch('/api/node-mgr/nodes/ipv6', {
           method: 'POST',
@@ -4838,6 +4843,12 @@
 
       if (!name) {
         showToast('节点名称不能为空', 'error');
+        return;
+      }
+      if (state.nodes.some(n => n.id !== id && n.name && n.name.trim().toLowerCase() === name.toLowerCase())) {
+        showToast(`已存在名为【${name}】的其他节点，名称不可重复！`, 'error');
+        const ni = document.getElementById('editNodeName');
+        if (ni) { ni.focus(); ni.select(); }
         return;
       }
       if (!server_ip) {
@@ -5419,6 +5430,13 @@
       const nameInput = document.getElementById('createNodeName');
       const inputName = nameInput ? nameInput.value.trim() : '';
       const finalName = inputName || defaultNodeName;
+
+      // Duplicate name check before submit
+      if (state.nodes.some(n => n.name && n.name.trim().toLowerCase() === finalName.toLowerCase())) {
+        showToast(`已存在名为【${finalName}】的节点，请更换节点名称！`, 'error');
+        if (nameInput) { nameInput.focus(); nameInput.select(); }
+        return;
+      }
 
       const payload = {
         server_uuid: finalServerUuid,
