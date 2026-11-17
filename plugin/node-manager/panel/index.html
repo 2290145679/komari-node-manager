@@ -540,8 +540,15 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定出口 (智能排除香港)</label>
-            <select id="target_ai" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">分流指定出口 (智能排除香港)</label>
+            <button type="button" onclick="openTargetPicker('target_ai')" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-slate-100 dark:hover:bg-zinc-700/60 flex items-center justify-between transition btn-tap shadow-sm text-left">
+              <div class="flex items-center gap-2 truncate pr-1">
+                <span id="badge_icon_target_ai" class="text-sm shrink-0">🤖</span>
+                <span id="badge_text_target_ai" class="font-bold text-slate-700 dark:text-slate-200 truncate">AI 自动优选 (智能排除香港)</span>
+              </div>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            </button>
+            <input type="hidden" id="target_ai" value="🤖 AI服务 (排除香港)">
           </div>
         </div>
 
@@ -555,8 +562,15 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
-            <select id="target_tg" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">分流指定出口</label>
+            <button type="button" onclick="openTargetPicker('target_tg')" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-slate-100 dark:hover:bg-zinc-700/60 flex items-center justify-between transition btn-tap shadow-sm text-left">
+              <div class="flex items-center gap-2 truncate pr-1">
+                <span id="badge_icon_target_tg" class="text-sm shrink-0">⚡</span>
+                <span id="badge_text_target_tg" class="font-bold text-slate-700 dark:text-slate-200 truncate">自动优选 (测速最低延迟)</span>
+              </div>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            </button>
+            <input type="hidden" id="target_tg" value="自动优选">
           </div>
         </div>
 
@@ -570,8 +584,15 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
-            <select id="target_media" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">分流指定出口</label>
+            <button type="button" onclick="openTargetPicker('target_media')" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-slate-100 dark:hover:bg-zinc-700/60 flex items-center justify-between transition btn-tap shadow-sm text-left">
+              <div class="flex items-center gap-2 truncate pr-1">
+                <span id="badge_icon_target_media" class="text-sm shrink-0">⚡</span>
+                <span id="badge_text_target_media" class="font-bold text-slate-700 dark:text-slate-200 truncate">自动优选 (测速最低延迟)</span>
+              </div>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            </button>
+            <input type="hidden" id="target_media" value="自动优选">
           </div>
         </div>
 
@@ -585,8 +606,15 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
-            <select id="target_dev" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">分流指定出口</label>
+            <button type="button" onclick="openTargetPicker('target_dev')" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-slate-100 dark:hover:bg-zinc-700/60 flex items-center justify-between transition btn-tap shadow-sm text-left">
+              <div class="flex items-center gap-2 truncate pr-1">
+                <span id="badge_icon_target_dev" class="text-sm shrink-0">⚡</span>
+                <span id="badge_text_target_dev" class="font-bold text-slate-700 dark:text-slate-200 truncate">自动优选 (测速最低延迟)</span>
+              </div>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            </button>
+            <input type="hidden" id="target_dev" value="自动优选">
           </div>
         </div>
 
@@ -600,8 +628,15 @@
             </div>
           </div>
           <div class="mt-4">
-            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">分流指定节点</label>
-            <select id="target_games" class="rule-target-select w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none"></select>
+            <label class="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1.5">分流指定出口</label>
+            <button type="button" onclick="openTargetPicker('target_games')" class="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800/80 hover:bg-slate-100 dark:hover:bg-zinc-700/60 flex items-center justify-between transition btn-tap shadow-sm text-left">
+              <div class="flex items-center gap-2 truncate pr-1">
+                <span id="badge_icon_target_games" class="text-sm shrink-0">🚫</span>
+                <span id="badge_text_target_games" class="font-bold text-slate-700 dark:text-slate-200 truncate">DIRECT (直连推荐)</span>
+              </div>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 shrink-0"></i>
+            </button>
+            <input type="hidden" id="target_games" value="DIRECT">
           </div>
         </div>
       </div>
@@ -641,11 +676,16 @@
             <input type="checkbox" id="enable_auto_group" class="w-4 h-4 text-purple-600 rounded">
           </label>
           <div class="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50/50 dark:bg-zinc-800/40">
-            <span class="text-xs font-semibold">最终漏斗规则 (Final)</span>
-            <select id="final_match" class="px-2 py-1 text-xs rounded border border-slate-300 dark:border-zinc-600 bg-white dark:bg-zinc-800">
-              <option value="PROXY">PROXY (代理)</option>
-              <option value="DIRECT">DIRECT (直连)</option>
-            </select>
+            <div>
+              <span class="text-xs font-semibold block">最终漏斗规则 (Final)</span>
+              <span class="text-[10px] text-slate-400">未匹配以上规则的其余国外所有流量走向</span>
+            </div>
+            <button type="button" onclick="openTargetPicker('final_match')" class="px-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-700/60 flex items-center gap-2 transition btn-tap shadow-sm">
+              <span id="badge_icon_final_match" class="text-xs">⚡</span>
+              <span id="badge_text_final_match" class="font-bold text-slate-700 dark:text-slate-200">自动优选</span>
+              <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
+            </button>
+            <input type="hidden" id="final_match" value="自动优选">
           </div>
         </div>
 
@@ -2031,6 +2071,32 @@
     </div>
   </div>
 
+  <!-- Modal: Bento 路由出口与节点选择器 (完美适配移动端与桌面端) -->
+  <div id="modalTargetPicker" class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden sheet-backdrop">
+    <div class="sheet-panel w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[82vh] flex flex-col">
+      <div class="sheet-drag-handle w-full py-2.5 -mt-2 mb-1 flex justify-center items-center cursor-grab active:cursor-grabbing sm:hidden touch-none" title="按住小横条下拉收回">
+        <div class="w-12 h-1.5 bg-slate-300 dark:bg-zinc-700 rounded-full pointer-events-none"></div>
+      </div>
+      <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-zinc-800 shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div id="targetPickerIcon" class="w-9 h-9 rounded-xl bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300 flex items-center justify-center text-lg font-bold shrink-0">⚡</div>
+          <div class="min-w-0">
+            <h4 id="targetPickerTitle" class="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 truncate">选择分流出口</h4>
+            <p id="targetPickerDesc" class="text-[11px] text-slate-400 truncate">指定该服务流量的最佳路由节点</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeModal('modalTargetPicker')" class="p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-zinc-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Options container -->
+      <div id="targetPickerOptions" class="overflow-y-auto py-3 space-y-3 flex-1 pr-1">
+        <!-- Dynamically rendered by JS -->
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: 统一主题服务器选择抽屉 (Macaron Bento Style) -->
   <div id="modalServerPicker" class="fixed inset-0 z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden sheet-backdrop">
     <div class="sheet-panel w-full sm:max-w-md bg-white dark:bg-zinc-900 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl border border-slate-200 dark:border-zinc-800 max-h-[75vh] flex flex-col">
@@ -3152,6 +3218,55 @@
       }
     }
 
+    const TARGET_META = {
+      target_ai: { icon: '🤖', title: 'AI 大模型服务分流出口', desc: 'ChatGPT, Claude, Gemini, OpenAI 访问出口' },
+      target_tg: { icon: '✈️', title: 'Telegram 社交专线分流出口', desc: 'Telegram 消息、频道与文件媒体加速' },
+      target_media: { icon: '🎬', title: '海外流媒体专区分流出口', desc: 'YouTube, Netflix, Disney+, Spotify' },
+      target_dev: { icon: '💻', title: '开发者技术服务分流出口', desc: 'GitHub, Docker Hub, StackOverflow' },
+      target_games: { icon: '🎮', title: '主流游戏平台分流出口', desc: 'Steam, Epic, PlayStation, Xbox' },
+      final_match: { icon: '🌐', title: '最终漏斗规则出口 (Final)', desc: '未匹配以上规则的其余国外所有流量' }
+    };
+
+    function getNodeFlag(name) {
+      if (!name) return '🌐';
+      if (/香港|hk|hongkong|hkl|hkt/i.test(name)) return '🇭🇰';
+      if (/新加坡|sg|singapore/i.test(name)) return '🇸🇬';
+      if (/日本|jp|japan|tokyo|osaka/i.test(name)) return '🇯🇵';
+      if (/美国|us|america|united states/i.test(name)) return '🇺🇸';
+      if (/台湾|tw|taiwan/i.test(name)) return '🇹🇼';
+      if (/韩国|kr|korea|seoul/i.test(name)) return '🇰🇷';
+      if (/德国|de|germany/i.test(name)) return '🇩🇪';
+      if (/英国|uk|gb|london/i.test(name)) return '🇬🇧';
+      return '🌐';
+    }
+
+    function getTargetDisplayInfo(key, val) {
+      if (!val || val === '自动优选') {
+        return { icon: '⚡', text: '自动优选 (测速最低延迟)' };
+      }
+      if (val === '🤖 AI服务 (排除香港)' || val === '🤖 AI自动优选 (非香港)' || val === '🤖 AI服务') {
+        return { icon: '🤖', text: 'AI 自动优选 (智能排除香港)' };
+      }
+      if (val === 'PROXY') {
+        return { icon: '🌐', text: 'PROXY (跟随客户端策略组)' };
+      }
+      if (val === 'DIRECT' || val === 'direct') {
+        return { icon: '🚫', text: 'DIRECT (直连不走代理)' };
+      }
+      const flag = getNodeFlag(val);
+      return { icon: flag, text: val };
+    }
+
+    function updateTargetBadge(key, val) {
+      const input = document.getElementById(key);
+      if (input) input.value = val;
+      const info = getTargetDisplayInfo(key, val);
+      const iconEl = document.getElementById('badge_icon_' + key);
+      const textEl = document.getElementById('badge_text_' + key);
+      if (iconEl) iconEl.textContent = info.icon;
+      if (textEl) textEl.textContent = info.text;
+    }
+
     function applyRulesToUI(r) {
       document.getElementById('direct_bt').checked = !!r.direct_bt;
       document.getElementById('direct_cn').checked = !!r.direct_cn;
@@ -3161,39 +3276,155 @@
       if (document.getElementById('split_dns')) {
         document.getElementById('split_dns').checked = r.split_dns !== undefined ? !!r.split_dns : true;
       }
-      if (r.final_match) document.getElementById('final_match').value = r.final_match;
       if (r.custom_rules !== undefined) document.getElementById('custom_rules').value = r.custom_rules;
+      ['target_ai', 'target_tg', 'target_media', 'target_dev', 'target_games', 'final_match'].forEach(k => {
+        if (r[k]) updateTargetBadge(k, r[k]);
+      });
     }
 
     function populateRulesPresetSelectors(nodes) {
-      const keys = ['target_ai', 'target_tg', 'target_media', 'target_dev', 'target_games'];
+      state.cachedNodes = nodes || [];
+      const keys = ['target_ai', 'target_tg', 'target_media', 'target_dev', 'target_games', 'final_match'];
       keys.forEach(k => {
-        const select = document.getElementById(k);
-        if (!select) return;
-        const cur = state.rules[k] || (k === 'target_games' ? 'DIRECT' : (k === 'target_ai' ? '🤖 AI服务 (排除香港)' : 'PROXY'));
-
-        let html = '';
-        if (k === 'target_ai') {
-          html = `
-            <option value="🤖 AI服务 (排除香港)" ${cur === '🤖 AI服务 (排除香港)' || cur === 'PROXY' || !cur ? 'selected' : ''}>🤖 自动优选 (智能排除所有香港节点)</option>
-            <option value="PROXY" ${cur === 'PROXY' && cur !== '🤖 AI服务 (排除香港)' ? 'selected' : ''}>PROXY (通用代理节点池)</option>
-            <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
-          `;
-          nodes.forEach(n => {
-            const isHk = /香港|hk|hongkong|hkl|hkt/i.test(n.name);
-            html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})${isHk ? ' ⚠️ [香港节点:OpenAI受限]' : ' [推荐解锁]'}</option>`;
-          });
-        } else {
-          html = `
-            <option value="PROXY" ${cur === 'PROXY' ? 'selected' : ''}>PROXY (智能代理节点池)</option>
-            <option value="DIRECT" ${cur === 'DIRECT' ? 'selected' : ''}>DIRECT (直连不走代理)</option>
-          `;
-          nodes.forEach(n => {
-            html += `<option value="${escapeHtml(n.name)}" ${cur === n.name ? 'selected' : ''}>${escapeHtml(n.name)} (${n.protocol})</option>`;
-          });
+        let cur = state.rules ? state.rules[k] : null;
+        if (!cur) {
+          const input = document.getElementById(k);
+          cur = input ? input.value : null;
         }
-        select.innerHTML = html;
+        if (!cur) {
+          if (k === 'target_games') cur = 'DIRECT';
+          else if (k === 'target_ai') cur = '🤖 AI服务 (排除香港)';
+          else cur = '自动优选';
+        }
+        updateTargetBadge(k, cur);
       });
+    }
+
+    function openTargetPicker(key) {
+      state.activePickerKey = key;
+      const meta = TARGET_META[key] || { icon: '🌐', title: '选择分流出口', desc: '指定最佳出口节点' };
+      document.getElementById('targetPickerIcon').textContent = meta.icon;
+      document.getElementById('targetPickerTitle').textContent = meta.title;
+      document.getElementById('targetPickerDesc').textContent = meta.desc;
+
+      const curVal = document.getElementById(key)?.value || '';
+      const nodes = state.cachedNodes || [];
+
+      // 1. Preset Strategies
+      const strategies = [];
+      if (key === 'target_ai') {
+        strategies.push({
+          val: '🤖 AI服务 (排除香港)',
+          icon: '🤖',
+          title: 'AI 自动优选 (智能排除香港节点)',
+          badge: '推荐 OpenAI/Claude',
+          badgeClass: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300',
+          subtext: '自动过滤全部香港节点，在新加坡/日本等可用节点中自动选延迟最低的'
+        });
+      }
+      strategies.push({
+        val: '自动优选',
+        icon: '⚡',
+        title: '全局自动优选 (测速最低延迟)',
+        badge: '最低延迟推荐',
+        badgeClass: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+        subtext: '客户端实时探测各节点延迟，始终动态选择所有节点中延迟最低的节点 (如香港 HKL)'
+      });
+      strategies.push({
+        val: 'PROXY',
+        icon: '🌐',
+        title: 'PROXY (跟随客户端主策略组)',
+        badge: '客户端默认',
+        badgeClass: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
+        subtext: '跟随手机/电脑客户端 PROXY 策略组的手动切换或默认选择'
+      });
+      strategies.push({
+        val: 'DIRECT',
+        icon: '🚫',
+        title: 'DIRECT (直连不走代理)',
+        badge: key === 'target_games' ? '游戏推荐' : '本地直连',
+        badgeClass: 'bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-slate-300',
+        subtext: '流量不经过任何节点直接访问，不消耗服务器流量'
+      });
+
+      let html = `
+        <div class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1 mb-1.5">⚡ 智能策略分组</div>
+        <div class="space-y-2">
+      `;
+
+      strategies.forEach(opt => {
+        const isSel = (curVal === opt.val);
+        html += `
+          <div onclick="selectTargetOption('${key}', '${escapeHtml(opt.val)}')"
+            class="p-3 rounded-2xl border cursor-pointer transition-all btn-tap flex items-center justify-between gap-3 ${isSel ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/30 ring-2 ring-purple-500/20' : 'border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-800/80 hover:bg-slate-50 dark:hover:bg-zinc-800'}">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="text-xl shrink-0">${opt.icon}</span>
+              <div class="min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100">${escapeHtml(opt.title)}</span>
+                  ${opt.badge ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${opt.badgeClass}">${opt.badge}</span>` : ''}
+                </div>
+                <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 leading-snug">${escapeHtml(opt.subtext)}</p>
+              </div>
+            </div>
+            ${isSel ? '<i data-lucide="check" class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0"></i>' : ''}
+          </div>
+        `;
+      });
+      html += `</div>`;
+
+      // 2. Concrete Nodes
+      if (nodes && nodes.length > 0) {
+        html += `
+          <div class="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider px-1 mt-4 mb-1.5">🌐 指定出口单节点</div>
+          <div class="space-y-2">
+        `;
+        nodes.forEach(n => {
+          const isSel = (curVal === n.name);
+          const flag = getNodeFlag(n.name);
+          const isHk = /香港|hk|hongkong|hkl|hkt/i.test(n.name);
+          let badge = '';
+          let badgeClass = '';
+          if (key === 'target_ai') {
+            if (isHk) {
+              badge = '⚠️ OpenAI受限';
+              badgeClass = 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300';
+            } else {
+              badge = '✅ 推荐解锁';
+              badgeClass = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300';
+            }
+          }
+          html += `
+            <div onclick="selectTargetOption('${key}', '${escapeHtml(n.name)}')"
+              class="p-3 rounded-2xl border cursor-pointer transition-all btn-tap flex items-center justify-between gap-3 ${isSel ? 'border-purple-500 bg-purple-50/70 dark:bg-purple-950/30 ring-2 ring-purple-500/20' : 'border-slate-200/90 dark:border-zinc-800 bg-white dark:bg-zinc-800/80 hover:bg-slate-50 dark:hover:bg-zinc-800'}">
+              <div class="flex items-center gap-3 min-w-0">
+                <span class="text-xl shrink-0">${flag}</span>
+                <div class="min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(n.name)}</span>
+                    <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-400 uppercase">${n.protocol || 'VLESS'}</span>
+                    ${badge ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeClass}">${badge}</span>` : ''}
+                  </div>
+                  <p class="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">${escapeHtml(n.server_ip || '')}:${n.port || ''}</p>
+                </div>
+              </div>
+              ${isSel ? '<i data-lucide="check" class="w-4 h-4 text-purple-600 dark:text-purple-400 shrink-0"></i>' : ''}
+            </div>
+          `;
+        });
+        html += `</div>`;
+      }
+
+      document.getElementById('targetPickerOptions').innerHTML = html;
+      openModal('modalTargetPicker');
+      initLucide();
+    }
+
+    function selectTargetOption(key, val) {
+      updateTargetBadge(key, val);
+      closeModal('modalTargetPicker');
+      const info = getTargetDisplayInfo(key, val);
+      showToast('已选中: ' + info.text, 'success');
     }
 
     async function saveRoutingRules() {

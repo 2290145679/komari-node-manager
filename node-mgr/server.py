@@ -2709,7 +2709,12 @@ def build_sing_box_client_profile(nodes, rules_cfg=None, sub_title=None):
         })
 
     final_match = rules_cfg.get("final_match") or "PROXY"
-    final_outbound = "direct" if final_match == "DIRECT" else "PROXY"
+    if final_match in ["DIRECT", "direct"]:
+        final_outbound = "direct"
+    elif final_match in valid_sb_tags:
+        final_outbound = final_match
+    else:
+        final_outbound = "PROXY"
 
     split_dns_enabled = rules_cfg.get("split_dns", True)
     if split_dns_enabled:
