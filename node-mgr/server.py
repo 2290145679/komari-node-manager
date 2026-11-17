@@ -1229,7 +1229,13 @@ def ping_node_handshake(server_ip, port, protocol="", sni="", timeout=3.5):
                 handshake_type = "TLS"
                 ssock.close()
                 sock = None
-            except Exception:
+            except Exception as e:
+                # 若协议强依赖 TLS 握手 (VLESS-Reality / Trojan)，TLS 握手失败即代表节点服务不可用，不可误判为可用
+                if any(k in str(protocol).lower() for k in ["reality", "trojan"]):
+                    if sock:
+                        try: sock.close()
+                        except Exception: pass
+                    return {"success": False, "latency_ms": None, "error": f"TLS 握手失败 (核心未运行或未对接: {e})"}
                 handshake_type = "TCP"
 
         if sock:
@@ -4186,20 +4192,29 @@ def check_and_notify_events():
         fail_threshold = int(rule_cfg.get("fail_threshold", 2))
         notify_recovery = bool(rule_cfg.get("notify_on_recovery", True))
         try:
-            c_n.execute("SELECT id, name, server_name, server_ip, port, protocol, sni FROM nodes WHERE enabled = 1")
+            c_n.execute("SELECT id, name, server_name, server_ip, port, protocol, sni, server_uuid FROM nodes WHERE enabled = 1")
             nodes_to_check = c_n.fetchall()
             if nodes_to_check:
                 def check_single_node(n_row):
-                    nid, nname, sname, ip, port, proto, sni = n_row
+                    nid, nname, sname, ip, port, proto, sni, suuid = n_row
+                    # 若归属主机探针当前处于离线状态，节点必然不可用，直接判定不可达，防止误报
+                    if suuid and get_state(f"host_st:{suuid}") == "offline":
+                        return n_row, {"success": False, "latency_ms": None, "error": "归属主机探针处于离线状态 (服务器掉线/重装未对接)"}
                     res = ping_node_handshake(ip, port, protocol=proto, sni=sni, timeout=3.5)
                     return n_row, res
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=min(8, len(nodes_to_check))) as pool:
                     results = list(pool.map(check_single_node, nodes_to_check))
 
-                for (nid, nname, sname, ip, port, proto, sni), res in results:
+                for (nid, nname, sname, ip, port, proto, sni, suuid), res in results:
                     last_tcp_st = get_state(f"node_tcp_st:{nid}")
                     fail_cnt = int(get_state(f"node_tcp_fail:{nid}", "0"))
+
+                    # 若主机处于离线状态，绝对不触发恢复解除通知
+                    is_host_offline = bool(suuid and get_state(f"host_st:{suuid}") == "offline")
+                    if is_host_offline:
+                        set_state(f"node_tcp_st:{nid}", "blocked")
+                        continue
 
                     if not res.get("success"):
                         fail_cnt += 1
