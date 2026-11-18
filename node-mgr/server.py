@@ -1710,6 +1710,10 @@ def get_servers_with_stats():
     active_relay_uuids = set(r[0] for r in c_n.fetchall() if r[0])
     c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
     baselines = {r[0]: (r[1], r[2]) for r in c_n.fetchall()}
+    c_n.execute("SELECT id, server_uuid, name, server_ip, port, enabled, protocol, sni FROM nodes WHERE is_external = 0 AND server_uuid != 'external' AND enabled = 1")
+    nodes_by_server = {}
+    for r in c_n.fetchall():
+        nodes_by_server.setdefault(r[1], []).append(r)
     conn_n.close()
 
     # Query real-time instantaneous metrics from Komari internal recent API (live second-by-second)
@@ -1809,8 +1813,46 @@ def get_servers_with_stats():
         public_remark = row.get("public_remark") or ""
         region = row.get("region") or ""
 
+        rec = recent_metrics.get(uuid_val)
+        is_probe_online = bool(rec and len(rec) > 0)
+
         last_seen = heartbeats.get(token, 0)
         is_online = (now - last_seen) <= 75 if last_seen > 0 else False
+
+        # Dual-channel health fallback:
+        # If agent heartbeat is overdue but host machine is online (probe alive),
+        # verify whether Sing-box is actually running via real TCP/TLS handshake on any of its nodes.
+        if not is_online and is_probe_online and uuid_val in nodes_by_server:
+            for snode in nodes_by_server[uuid_val]:
+                nid, _, nname, nip, nport, _, nproto, nsni = snode
+                p_cached = _node_latency_cache.get(nid)
+                if p_cached and p_cached.get("latency_ms") and (now - p_cached.get("ts", 0)) < 180:
+                    is_online = True
+                    break
+                target_ip = nip or custom_ip or ip4
+                if target_ip and nport:
+                    res = ping_node_handshake(target_ip, nport, protocol=nproto, sni=nsni, timeout=1.8)
+                    if res.get("success"):
+                        is_online = True
+                        _node_latency_cache[nid] = {
+                            "ok": True,
+                            "node_id": nid,
+                            "node_name": nname,
+                            "latency_ms": res.get("latency_ms"),
+                            "handshake_type": res.get("handshake_type", "TCP"),
+                            "ts": now
+                        }
+                        try:
+                            conn_hb = sqlite3.connect(NODES_DB)
+                            c_hb = conn_hb.cursor()
+                            c_hb.execute("INSERT OR REPLACE INTO agent_heartbeats (token, last_seen) VALUES (?, ?)", (token, now))
+                            conn_hb.commit()
+                            conn_hb.close()
+                            heartbeats[token] = now
+                            last_seen = now
+                        except Exception:
+                            pass
+                        break
 
         r_last_seen = realm_heartbeats.get(token, 0)
         is_realm_online = (now - r_last_seen) <= 90 if r_last_seen > 0 else False
@@ -1826,8 +1868,6 @@ def get_servers_with_stats():
         is_relay_assigned = uuid_val in active_relay_uuids
         has_realm = is_realm_online or (r_last_seen > 0) or is_realm_configured or is_relay_assigned
 
-        rec = recent_metrics.get(uuid_val)
-        is_probe_online = bool(rec and len(rec) > 0)
         is_server_online = is_probe_online or is_online
         if is_server_online:
             online_count += 1
@@ -3963,12 +4003,8 @@ REOF
         echo "$NEW_SYNC" > /usr/local/bin/komari-pro-node-sync.sh.new
         chmod +x /usr/local/bin/komari-pro-node-sync.sh.new
         mv /usr/local/bin/komari-pro-node-sync.sh.new /usr/local/bin/komari-pro-node-sync.sh
-        if command -v systemctl >/dev/null 2>&1; then
-          systemctl restart komari-pro-node-sync.service >/dev/null 2>&1 &
-        elif command -v rc-service >/dev/null 2>&1; then
-          rc-service komari-pro-node-sync restart >/dev/null 2>&1 &
-        fi
-        exit 0
+        echo "[NodeSync] Sync script updated to latest version. Executing new version in-place..."
+        exec /bin/bash /usr/local/bin/komari-pro-node-sync.sh
       fi
     fi
   fi
@@ -4030,6 +4066,7 @@ Type=simple
 ExecStart=/bin/bash /usr/local/bin/komari-pro-node-sync.sh
 Restart=always
 RestartSec=5
+KillMode=process
 
 [Install]
 WantedBy=multi-user.target
