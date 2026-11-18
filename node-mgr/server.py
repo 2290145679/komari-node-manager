@@ -1828,12 +1828,16 @@ def get_servers_with_stats():
                 p_cached = _node_latency_cache.get(nid)
                 if p_cached and p_cached.get("latency_ms") and (now - p_cached.get("ts", 0)) < 180:
                     is_online = True
+                    last_seen = now
+                    heartbeats[token] = now
                     break
                 target_ip = nip or custom_ip or ip4
                 if target_ip and nport:
-                    res = ping_node_handshake(target_ip, nport, protocol=nproto, sni=nsni, timeout=1.8)
+                    res = ping_node_handshake(target_ip, nport, protocol=nproto, sni=nsni, timeout=2.5)
                     if res.get("success"):
                         is_online = True
+                        last_seen = now
+                        heartbeats[token] = now
                         _node_latency_cache[nid] = {
                             "ok": True,
                             "node_id": nid,
@@ -1848,8 +1852,6 @@ def get_servers_with_stats():
                             c_hb.execute("INSERT OR REPLACE INTO agent_heartbeats (token, last_seen) VALUES (?, ?)", (token, now))
                             conn_hb.commit()
                             conn_hb.close()
-                            heartbeats[token] = now
-                            last_seen = now
                         except Exception:
                             pass
                         break
@@ -4410,35 +4412,57 @@ def check_and_notify_events():
         # Sing-box Core Online / Offline (rule: singbox_status)
         cfg_sb = enabled_rules.get("singbox_status") or {}
         sb_timeout = max(60, int(cfg_sb.get("offline_timeout", 75)))
-        s_last_seen = s.get("last_seen") or 0
-        sb_online = (now - s_last_seen) <= sb_timeout if s_last_seen > 0 else False
+        sb_online = bool(s.get("singbox_online"))
         notify_sb_rec = bool(cfg_sb.get("notify_recovery", True))
 
         if host_online and s.get("singbox_installed", False) and "singbox_status" in enabled_rules:
             last_sb_st = get_state(f"sb_st:{uuid_val}")
+            fail_count = int(get_state(f"sb_fail_cnt:{uuid_val}", "0") or "0")
+            rec_count = int(get_state(f"sb_rec_cnt:{uuid_val}", "0") or "0")
+
             if not last_sb_st:
                 set_state(f"sb_st:{uuid_val}", "online" if sb_online else "offline")
-            elif last_sb_st == "online" and not sb_online:
-                set_state(f"sb_st:{uuid_val}", "offline")
-                set_state(f"sb_off_time:{uuid_val}", str(now))
-                dispatch_notification(
-                    title="🔴 Sing-box 核心离线告警",
-                    message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>异常事件</b>: 主机在线但 Sing-box 核心代理已中断连接超过 {sb_timeout} 秒！\n<b>排查建议</b>: 请登录节点后台或执行 <code>systemctl status sing-box</code> 查看日志排查。",
-                    level="danger",
-                    rule_key="singbox_status"
-                )
-            elif last_sb_st == "offline" and sb_online:
-                set_state(f"sb_st:{uuid_val}", "online")
-                if notify_sb_rec:
-                    off_time = int(get_state(f"sb_off_time:{uuid_val}", str(now)))
-                    dur_s = max(0, now - off_time)
-                    dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
-                    dispatch_notification(
-                        title="🟢 Sing-box 核心已恢复运行",
-                        message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。\n<b>本次中断时长</b>: {dur_txt}",
-                        level="success",
-                        rule_key="singbox_status"
-                    )
+                set_state(f"sb_fail_cnt:{uuid_val}", "0")
+                set_state(f"sb_rec_cnt:{uuid_val}", "0")
+            elif last_sb_st == "online":
+                if not sb_online:
+                    fail_count += 1
+                    set_state(f"sb_fail_cnt:{uuid_val}", str(fail_count))
+                    # Debounce: Require 2 consecutive failed checks before firing offline alert
+                    if fail_count >= 2:
+                        set_state(f"sb_st:{uuid_val}", "offline")
+                        set_state(f"sb_off_time:{uuid_val}", str(now))
+                        set_state(f"sb_fail_cnt:{uuid_val}", "0")
+                        dispatch_notification(
+                            title="🔴 Sing-box 核心离线告警",
+                            message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>异常事件</b>: 主机在线但 Sing-box 核心代理已中断连接超过 {sb_timeout} 秒！\n<b>排查建议</b>: 请登录节点后台或执行 <code>systemctl status sing-box</code> 查看日志排查。",
+                            level="danger",
+                            rule_key="singbox_status"
+                        )
+                else:
+                    if fail_count > 0:
+                        set_state(f"sb_fail_cnt:{uuid_val}", "0")
+            elif last_sb_st == "offline":
+                if sb_online:
+                    rec_count += 1
+                    set_state(f"sb_rec_cnt:{uuid_val}", str(rec_count))
+                    # Debounce: Require 2 consecutive successful checks before firing recovery alert
+                    if rec_count >= 2:
+                        set_state(f"sb_st:{uuid_val}", "online")
+                        set_state(f"sb_rec_cnt:{uuid_val}", "0")
+                        if notify_sb_rec:
+                            off_time = int(get_state(f"sb_off_time:{uuid_val}", str(now)))
+                            dur_s = max(0, now - off_time)
+                            dur_txt = f"{dur_s // 60} 分 {dur_s % 60} 秒" if dur_s >= 60 else f"{dur_s} 秒"
+                            dispatch_notification(
+                                title="🟢 Sing-box 核心已恢复运行",
+                                message=f"<b>服务器</b>: <code>{s_name}</code> ({ip})\n<b>事件</b>: Sing-box 核心代理已重新恢复运行，分流节点就绪。\n<b>本次中断时长</b>: {dur_txt}",
+                                level="success",
+                                rule_key="singbox_status"
+                            )
+                else:
+                    if rec_count > 0:
+                        set_state(f"sb_rec_cnt:{uuid_val}", "0")
 
         # Traffic Burst Surge (rule: traffic_surge)
         if "traffic_surge" in enabled_rules:
