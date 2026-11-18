@@ -5117,7 +5117,11 @@ def get_user_portal_payload(token, domain=None, proto=None):
     all_server_uuids = set(s["uuid"] for s in servers_data.get("servers", []))
     online_server_uuids = set(
         s["uuid"] for s in servers_data.get("servers", [])
-        if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
+        if s.get("server_online") and s.get("singbox_online")
+    )
+    online_host_uuids = set(
+        s["uuid"] for s in servers_data.get("servers", [])
+        if s.get("server_online")
     )
 
     user_nodes = []
@@ -5136,7 +5140,7 @@ def get_user_portal_payload(token, domain=None, proto=None):
             n_copy["uuid_or_passwd"] = u_uuid
         is_on = bool(n.get("is_external") or n.get("server_uuid") == "external" or (
             n.get("server_uuid") in online_server_uuids and (
-                not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+                not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_host_uuids
             )
         ))
         if is_node_in_failover(n.get("id")) or bool(n.get("is_failover")):
@@ -5581,11 +5585,15 @@ rules:
                 s["uuid"] for s in servers_data.get("servers", [])
                 if s.get("server_online") and s.get("singbox_online")
             )
+            online_host_uuids = set(
+                s["uuid"] for s in servers_data.get("servers", [])
+                if s.get("server_online")
+            )
             nodes = [
                 n for n in all_nodes
                 if n.get("is_external") or n.get("server_uuid") == "external" or (
                     n.get("server_uuid") in online_server_uuids and (
-                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_host_uuids
                     )
                 )
             ]
@@ -5633,13 +5641,17 @@ rules:
             servers_data = get_cached_servers_with_stats()
             online_server_uuids = set(
                 s["uuid"] for s in servers_data.get("servers", [])
-                if s.get("server_online") or s.get("probe_online") or s.get("singbox_online")
+                if s.get("server_online") and s.get("singbox_online")
+            )
+            online_host_uuids = set(
+                s["uuid"] for s in servers_data.get("servers", [])
+                if s.get("server_online")
             )
             nodes = [
                 n for n in all_nodes
                 if n.get("is_external") or n.get("server_uuid") == "external" or (
                     n.get("server_uuid") in online_server_uuids and (
-                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_server_uuids
+                        not n.get("is_relay") or not n.get("relay_server_uuid") or n.get("relay_server_uuid") in online_host_uuids
                     )
                 )
             ]
@@ -5968,31 +5980,46 @@ rules:
                     n["is_external"] = 1
                     n["server_online"] = True
                     n["singbox_online"] = True
+                    n["is_online"] = True
                     n["node_status"] = "online"
                     n["status_text"] = "外部节点"
                 else:
                     srv = servers_map.get(n.get("server_uuid"))
+                    rsrv = servers_map.get(n.get("relay_server_uuid")) if n.get("is_relay") else None
                     if not srv or not srv.get("server_online"):
                         n["server_online"] = False
                         n["singbox_online"] = False
+                        n["is_online"] = False
                         n["node_status"] = "offline"
                         n["status_text"] = "服务器离线"
+                    elif n.get("is_relay") and (not rsrv or not rsrv.get("server_online")):
+                        n["server_online"] = bool(srv.get("server_online"))
+                        n["singbox_online"] = bool(srv.get("singbox_online"))
+                        n["relay_server_online"] = False
+                        n["is_online"] = False
+                        n["node_status"] = "relay_offline"
+                        n["status_text"] = "⚠️ 中转机离线"
                     else:
                         is_sb = bool(srv.get("singbox_online"))
                         is_srv = bool(srv.get("server_online"))
                         n["server_online"] = is_srv
                         n["singbox_online"] = is_sb
                         n["probe_online"] = bool(srv.get("probe_online"))
+                        if n.get("is_relay"):
+                            n["relay_server_online"] = bool(rsrv.get("server_online")) if rsrv else False
                         if not is_sb:
+                            n["is_online"] = False
                             n["node_status"] = "core_offline"
                             n["status_text"] = "⚠️ 核心离线 (Sing-box 未运行)"
                         else:
+                            n["is_online"] = True
                             n["node_status"] = "online"
                             n["status_text"] = "正常在线"
 
                 is_fail = is_node_in_failover(n["id"]) or bool(n.get("is_failover"))
                 n["is_failover"] = is_fail
                 if is_fail and n.get("node_status") == "online":
+                    n["is_online"] = False
                     n["node_status"] = "failover"
                     n["status_text"] = "⚠️ 故障熔断中"
 
@@ -6078,25 +6105,50 @@ rules:
                     n["is_external"] = 1
                     n["server_online"] = True
                     n["singbox_online"] = True
+                    n["is_online"] = True
                     n["node_status"] = "online"
                     n["status_text"] = "外部节点"
                     online_node_count += 1
                 else:
                     srv = servers_map.get(n.get("server_uuid"))
+                    rsrv = servers_map.get(n.get("relay_server_uuid")) if n.get("is_relay") else None
                     if not srv or not srv.get("server_online"):
                         n["server_online"] = False
                         n["singbox_online"] = False
+                        n["is_online"] = False
                         n["node_status"] = "offline"
                         n["status_text"] = "服务器离线"
+                    elif n.get("is_relay") and (not rsrv or not rsrv.get("server_online")):
+                        n["server_online"] = bool(srv.get("server_online"))
+                        n["singbox_online"] = bool(srv.get("singbox_online"))
+                        n["relay_server_online"] = False
+                        n["is_online"] = False
+                        n["node_status"] = "relay_offline"
+                        n["status_text"] = "⚠️ 中转机离线"
                     else:
                         is_sb = bool(srv.get("singbox_online"))
                         is_srv = bool(srv.get("server_online"))
                         n["server_online"] = is_srv
                         n["singbox_online"] = is_sb
                         n["probe_online"] = bool(srv.get("probe_online"))
-                        n["node_status"] = "online"
-                        n["status_text"] = "正常在线"
-                        online_node_count += 1
+                        if n.get("is_relay"):
+                            n["relay_server_online"] = bool(rsrv.get("server_online")) if rsrv else False
+                        if not is_sb:
+                            n["is_online"] = False
+                            n["node_status"] = "core_offline"
+                            n["status_text"] = "⚠️ 核心离线 (Sing-box 未运行)"
+                        else:
+                            is_fail = is_node_in_failover(n["id"]) or bool(n.get("is_failover"))
+                            n["is_failover"] = is_fail
+                            if is_fail:
+                                n["is_online"] = False
+                                n["node_status"] = "failover"
+                                n["status_text"] = "⚠️ 故障熔断中"
+                            else:
+                                n["is_online"] = True
+                                n["node_status"] = "online"
+                                n["status_text"] = "正常在线"
+                                online_node_count += 1
 
             self._send_json({
                 "ok": True,

@@ -3218,10 +3218,56 @@
           latBadge = `<span class="px-2 py-0.5 rounded-lg text-[10px] font-mono font-semibold bg-rose-100 text-rose-700">超时</span>`;
         }
 
-        const isOnline = n.server_online || n.singbox_online;
-        const statusDot = isOnline 
-          ? `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span>在线</span>`
-          : `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-rose-500"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>离线</span>`;
+        const isOnline = Boolean(n.is_external || (
+          n.server_online && 
+          n.singbox_online && 
+          n.node_status !== 'core_offline' && 
+          n.node_status !== 'offline' && 
+          n.node_status !== 'relay_offline' && 
+          n.node_status !== 'failover'
+        ));
+
+        let statusDot = '';
+        let offlineBanner = '';
+        let cardOfflineBorder = '';
+
+        if (n.is_external) {
+          statusDot = `<span class="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400"><span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>外部</span>`;
+        } else if (n.node_status === 'failover') {
+          statusDot = `<span class="inline-flex items-center gap-1 text-[11px] font-black text-amber-600 dark:text-amber-400"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>熔断中</span>`;
+          offlineBanner = `
+            <div class="px-2.5 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 flex items-center justify-between text-[11px] text-amber-700 dark:text-amber-300">
+              <span class="flex items-center gap-1.5 font-bold"><span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>⚠️ 测速连续失败已自动熔断降级，已临时移出订阅</span>
+            </div>
+          `;
+          cardOfflineBorder = '!border-amber-400/80 dark:!border-amber-600/70 bg-gradient-to-br from-amber-50/20 via-white to-amber-50/10 dark:from-amber-950/20 dark:via-zinc-900 dark:to-amber-950/10';
+        } else if (n.node_status === 'core_offline' || (!n.singbox_online && n.server_online)) {
+          statusDot = `<span class="inline-flex items-center gap-1.5 text-[11px] font-black text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/40"><span class="w-2 h-2 rounded-full bg-rose-500 status-pulse"></span>核心离线</span>`;
+          offlineBanner = `
+            <div class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-center justify-between text-[11px] text-rose-700 dark:text-rose-300">
+              <span class="flex items-center gap-1.5 font-bold"><span class="w-1.5 h-1.5 rounded-full bg-rose-500 status-pulse"></span>⚠️ Sing-box 核心离线 (服务未运行)，已自动从客户端订阅中摘除</span>
+            </div>
+          `;
+          cardOfflineBorder = '!border-rose-400/80 dark:!border-rose-600/70 shadow-[0_0_16px_rgba(244,63,94,0.12)] bg-gradient-to-br from-rose-50/25 via-white to-rose-50/10 dark:from-rose-950/25 dark:via-zinc-900 dark:to-rose-950/15';
+        } else if (n.node_status === 'relay_offline' || (n.is_relay && n.relay_server_online === false)) {
+          statusDot = `<span class="inline-flex items-center gap-1.5 text-[11px] font-black text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/40"><span class="w-2 h-2 rounded-full bg-rose-500"></span>中转离线</span>`;
+          offlineBanner = `
+            <div class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-center justify-between text-[11px] text-rose-700 dark:text-rose-300">
+              <span class="flex items-center gap-1.5 font-bold"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>⚠️ 中转入口线路机离线，已自动从客户端订阅中摘除</span>
+            </div>
+          `;
+          cardOfflineBorder = '!border-rose-400/80 dark:!border-rose-600/70 shadow-[0_0_16px_rgba(244,63,94,0.12)] bg-gradient-to-br from-rose-50/25 via-white to-rose-50/10 dark:from-rose-950/25 dark:via-zinc-900 dark:to-rose-950/15';
+        } else if (!isOnline || n.node_status === 'offline' || !n.server_online) {
+          statusDot = `<span class="inline-flex items-center gap-1.5 text-[11px] font-black text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900/40"><span class="w-2 h-2 rounded-full bg-rose-500"></span>主机离线</span>`;
+          offlineBanner = `
+            <div class="px-2.5 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 flex items-center justify-between text-[11px] text-rose-700 dark:text-rose-300">
+              <span class="flex items-center gap-1.5 font-bold"><span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>⚠️ 服务器失联断网，已自动从客户端订阅中摘除</span>
+            </div>
+          `;
+          cardOfflineBorder = '!border-rose-400/80 dark:!border-rose-600/70 shadow-[0_0_16px_rgba(244,63,94,0.12)] bg-gradient-to-br from-rose-50/25 via-white to-rose-50/10 dark:from-rose-950/25 dark:via-zinc-900 dark:to-rose-950/15';
+        } else {
+          statusDot = `<span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 status-pulse"></span>在线</span>`;
+        }
 
         // 判定该节点所对应的主机是否确实拥有 IPv6
         const directSrv = state.servers?.find(s => s.uuid === n.server_uuid);
@@ -3262,7 +3308,7 @@
         `;
 
         return `
-          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3 relative overflow-hidden transition-all duration-200 border-slate-100 dark:border-zinc-800/80 hover:border-purple-200 dark:hover:border-purple-900/40">
+          <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3 relative overflow-hidden transition-all duration-200 border-slate-100 dark:border-zinc-800/80 hover:border-purple-200 dark:hover:border-purple-900/40 ${cardOfflineBorder}">
             <!-- Row 1: Header (Protocol, Name, Latency, Status) -->
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0 flex-1">
@@ -3291,6 +3337,7 @@
 
             <!-- Row 2: 核心关键信息展示 (服务器、端口、中转/直连拓扑) -->
             ${routeInfoHtml}
+            ${offlineBanner}
 
             <!-- Row 3: 底部操作栏 (紧凑单行排布，不折行不凌乱) -->
             <div class="pt-2.5 border-t border-slate-100 dark:border-zinc-800/70 flex items-center justify-between gap-1.5">
