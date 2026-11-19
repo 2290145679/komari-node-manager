@@ -1947,7 +1947,39 @@
             <i data-lucide="chevron-down" class="w-4 h-4 text-slate-400 group-hover:text-purple-500 transition-colors shrink-0"></i>
           </button>
           <input type="hidden" id="createNodeServerSelect" value="">
-          <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
+
+          <!-- IP Version / Address Selector (IPv4 vs IPv6) -->
+          <div id="createNodeIpVersionSection" class="mt-2.5 pt-2 border-t border-slate-100 dark:border-zinc-800">
+            <div class="flex items-center justify-between mb-1.5">
+              <label class="block font-semibold text-slate-600 dark:text-slate-400 text-xs">出网 IP 协议版本</label>
+              <span id="createNodeIpTypeBadge" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold">自动探测</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2" id="createNodeIpVersionGrid">
+              <button type="button" id="btnIpVersionV4" onclick="setCreateNodeIpVersion('v4')" class="p-2.5 rounded-xl border text-left transition-all btn-tap group">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-bold text-xs flex items-center gap-1.5">
+                    <span id="dotIpV4" class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                    <span>IPv4 节点</span>
+                  </span>
+                  <span id="badgeIpV4" class="text-[9px] px-1 py-0.5 rounded font-mono font-bold bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-slate-300">v4</span>
+                </div>
+                <div id="createNodeIpv4Display" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">未检测到</div>
+              </button>
+              <button type="button" id="btnIpVersionV6" onclick="setCreateNodeIpVersion('v6')" class="p-2.5 rounded-xl border text-left transition-all btn-tap group">
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="font-bold text-xs flex items-center gap-1.5">
+                    <span id="dotIpV6" class="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span>IPv6 节点</span>
+                  </span>
+                  <span id="badgeIpV6" class="text-[9px] px-1 py-0.5 rounded font-mono font-bold bg-slate-100 dark:bg-zinc-700 text-slate-600 dark:text-slate-300">v6</span>
+                </div>
+                <div id="createNodeIpv6Display" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">未检测到</div>
+              </button>
+            </div>
+            <input type="hidden" id="createNodeSelectedIpVersion" value="v4">
+            <input type="hidden" id="createNodeSelectedIp" value="">
+            <div id="createNodeIpHint" class="mt-1.5 text-[11px]"></div>
+          </div>
           <!-- Alert if no realm servers -->
           <div id="createNodeNoRealmAlert" class="hidden mt-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 text-xs space-y-1">
             <div class="font-bold flex items-center gap-1.5">
@@ -5351,6 +5383,9 @@
       };
       const protoLabel = protoLabels[proto] || 'Reality';
 
+      const isV6 = (state.createNodeSelectedIpVersion === 'v6') || (document.getElementById('createNodeSelectedIpVersion')?.value === 'v6');
+      const v6Suffix = isV6 ? ' [IPv6]' : '';
+
       let autoName = '';
       if (isRelay) {
         const landingUuid = document.getElementById('createNodeLandingServerSelect')?.value;
@@ -5368,16 +5403,16 @@
       } else {
         const flag = getRegionFlag(mainSrv || mainName);
         if (mainName) {
-          autoName = `${flag} ${mainName} - ${protoLabel}`;
+          autoName = `${flag} ${mainName}${v6Suffix} - ${protoLabel}`;
         } else {
-          autoName = `🌐 自建节点 - ${protoLabel}`;
+          autoName = `🌐 自建节点${v6Suffix} - ${protoLabel}`;
         }
       }
 
       const nameInput = document.getElementById('createNodeName');
       if (nameInput) {
         nameInput.placeholder = autoName;
-        if (!state.nodeNameUserModified || !nameInput.value.trim()) {
+        if (!state.nodeNameUserModified || !nameInput.value.trim() || nameInput.value.includes('[IPv6]') !== isV6) {
           nameInput.value = autoName;
         }
       }
@@ -5641,18 +5676,124 @@
       initLucide();
     }
 
-    function updateCreateNodeIpHint() {
-      const s = document.getElementById('createNodeServerSelect');
+    function setCreateNodeIpVersion(ver) {
+      const srvUuid = document.getElementById('createNodeServerSelect')?.value;
+      const srv = state.servers.find(s => s.uuid === srvUuid);
+      const v4 = srv ? (srv.custom_ip || srv.ipv4 || '') : '';
+      const v6 = srv ? (srv.custom_ipv6 || srv.ipv6 || '') : '';
+
+      if (ver === 'v6' && !v6) {
+        showToast('该服务器未探测到公网 IPv6 地址，无法创建 IPv6 节点', 'warn');
+        return;
+      }
+      if (ver === 'v4' && !v4) {
+        showToast('该服务器未探测到公网 IPv4 地址', 'warn');
+        return;
+      }
+
+      state.createNodeSelectedIpVersion = ver;
+      const verInput = document.getElementById('createNodeSelectedIpVersion');
+      if (verInput) verInput.value = ver;
+      const ipInput = document.getElementById('createNodeSelectedIp');
+      if (ipInput) ipInput.value = ver === 'v6' ? v6 : v4;
+
+      renderIpVersionButtons(srv);
+      updateCreateNodeDefaultName();
+    }
+
+    function renderIpVersionButtons(srv) {
+      const btnV4 = document.getElementById('btnIpVersionV4');
+      const btnV6 = document.getElementById('btnIpVersionV6');
+      const dispV4 = document.getElementById('createNodeIpv4Display');
+      const dispV6 = document.getElementById('createNodeIpv6Display');
+      const badgeType = document.getElementById('createNodeIpTypeBadge');
       const hint = document.getElementById('createNodeIpHint');
-      if (!s || !hint) return;
-      const srv = state.servers.find(srv => srv.uuid === s.value);
-      const ip = srv ? (srv.custom_ip || srv.ipv4 || srv.ipv6 || '') : '';
-      if (ip) {
-        hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-semibold"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 已自动获取服务器IP: <span class="font-mono bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded text-[11px]">${escapeHtml(ip)}</span></span>`;
-      } else {
-        hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-amber-500 font-semibold"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> 该服务器暂未探测到公网IP，将在探针上报后自动同步</span>`;
+
+      if (!srv) {
+        if (dispV4) dispV4.textContent = '请先选择服务器';
+        if (dispV6) dispV6.textContent = '请先选择服务器';
+        return;
+      }
+
+      const v4 = srv.custom_ip || srv.ipv4 || '';
+      const v6 = srv.custom_ipv6 || srv.ipv6 || '';
+
+      if (dispV4) dispV4.textContent = v4 || '无公网 IPv4';
+      if (dispV6) dispV6.textContent = v6 || '无公网 IPv6';
+
+      let currentVer = state.createNodeSelectedIpVersion || 'v4';
+      if (currentVer === 'v6' && !v6 && v4) {
+        currentVer = 'v4';
+        state.createNodeSelectedIpVersion = 'v4';
+      } else if (currentVer === 'v4' && !v4 && v6) {
+        currentVer = 'v6';
+        state.createNodeSelectedIpVersion = 'v6';
+      }
+
+      const verInput = document.getElementById('createNodeSelectedIpVersion');
+      if (verInput) verInput.value = currentVer;
+      const ipInput = document.getElementById('createNodeSelectedIp');
+      if (ipInput) ipInput.value = currentVer === 'v6' ? v6 : v4;
+
+      if (badgeType) {
+        if (v4 && v6) {
+          badgeType.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-semibold';
+          badgeType.textContent = '✨ 双栈支持 (v4+v6)';
+        } else if (v6) {
+          badgeType.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 font-semibold';
+          badgeType.textContent = '仅 IPv6';
+        } else if (v4) {
+          badgeType.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 font-semibold';
+          badgeType.textContent = '仅 IPv4';
+        } else {
+          badgeType.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 font-semibold';
+          badgeType.textContent = '未探测到 IP';
+        }
+      }
+
+      const activeClass = ['border-purple-500', 'bg-purple-50/70', 'dark:bg-purple-950/40', 'text-purple-700', 'dark:text-purple-300', 'shadow-sm'];
+      const inactiveClass = ['border-slate-200', 'dark:border-zinc-700', 'bg-slate-50', 'dark:bg-zinc-800', 'text-slate-600', 'dark:text-slate-400'];
+      const disabledClass = ['opacity-40', 'cursor-not-allowed'];
+
+      if (btnV4) {
+        btnV4.classList.remove(...activeClass, ...inactiveClass, ...disabledClass);
+        if (!v4) {
+          btnV4.classList.add(...inactiveClass, ...disabledClass);
+        } else if (currentVer === 'v4') {
+          btnV4.classList.add(...activeClass);
+        } else {
+          btnV4.classList.add(...inactiveClass);
+        }
+      }
+
+      if (btnV6) {
+        btnV6.classList.remove(...activeClass, ...inactiveClass, ...disabledClass);
+        if (!v6) {
+          btnV6.classList.add(...inactiveClass, ...disabledClass);
+        } else if (currentVer === 'v6') {
+          btnV6.classList.add(...activeClass);
+        } else {
+          btnV6.classList.add(...inactiveClass);
+        }
+      }
+
+      const activeIp = currentVer === 'v6' ? v6 : v4;
+      if (hint) {
+        if (activeIp) {
+          const typeLabel = currentVer === 'v6' ? 'IPv6' : 'IPv4';
+          hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-teal-600 dark:text-teal-400 font-semibold"><i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i> 已绑定公网 ${typeLabel}: <span class="font-mono bg-teal-50 dark:bg-teal-950/40 px-1.5 py-0.5 rounded text-[11px]">${escapeHtml(activeIp)}</span></span>`;
+        } else {
+          hint.innerHTML = `<span class="inline-flex items-center gap-1.5 text-amber-500 font-semibold"><i data-lucide="alert-circle" class="w-3.5 h-3.5"></i> 该服务器暂未探测到公网 IP，将在探针上报后自动同步</span>`;
+        }
       }
       initLucide();
+    }
+
+    function updateCreateNodeIpHint() {
+      const s = document.getElementById('createNodeServerSelect');
+      if (!s) return;
+      const srv = state.servers.find(srv => srv.uuid === s.value);
+      renderIpVersionButtons(srv);
     }
 
     function getUsedPortsForServer(serverUuid) {
@@ -5711,7 +5852,10 @@
       const srvUuid = sel ? sel.value : '';
       const srv = state.servers.find(s => s.uuid === srvUuid);
       const serverName = srv ? srv.name : '';
-      const serverIp = srv ? (srv.custom_ip || srv.ipv4 || srv.ipv6 || '') : '';
+      const isV6 = (state.createNodeSelectedIpVersion === 'v6') || (document.getElementById('createNodeSelectedIpVersion')?.value === 'v6');
+      const serverIp = isV6
+        ? (srv ? (srv.custom_ipv6 || srv.ipv6 || srv.custom_ip || srv.ipv4 || '') : '')
+        : (srv ? (srv.custom_ip || srv.ipv4 || srv.custom_ipv6 || srv.ipv6 || '') : '');
 
       const isRelay = document.getElementById('createNodeEnableRelay')?.checked ? 1 : 0;
       let finalServerUuid = srvUuid;
