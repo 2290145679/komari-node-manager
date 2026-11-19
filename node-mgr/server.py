@@ -1122,39 +1122,62 @@ def fix_all_dangling_rules(default_fallback="PROXY"):
     return {"fixed": fixed_count}
 
 def sync_ping_tasks_all_clients():
-    """Ensure all servers in Komari clients table are included in ping tasks marked with all_clients = 1"""
+    """
+    Ensure ping tasks stay completely in sync with Komari clients:
+    1. Prune all dead server UUIDs (servers deleted from Komari clients table) from ALL ping tasks.
+    2. For ping tasks with all_clients = 1, ensure all current valid client UUIDs are included.
+    3. For IPv6 tasks (name or target contains v6/ipv6) with all_clients = 0:
+       If their client list has become empty (because previously assigned servers were deleted),
+       automatically bind them to currently existing servers that have public IPv6!
+    """
     if not os.path.exists(KOMARI_DB):
         return 0
     try:
         conn_k = sqlite3.connect(KOMARI_DB)
         c_k = conn_k.cursor()
-        c_k.execute("SELECT uuid FROM clients")
-        all_uuids = [r[0] for r in c_k.fetchall() if r[0]]
+        c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
+        all_clients_rows = c_k.fetchall()
+        all_uuids = set(r[0] for r in all_clients_rows if r[0])
+        v6_uuids = [r[0] for r in all_clients_rows if r[0] and r[3] and ":" in str(r[3])]
+
         if not all_uuids:
             conn_k.close()
             return 0
 
-        c_k.execute("SELECT id, clients, all_clients FROM ping_tasks WHERE all_clients = 1")
+        c_k.execute("SELECT id, name, target, clients, all_clients FROM ping_tasks")
         tasks = c_k.fetchall()
         updated_count = 0
-        for tid, clients_json, all_clients in tasks:
+        for tid, tname, target, clients_json, all_clients in tasks:
             try:
                 clist = json.loads(clients_json) if clients_json else []
             except Exception:
                 clist = []
-            cset = set(clist)
-            changed = False
-            for u in all_uuids:
-                if u not in cset:
-                    clist.append(u)
-                    cset.add(u)
-                    changed = True
-            if changed:
-                c_k.execute("UPDATE ping_tasks SET clients = ? WHERE id = ?", (json.dumps(clist), tid))
+
+            # 1. Prune any dead UUIDs that no longer exist in clients table
+            clean_list = [u for u in clist if u in all_uuids]
+
+            # 2. For all_clients = 1: ensure all alive UUIDs are present
+            if all_clients:
+                clean_set = set(clean_list)
+                for u in all_uuids:
+                    if u not in clean_set:
+                        clean_list.append(u)
+                        clean_set.add(u)
+
+            # 3. For IPv6 tasks with all_clients = 0 whose assigned servers are now all dead:
+            # Auto-heal by assigning current live servers that have IPv6
+            is_v6_task = bool(tname and ("v6" in tname.lower() or "ipv6" in tname.lower())) or bool(target and ("v6" in target.lower() or "ipv6" in target.lower()))
+            if not all_clients and len(clean_list) == 0 and is_v6_task and v6_uuids:
+                clean_list = list(v6_uuids)
+
+            # Check if list changed
+            if set(clean_list) != set(clist) or len(clean_list) != len(clist):
+                c_k.execute("UPDATE ping_tasks SET clients = ? WHERE id = ?", (json.dumps(clean_list), tid))
                 updated_count += 1
+
         if updated_count > 0:
             conn_k.commit()
-            # Trigger background restart of komari so Go in-memory scheduler loads newly added servers
+            # Trigger background restart of komari so Go in-memory scheduler loads clean servers list
             def _async_reload_komari():
                 time.sleep(1)
                 try:
@@ -5803,21 +5826,33 @@ rules:
             return
 
         if path in ["/api/ping-tasks", "/api/node-mgr/ping-tasks"]:
+            try:
+                sync_ping_tasks_all_clients()
+            except Exception as e:
+                print(f"Error in sync_ping_tasks_all_clients: {e}")
+
             tasks = []
             if os.path.exists(KOMARI_DB):
                 conn_k = sqlite3.connect(KOMARI_DB)
                 c_k = conn_k.cursor()
+                c_k.execute("SELECT uuid, name, ipv4, ipv6 FROM clients")
+                clients_dict = {r[0]: {"name": r[1] or "", "ipv4": r[2] or "", "ipv6": r[3] or ""} for r in c_k.fetchall() if r[0]}
+                valid_uuids = set(clients_dict.keys())
+
                 c_k.execute("SELECT id, weight, name, clients, all_clients, type, target, interval FROM ping_tasks ORDER BY weight DESC, id ASC")
                 for r in c_k.fetchall():
                     try:
                         c_list = json.loads(r[3]) if r[3] else []
                     except:
                         c_list = []
+                    live_clients = [u for u in c_list if u in valid_uuids]
+                    live_server_names = [clients_dict[u]["name"] for u in live_clients if u in clients_dict]
                     tasks.append({
                         "id": r[0],
                         "weight": r[1],
                         "name": r[2],
-                        "clients": c_list,
+                        "clients": live_clients,
+                        "server_names": live_server_names,
                         "all_clients": bool(r[4]),
                         "type": r[5] or "tcp",
                         "target": r[6],

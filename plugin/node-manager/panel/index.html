@@ -4756,9 +4756,22 @@
         container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400 col-span-full">暂无配置的延迟测速任务，点击上方按钮新建</div>`;
         return;
       }
+      const totalLiveServers = (state.servers || []).length;
+
       container.innerHTML = state.pingTasks.map(t => {
-        const isAll = t.all_clients || !t.clients || t.clients.length === 0;
-        const clientDesc = isAll ? '全网所有在线服务器' : `已指定 ${t.clients.length} 台服务器`;
+        const validServers = (t.clients || []).map(u => (state.servers || []).find(s => s.uuid === u)).filter(Boolean);
+        let clientDesc = '';
+        if (t.all_clients) {
+          clientDesc = `全网所有在线服务器 (${totalLiveServers} 台)`;
+        } else if (validServers.length > 0) {
+          const namesStr = validServers.map(s => s.name).slice(0, 2).join(', ') + (validServers.length > 2 ? ` 等${validServers.length}台` : '');
+          clientDesc = `已指定 ${validServers.length} 台 (${namesStr})`;
+        } else if (t.server_names && t.server_names.length > 0) {
+          const namesStr = t.server_names.slice(0, 2).join(', ') + (t.server_names.length > 2 ? ` 等${t.server_names.length}台` : '');
+          clientDesc = `已指定 ${t.server_names.length} 台 (${namesStr})`;
+        } else {
+          clientDesc = `<span class="text-rose-500 font-bold">⚠️ 未指定有效服务器 (原机器已删除)</span>`;
+        }
 
         return `
           <div class="bento-card p-4 sm:p-5 flex flex-col justify-between space-y-3.5 border-teal-100 dark:border-teal-900/30">
@@ -4902,8 +4915,8 @@
       document.getElementById('pingTaskInterval').value = t.interval || 60;
       document.getElementById('pingTaskAllClients').checked = !!t.all_clients;
 
-      let clientUuids = t.clients || [];
-      if (t.all_clients && (!clientUuids || clientUuids.length === 0)) {
+      let clientUuids = (t.clients || []).filter(u => (state.servers || []).some(s => s.uuid === u));
+      if (t.all_clients && clientUuids.length === 0) {
         clientUuids = (state.servers || []).map(s => s.uuid);
       }
       renderPingServerSelection(clientUuids);
