@@ -719,11 +719,31 @@
 
       <!-- Server Ranking List -->
       <div class="bento-card p-4 sm:p-6 space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">各服务器流量消耗占比排行</h2>
-          <button onclick="resetTrafficBaseline()" class="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-xl hover:bg-rose-100 transition btn-tap">
-            清零重置流量基线
-          </button>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <h2 class="text-base font-bold text-slate-800 dark:text-slate-100" id="trafficRankingTitle">流量消耗占比排行</h2>
+            <span class="text-xs text-slate-400 font-normal" id="trafficRankingSubTitle">· 网卡物理总流量</span>
+          </div>
+
+          <!-- Switcher Segmented Control -->
+          <div class="flex items-center gap-1 bg-slate-100 dark:bg-zinc-800 p-1 rounded-xl self-start sm:self-auto border border-slate-200/50 dark:border-zinc-700/50">
+            <button id="tabBtnTrafficNic" onclick="switchTrafficTab('nic')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm">
+              🌐 网卡总流量
+            </button>
+            <button id="tabBtnTrafficNode" onclick="switchTrafficTab('node')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-600 dark:text-slate-300 hover:text-blue-600">
+              🚀 经过节点流量
+            </button>
+            <button id="tabBtnTrafficUser" onclick="switchTrafficTab('user')" class="px-3 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-600 dark:text-slate-300 hover:text-blue-600">
+              👥 用户流量排行
+            </button>
+          </div>
+
+          <!-- Action buttons for active tab -->
+          <div id="trafficTabActions">
+            <button id="btnResetTrafficBaseline" onclick="resetTrafficBaseline()" class="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-xl hover:bg-rose-100 transition btn-tap">
+              清零重置流量基线
+            </button>
+          </div>
         </div>
         <div id="trafficRankList" class="space-y-3">
           <!-- Rendered by JS -->
@@ -2665,7 +2685,12 @@
       document.getElementById('trafficTotalDown').textContent = formatBytes(totalDownBytes);
       document.getElementById('trafficTotalUp').textContent = formatBytes(totalUpBytes);
 
-      renderTrafficRanks(servers, totalTrafficBytes);
+      state.totalTrafficBytes = totalTrafficBytes;
+      state.totalNodeTrafficBytes = data.total_node_traffic || 0;
+      if (data.users_traffic) {
+        state.usersTraffic = data.users_traffic;
+      }
+      renderTrafficRanks();
     }
 
     function renderServersGrid() {
@@ -3563,26 +3588,212 @@
       }
     }
 
-    // 5. TRAFFIC RANKS
-    function renderTrafficRanks(servers, totalBytes) {
+    // 5. TRAFFIC RANKS & SWITCHER
+    function switchTrafficTab(tab) {
+      state.trafficTab = tab;
+      
+      const activeCls = 'px-3 py-1.5 text-xs font-bold rounded-lg transition-all bg-white dark:bg-zinc-700 text-blue-600 dark:text-blue-400 shadow-sm';
+      const inactiveCls = 'px-3 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-600 dark:text-slate-300 hover:text-blue-600';
+      
+      const btnNic = document.getElementById('tabBtnTrafficNic');
+      const btnNode = document.getElementById('tabBtnTrafficNode');
+      const btnUser = document.getElementById('tabBtnTrafficUser');
+      if (btnNic) btnNic.className = tab === 'nic' ? activeCls : inactiveCls;
+      if (btnNode) btnNode.className = tab === 'node' ? activeCls : inactiveCls;
+      if (btnUser) btnUser.className = tab === 'user' ? activeCls : inactiveCls;
+      
+      const subTitle = document.getElementById('trafficRankingSubTitle');
+      const actions = document.getElementById('trafficTabActions');
+      if (tab === 'nic') {
+        if (subTitle) subTitle.textContent = '· 网卡物理总流量';
+        if (actions) actions.innerHTML = `
+          <button onclick="resetTrafficBaseline()" class="px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-xl hover:bg-rose-100 transition btn-tap">
+            清零重置流量基线
+          </button>
+        `;
+      } else if (tab === 'node') {
+        if (subTitle) subTitle.textContent = '· 经过各服务器节点的业务流量';
+        if (actions) actions.innerHTML = `
+          <button onclick="loadServers(true)" class="px-3 py-1.5 text-xs font-semibold text-purple-600 bg-purple-50 dark:bg-purple-950/30 rounded-xl hover:bg-purple-100 transition btn-tap flex items-center gap-1">
+            <span>🔄 刷新节点流量</span>
+          </button>
+        `;
+      } else if (tab === 'user') {
+        if (subTitle) subTitle.textContent = '· 订阅用户已消耗流量排行';
+        if (actions) actions.innerHTML = `
+          <button onclick="switchTab('users')" class="px-3 py-1.5 text-xs font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 rounded-xl hover:bg-amber-100 transition btn-tap flex items-center gap-1">
+            <span>👥 管理用户订阅</span>
+          </button>
+        `;
+        if (!state.usersTraffic || state.usersTraffic.length === 0) {
+          fetch('/api/node-mgr/sub/users').then(r => r.json()).then(res => {
+            if (res && res.users) {
+              state.usersTraffic = res.users;
+              renderTrafficRanks();
+            }
+          }).catch(e => console.error('Load sub users for traffic rank error:', e));
+        }
+      }
+      
+      renderTrafficRanks();
+    }
+
+    function renderTrafficRanks() {
       const container = document.getElementById('trafficRankList');
       if (!container) return;
+      const tab = state.trafficTab || 'nic';
+      const servers = state.servers || [];
 
-      const sorted = [...servers].sort((a, b) => (b.traffic_total || 0) - (a.traffic_total || 0));
-      container.innerHTML = sorted.map(s => {
-        const pct = totalBytes > 0 ? ((s.traffic_total || 0) / totalBytes * 100).toFixed(1) : 0;
-        return `
-          <div class="p-3 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850">
-            <div class="flex items-center justify-between text-xs mb-1.5 font-semibold">
-              <span>${escapeHtml(s.name)}</span>
-              <span class="font-mono text-blue-600">${formatBytes(s.traffic_total || 0)} (${pct}%)</span>
+      if (tab === 'nic') {
+        const totalBytes = state.totalTrafficBytes || servers.reduce((acc, s) => acc + (s.traffic_total || 0), 0);
+        const sorted = [...servers].sort((a, b) => (b.traffic_total || 0) - (a.traffic_total || 0));
+        if (sorted.length === 0) {
+          container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">暂无服务器网卡流量数据</div>`;
+          return;
+        }
+        container.innerHTML = sorted.map((s, idx) => {
+          const sTot = s.traffic_total || 0;
+          const pct = totalBytes > 0 ? (sTot / totalBytes * 100).toFixed(1) : 0;
+          const rankBadge = idx < 3 
+            ? `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black ${idx === 0 ? 'bg-amber-400 text-amber-950' : idx === 1 ? 'bg-slate-300 text-slate-900' : 'bg-amber-600 text-white'}">${idx + 1}</span>`
+            : `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-500">${idx + 1}</span>`;
+          return `
+            <div class="p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850 hover:border-blue-200 transition">
+              <div class="flex items-center justify-between text-xs mb-1.5 font-semibold">
+                <div class="flex items-center gap-2">
+                  ${rankBadge}
+                  <span class="font-bold text-slate-800 dark:text-slate-100">${escapeHtml(s.name)}</span>
+                  <span class="text-[10px] font-mono text-slate-400 font-normal">${escapeHtml(s.ipv4 || s.ipv6 || '')}</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-blue-600 dark:text-blue-400 font-bold">${formatBytes(sTot)}</span>
+                  <span class="text-[11px] text-slate-400 font-normal">(${pct}%)</span>
+                </div>
+              </div>
+              <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden mb-1.5">
+                <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full" style="width: ${pct}%"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-slate-400">
+                <span>↓ 入网: ${formatBytes(s.traffic_down || 0)} · ↑ 出网: ${formatBytes(s.traffic_up || 0)}</span>
+                <span>实时速率: ↓${formatSpeed(s.in_rate || 0)} · ↑${formatSpeed(s.out_rate || 0)}</span>
+              </div>
             </div>
-            <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden">
-              <div class="h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full" style="width: ${pct}%"></div>
+          `;
+        }).join('');
+      } else if (tab === 'node') {
+        const totalNodeBytes = state.totalNodeTrafficBytes || servers.reduce((acc, s) => acc + (s.node_traffic_total || 0), 0);
+        const sorted = [...servers].sort((a, b) => (b.node_traffic_total || 0) - (a.node_traffic_total || 0));
+        if (sorted.length === 0) {
+          container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">暂无节点业务流量数据</div>`;
+          return;
+        }
+        container.innerHTML = sorted.map((s, idx) => {
+          const sNodeTot = s.node_traffic_total || 0;
+          const pct = totalNodeBytes > 0 ? (sNodeTot / totalNodeBytes * 100).toFixed(1) : 0;
+          const nodes = s.nodes_traffic || [];
+          const rankBadge = idx < 3 
+            ? `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black ${idx === 0 ? 'bg-amber-400 text-amber-950' : idx === 1 ? 'bg-slate-300 text-slate-900' : 'bg-amber-600 text-white'}">${idx + 1}</span>`
+            : `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-500">${idx + 1}</span>`;
+          
+          let nodesHtml = '';
+          if (nodes.length > 0) {
+            nodesHtml = `
+              <div class="mt-2.5 pt-2 border-t border-slate-200/60 dark:border-zinc-800/80 grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                ${nodes.map(n => {
+                  const nUsed = n.traffic_used || 0;
+                  const nPct = sNodeTot > 0 ? (nUsed / sNodeTot * 100).toFixed(1) : 0;
+                  return `
+                    <div class="flex items-center justify-between text-[11px] p-1.5 rounded-lg bg-white/70 dark:bg-zinc-900/60 border border-slate-100 dark:border-zinc-800">
+                      <div class="flex items-center gap-1.5 min-w-0">
+                        <span class="px-1 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 uppercase">${escapeHtml(n.protocol || 'node')}</span>
+                        <span class="font-medium text-slate-700 dark:text-slate-300 truncate">${escapeHtml(n.name)}</span>
+                        <span class="font-mono text-[10px] text-slate-400">:${n.port}</span>
+                      </div>
+                      <div class="font-mono font-bold text-purple-600 dark:text-purple-400 shrink-0 ml-2">
+                        ${formatBytes(nUsed)} <span class="text-[10px] text-slate-400 font-normal">(${nPct}%)</span>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            `;
+          } else {
+            nodesHtml = `<div class="mt-1.5 text-[10px] text-slate-400">该服务器暂未创建代理节点</div>`;
+          }
+
+          return `
+            <div class="p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850 hover:border-purple-200 transition">
+              <div class="flex items-center justify-between text-xs mb-1.5 font-semibold">
+                <div class="flex items-center gap-2">
+                  ${rankBadge}
+                  <span class="font-bold text-slate-800 dark:text-slate-100">${escapeHtml(s.name)}</span>
+                  <span class="px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-300">${nodes.length} 个节点</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-mono text-purple-600 dark:text-purple-400 font-bold">${formatBytes(sNodeTot)}</span>
+                  <span class="text-[11px] text-slate-400 font-normal">(${pct}%)</span>
+                </div>
+              </div>
+              <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+                <div class="h-full bg-gradient-to-r from-purple-500 to-pink-600 rounded-full" style="width: ${pct}%"></div>
+              </div>
+              ${nodesHtml}
             </div>
-          </div>
-        `;
-      }).join('');
+          `;
+        }).join('');
+      } else if (tab === 'user') {
+        const users = state.usersTraffic || [];
+        const sorted = [...users].sort((a, b) => (b.traffic_used_bytes || 0) - (a.traffic_used_bytes || 0));
+        const totalUserBytes = sorted.reduce((acc, u) => acc + (u.traffic_used_bytes || 0), 0);
+        if (sorted.length === 0) {
+          container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400">暂无用户流量数据</div>`;
+          return;
+        }
+        container.innerHTML = sorted.map((u, idx) => {
+          const usedB = u.traffic_used_bytes || 0;
+          const limitB = u.traffic_limit_bytes || 0;
+          const sharePct = totalUserBytes > 0 ? (usedB / totalUserBytes * 100).toFixed(1) : 0;
+          const quotaPct = limitB > 0 ? Math.min(100, (usedB / limitB * 100)).toFixed(1) : null;
+          
+          const rankBadge = idx < 3 
+            ? `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-black ${idx === 0 ? 'bg-amber-400 text-amber-950' : idx === 1 ? 'bg-slate-300 text-slate-900' : 'bg-amber-600 text-white'}">${idx + 1}</span>`
+            : `<span class="w-5 h-5 rounded-md flex items-center justify-center text-[11px] font-bold bg-slate-100 dark:bg-zinc-800 text-slate-500">${idx + 1}</span>`;
+          
+          const isEnabled = u.enabled !== false;
+          const isExh = (limitB > 0 && usedB >= limitB);
+          const statusBadge = !isEnabled 
+            ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300">已封禁</span>`
+            : isExh 
+            ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300">额度耗尽</span>`
+            : `<span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">正常</span>`;
+
+          const quotaDesc = limitB > 0 ? `${formatBytes(usedB)} / ${formatBytes(limitB)} (${quotaPct}%)` : `${formatBytes(usedB)} (不限额)`;
+
+          return `
+            <div class="p-3.5 rounded-xl border border-slate-100 dark:border-zinc-800 bg-slate-50/50 dark:bg-zinc-850 hover:border-amber-200 transition">
+              <div class="flex items-center justify-between text-xs mb-1.5 font-semibold">
+                <div class="flex items-center gap-2 min-w-0">
+                  ${rankBadge}
+                  <span class="font-bold text-slate-800 dark:text-slate-100 truncate">${escapeHtml(u.username || u.name || '用户')}</span>
+                  ${u.remark ? `<span class="text-[10px] text-slate-400 font-normal truncate">(${escapeHtml(u.remark)})</span>` : ''}
+                  ${statusBadge}
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                  <span class="font-mono text-amber-600 dark:text-amber-400 font-bold">${quotaDesc}</span>
+                  <span class="text-[11px] text-slate-400 font-normal">全网占比 ${sharePct}%</span>
+                </div>
+              </div>
+              <div class="w-full h-1.5 bg-slate-200 dark:bg-zinc-700 rounded-full overflow-hidden mb-1.5">
+                <div class="h-full bg-gradient-to-r from-amber-500 to-orange-600 rounded-full" style="width: ${quotaPct !== null ? quotaPct : sharePct}%"></div>
+              </div>
+              <div class="flex items-center justify-between text-[10px] text-slate-400">
+                <span>到期时间: ${u.expire_time ? escapeHtml(u.expire_time) : '长期有效'}</span>
+                <span>累计消耗: ${formatBytes(usedB)}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
     }
 
     // 6. ALERTS & NOTIFICATIONS DATA

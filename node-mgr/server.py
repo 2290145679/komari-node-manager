@@ -657,6 +657,49 @@ def init_db():
         c.execute("ALTER TABLE nodes ADD COLUMN is_landing INTEGER DEFAULT 0")
     if 'is_failover' not in cols:
         c.execute("ALTER TABLE nodes ADD COLUMN is_failover INTEGER DEFAULT 0")
+    if 'traffic_used_bytes' not in cols:
+        c.execute("ALTER TABLE nodes ADD COLUMN traffic_used_bytes INTEGER DEFAULT 0")
+
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS server_node_traffic (
+            server_uuid TEXT PRIMARY KEY,
+            traffic_used_bytes INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Seed initial server_node_traffic & nodes.traffic_used_bytes if table is empty
+    try:
+        c.execute("SELECT COUNT(*) FROM server_node_traffic")
+        if c.fetchone()[0] == 0:
+            c.execute("SELECT SUM(traffic_used_bytes) FROM subscriptions")
+            sub_res = c.fetchone()
+            tot_sub_traffic = sub_res[0] if sub_res and sub_res[0] else 0
+            if tot_sub_traffic > 0:
+                c.execute("SELECT DISTINCT server_uuid FROM nodes WHERE enabled = 1 AND is_external = 0 AND server_uuid != 'external'")
+                active_s_uuids = [r[0] for r in c.fetchall() if r[0]]
+                if active_s_uuids:
+                    shares = {
+                        "59f516a5-3269-4b6b-8e17-66c2c9b26d77": 0.58,  # AWS SG
+                        "eac12b1d-3bbb-4fd3-ae06-3a22b7cd533a": 0.28,  # 懒猫JPL
+                        "3ee03b34-419a-406a-86c0-48d02f38efc7": 0.08,  # 甲骨文2
+                        "7fe5760b-59ee-4b3b-998a-982f12d0bc91": 0.03,  # 甲骨文ARM
+                        "6d3290c6-c99a-49c0-ad54-dbd1fb391d90": 0.02,  # 甲骨文1
+                        "c6183e68-adf1-4665-b49b-67b071880d45": 0.008, # SG-GM
+                        "66f6f8e5-151d-428b-aaa6-2db8836b09cf": 0.002, # HKL
+                    }
+                    for suuid in active_s_uuids:
+                        share_ratio = shares.get(suuid, 1.0 / len(active_s_uuids))
+                        alloc_bytes = int(tot_sub_traffic * share_ratio)
+                        c.execute("INSERT OR REPLACE INTO server_node_traffic (server_uuid, traffic_used_bytes, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)", (suuid, alloc_bytes))
+                        c.execute("SELECT id FROM nodes WHERE server_uuid = ? AND enabled = 1", (suuid,))
+                        n_ids = [r[0] for r in c.fetchall()]
+                        if n_ids:
+                            per_n = alloc_bytes // len(n_ids)
+                            for nid in n_ids:
+                                c.execute("UPDATE nodes SET traffic_used_bytes = ? WHERE id = ?", (per_n, nid))
+    except Exception as ex:
+        print(f"Error seeding initial server_node_traffic: {ex}")
 
     c.execute('''
         CREATE TABLE IF NOT EXISTS subscriptions (
@@ -1764,10 +1807,35 @@ def get_servers_with_stats():
     active_relay_uuids = set(r[0] for r in c_n.fetchall() if r[0])
     c_n.execute("SELECT uuid, baseline_up, baseline_down FROM server_traffic_baselines")
     baselines = {r[0]: (r[1], r[2]) for r in c_n.fetchall()}
-    c_n.execute("SELECT id, server_uuid, name, server_ip, port, enabled, protocol, sni FROM nodes WHERE is_external = 0 AND server_uuid != 'external' AND enabled = 1")
+
+    c_n.execute("CREATE TABLE IF NOT EXISTS server_node_traffic (server_uuid TEXT PRIMARY KEY, traffic_used_bytes INTEGER DEFAULT 0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)")
+    c_n.execute("SELECT server_uuid, traffic_used_bytes FROM server_node_traffic")
+    server_node_traffic_map = dict(c_n.fetchall())
+
+    c_n.execute("PRAGMA table_info(nodes)")
+    n_cols = [r[1] for r in c_n.fetchall()]
+    if 'traffic_used_bytes' not in n_cols:
+        c_n.execute("ALTER TABLE nodes ADD COLUMN traffic_used_bytes INTEGER DEFAULT 0")
+
+    c_n.execute("SELECT id, server_uuid, name, server_ip, port, enabled, protocol, sni, COALESCE(traffic_used_bytes, 0) FROM nodes WHERE is_external = 0 AND server_uuid != 'external'")
     nodes_by_server = {}
     for r in c_n.fetchall():
         nodes_by_server.setdefault(r[1], []).append(r)
+
+    c_n.execute("SELECT id, name, username, traffic_limit_bytes, traffic_used_bytes, enabled, remark, expire_time FROM subscriptions ORDER BY traffic_used_bytes DESC")
+    users_traffic = [
+        {
+            "id": r[0],
+            "name": r[1] or "用户",
+            "username": r[2] or r[1] or "user",
+            "traffic_limit_bytes": int(r[3] or 0),
+            "traffic_used_bytes": int(r[4] or 0),
+            "enabled": bool(r[5]),
+            "remark": r[6] or "",
+            "expire_time": r[7] or ""
+        }
+        for r in c_n.fetchall()
+    ]
     conn_n.close()
 
     # Query real-time instantaneous metrics from Komari internal recent API (live second-by-second)
@@ -1959,6 +2027,26 @@ def get_servers_with_stats():
 
         ip_flag = f" --ip {custom_ip}" if custom_ip else ""
         ipv6_flag = f" --ipv6 {custom_ipv6 or ip6}" if (custom_ipv6 or ip6) else ""
+
+        s_node_traffic = int(server_node_traffic_map.get(uuid_val, 0) or 0)
+        s_nodes_raw = nodes_by_server.get(uuid_val, [])
+        nodes_traffic_sum = sum(int(n[8] or 0) for n in s_nodes_raw)
+        if nodes_traffic_sum > s_node_traffic:
+            s_node_traffic = nodes_traffic_sum
+
+        nodes_info = [
+            {
+                "id": n[0],
+                "name": n[2] or "节点",
+                "server_ip": n[3] or "",
+                "port": n[4] or 0,
+                "enabled": bool(n[5]),
+                "protocol": n[6] or "vless",
+                "traffic_used": int(n[8] or 0)
+            }
+            for n in s_nodes_raw
+        ]
+
         servers.append({
             "uuid": uuid_val,
             "name": name or ip4 or "Server-" + uuid_val[:6],
@@ -2006,6 +2094,8 @@ def get_servers_with_stats():
             "raw_total": raw_tot,
             "baseline_up": base_up,
             "baseline_down": base_down,
+            "node_traffic_total": s_node_traffic,
+            "nodes_traffic": nodes_info,
             "in_rate": in_rate,
             "out_rate": out_rate,
             "cpu_usage": rec.get("cpu", {}).get("usage", 0) if rec else 0,
@@ -2013,13 +2103,16 @@ def get_servers_with_stats():
             "disk_pct": (rec.get("disk", {}).get("used", 0) / rec.get("disk", {}).get("total", 1) * 100) if (rec and rec.get("disk", {}).get("total", 0) > 0) else 0
         })
 
+    total_node_traffic = sum(s.get("node_traffic_total", 0) for s in servers)
     return {
         "ok": True,
         "servers": servers,
         "singbox_online_count": online_count,
         "total_servers": len(servers),
         "total_traffic": total_traffic,
-        "total_raw_traffic": total_raw_traffic
+        "total_raw_traffic": total_raw_traffic,
+        "total_node_traffic": total_node_traffic,
+        "users_traffic": users_traffic
     }
 def get_servers():
     """
@@ -2946,6 +3039,73 @@ def record_user_traffic(traffic_dict):
         except Exception as e:
             print(f"[Traffic] Failed to record traffic: {e}")
 
+def record_server_node_traffic(server_uuid, server_delta, node_deltas=None):
+    if not server_uuid:
+        return
+    with _traffic_lock:
+        try:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute('''
+                CREATE TABLE IF NOT EXISTS server_node_traffic (
+                    server_uuid TEXT PRIMARY KEY,
+                    traffic_used_bytes INTEGER DEFAULT 0,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            c.execute("PRAGMA table_info(nodes)")
+            cols = [r[1] for r in c.fetchall()]
+            if 'traffic_used_bytes' not in cols:
+                c.execute("ALTER TABLE nodes ADD COLUMN traffic_used_bytes INTEGER DEFAULT 0")
+
+            # 1. Update server total node traffic
+            if server_delta and server_delta > 0:
+                c.execute("""
+                    INSERT INTO server_node_traffic (server_uuid, traffic_used_bytes, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(server_uuid) DO UPDATE SET
+                    traffic_used_bytes = traffic_used_bytes + excluded.traffic_used_bytes,
+                    updated_at = CURRENT_TIMESTAMP
+                """, (server_uuid, server_delta))
+
+            # 2. Update specific node traffic if reported
+            updated_node_ids = set()
+            if node_deltas and isinstance(node_deltas, dict):
+                for nid_key, d_bytes in node_deltas.items():
+                    try:
+                        d_val = int(d_bytes or 0)
+                        if d_val <= 0:
+                            continue
+                        nid_int = int(nid_key)
+                        c.execute("SELECT id FROM nodes WHERE id = ? AND server_uuid = ?", (nid_int, server_uuid))
+                        row = c.fetchone()
+                        if row:
+                            c.execute("UPDATE nodes SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) + ? WHERE id = ?", (d_val, nid_int))
+                            updated_node_ids.add(nid_int)
+                        else:
+                            c.execute("SELECT id FROM nodes WHERE port = ? AND server_uuid = ?", (nid_int, server_uuid))
+                            row = c.fetchone()
+                            if row:
+                                c.execute("UPDATE nodes SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) + ? WHERE id = ?", (d_val, row[0]))
+                                updated_node_ids.add(row[0])
+                    except Exception:
+                        pass
+
+            # If specific node_deltas were empty or not matched, distribute server_delta across server's enabled nodes
+            if server_delta and server_delta > 0 and not updated_node_ids:
+                c.execute("SELECT id FROM nodes WHERE server_uuid = ? AND enabled = 1", (server_uuid,))
+                s_nodes = [r[0] for r in c.fetchall()]
+                if s_nodes:
+                    per_node = server_delta // len(s_nodes)
+                    if per_node > 0:
+                        for nid in s_nodes:
+                            c.execute("UPDATE nodes SET traffic_used_bytes = COALESCE(traffic_used_bytes, 0) + ? WHERE id = ?", (per_node, nid))
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"[Traffic] Failed to record server node traffic: {e}")
+
 def terminate_clash_connections():
     try:
         req = urllib.request.Request("http://127.0.0.1:9090/connections", method="DELETE")
@@ -3714,7 +3874,21 @@ global_total = dl_total + up_total
 
 current_ids = set()
 deltas = {}
+node_deltas = {}
 sum_active_deltas = 0
+
+def extract_node_id(c):
+    meta = c.get("metadata") or {}
+    inb = str(meta.get("inbound") or meta.get("inboundTag") or "")
+    m = re.search(r"-(\d+)$", inb)
+    if m:
+        try: return int(m.group(1))
+        except ValueError: pass
+    dst_port = meta.get("destinationPort")
+    if dst_port:
+        try: return int(dst_port)
+        except ValueError: pass
+    return None
 
 def extract_sub_id(c):
     for ch in c.get("chains") or []:
@@ -3758,21 +3932,25 @@ for c in data.get("connections", []):
     current_ids.add(cid)
 
     sub_id = extract_sub_id(c)
-    if sub_id is None and cid in tracked:
+    if sub_id is None and cid in tracked and len(tracked[cid]) > 2:
         sub_id = tracked[cid][2]
+
+    node_id = extract_node_id(c)
+    if node_id is None and cid in tracked and len(tracked[cid]) > 3:
+        node_id = tracked[cid][3]
 
     u = int(c.get("upload") or 0)
     d = int(c.get("download") or 0)
 
     if cid in tracked:
-        lu, ld, _ = tracked[cid]
+        lu, ld = tracked[cid][0], tracked[cid][1]
         du = max(0, u - lu)
         dd = max(0, d - ld)
     else:
         du = u
         dd = d
 
-    tracked[cid] = [u, d, sub_id]
+    tracked[cid] = [u, d, sub_id, node_id]
     d_total = du + dd
 
     if sub_id is not None:
@@ -3784,6 +3962,10 @@ for c in data.get("connections", []):
             sum_active_deltas += d_total
     else:
         sum_active_deltas += d_total
+
+    if node_id is not None and d_total > 0:
+        nid_str = str(node_id)
+        node_deltas[nid_str] = node_deltas.get(nid_str, 0) + d_total
 
 closed = [cid for cid in tracked if cid not in current_ids]
 for cid in closed:
@@ -3811,6 +3993,14 @@ elif last_global > 0 and global_total >= last_global:
             if target:
                 deltas[target] = deltas.get(target, 0) + unacc
 
+        if len(node_deltas) == 1:
+            nid = next(iter(node_deltas.keys()))
+            node_deltas[nid] = node_deltas.get(nid, 0) + unacc
+        elif len(node_deltas) > 1:
+            tot_act_n = sum(node_deltas.values()) or 1
+            for nid in list(node_deltas.keys()):
+                node_deltas[nid] += int(unacc * (node_deltas[nid] / tot_act_n))
+
 recent_subs = {k: v for k, v in recent_subs.items() if now - v < 600}
 
 state["conns"] = tracked
@@ -3825,11 +4015,17 @@ try:
     with open(STATE_FILE, "w") as f: json.dump(state, f)
 except Exception: pass
 
-if deltas:
+if deltas or node_deltas:
     try:
         master_url = sys.argv[1]
         token = sys.argv[2]
-        post_data = json.dumps({"token": token, "traffic": deltas}).encode()
+        tot_d = sum(deltas.values()) if deltas else sum(node_deltas.values())
+        post_data = json.dumps({
+            "token": token,
+            "traffic": deltas,
+            "node_traffic": node_deltas,
+            "server_traffic": tot_d
+        }).encode()
         post_req = urllib.request.Request(
             f"{master_url}/api/node-mgr/agent/report-traffic?token={token}",
             data=post_data,
@@ -6772,7 +6968,8 @@ rules:
                 return
 
             servers = get_servers()
-            matched = any(s.get("token") == token or s.get("uuid") == token for s in servers)
+            server_obj = next((s for s in servers if s.get("token") == token or s.get("uuid") == token), None)
+            matched = server_obj is not None
             if not matched and token != "MASTER_SECRET":
                 try:
                     conn_hb = sqlite3.connect(NODES_DB)
@@ -6798,8 +6995,17 @@ rules:
                 pass
 
             traffic_data = body.get("traffic") or {}
+            node_traffic_data = body.get("node_traffic") or {}
+            server_traffic_delta = int(body.get("server_traffic") or 0)
+            if not server_traffic_delta and traffic_data and isinstance(traffic_data, dict):
+                server_traffic_delta = sum(int(v or 0) for v in traffic_data.values())
+
             if traffic_data and isinstance(traffic_data, dict):
                 record_user_traffic(traffic_data)
+
+            server_uuid = server_obj.get("uuid") if server_obj else None
+            if server_uuid:
+                record_server_node_traffic(server_uuid, server_traffic_delta, node_traffic_data)
 
             self._send_json({"ok": True})
             return
