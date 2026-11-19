@@ -2022,8 +2022,15 @@
             <input type="text" id="createNodeName" oninput="onNodeNameInput()" placeholder="输入节点名称" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
           </div>
           <div>
-            <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400 mb-1">服务端口</label>
-            <input type="number" id="createNodePort" placeholder="例如: 20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none">
+            <div class="flex items-center justify-between mb-1">
+              <div class="flex items-center gap-2">
+                <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400">服务端口</label>
+                <button type="button" onclick="randomizeCreateNodePort(true)" class="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 btn-tap" title="随机一个10000-60000未使用的空闲端口">
+                  <span>🎲 换一个</span>
+                </button>
+              </div>
+            </div>
+            <input type="number" id="createNodePort" placeholder="例如: 28419" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
           </div>
         </div>
         <div>
@@ -2441,6 +2448,7 @@
       if (sniInput && !sniInput.value) sniInput.value = 'addons.mozilla.org';
       toggleCreateNodeRelayFields();
       populateServerSelectForNode();
+      randomizeCreateNodePort(true);
       updateCreateNodeDefaultName();
       openModal('modalCreateNode');
     }
@@ -5512,6 +5520,11 @@
         }
         updateCreateNodeIpHint();
         updateCreateNodeDefaultName();
+        const curPort = parseInt(document.getElementById('createNodePort')?.value);
+        const used = getUsedPortsForServer(uuid);
+        if (!curPort || used.has(curPort)) {
+          randomizeCreateNodePort(true);
+        }
       } else {
         const input = document.getElementById('createNodeLandingServerSelect');
         const display = document.getElementById('createNodeLandingServerSelectName');
@@ -5642,15 +5655,54 @@
       initLucide();
     }
 
+    function getUsedPortsForServer(serverUuid) {
+      const used = new Set([22, 53, 80, 443, 8080, 8443, 9090, 25774, 25775]);
+      if (!serverUuid) return used;
+      (state.nodes || []).forEach(n => {
+        if (n.server_uuid === serverUuid && n.port) {
+          used.add(parseInt(n.port));
+        }
+        if (n.relay_server_uuid === serverUuid) {
+          if (n.relay_port) used.add(parseInt(n.relay_port));
+          else if (n.port) used.add(parseInt(n.port));
+        }
+      });
+      return used;
+    }
+
+    function getRandomUnusedPort(serverUuid, minPort = 10000, maxPort = 60000) {
+      const used = getUsedPortsForServer(serverUuid);
+      for (let i = 0; i < 200; i++) {
+        const p = Math.floor(Math.random() * (maxPort - minPort + 1)) + minPort;
+        if (!used.has(p)) return p;
+      }
+      for (let p = minPort; p <= maxPort; p++) {
+        if (!used.has(p)) return p;
+      }
+      return 20082;
+    }
+
+    function randomizeCreateNodePort(force = true) {
+      const srvUuid = document.getElementById('createNodeServerSelect')?.value;
+      const portInput = document.getElementById('createNodePort');
+      if (!portInput) return;
+      const cur = parseInt(portInput.value);
+      const used = getUsedPortsForServer(srvUuid);
+      if (!force && cur >= 10000 && cur <= 65535 && !used.has(cur)) {
+        return;
+      }
+      portInput.value = getRandomUnusedPort(srvUuid, 10000, 60000);
+      const portStatus = document.getElementById('createNodePortStatus');
+      if (portStatus) portStatus.innerHTML = '';
+    }
+
     function toggleProtocolFields() {
       // Automatic defaults
-      const p = document.getElementById('createNodeProtocol').value;
       const portInput = document.getElementById('createNodePort');
-      if (p === 'vless_reality') portInput.value = '20082';
-      else if (p === 'hysteria2') portInput.value = '20443';
-      else if (p === 'tuic') portInput.value = '20444';
-      else if (p === 'trojan') portInput.value = '20445';
-      else if (p === 'vmess_ws') portInput.value = '20080';
+      const cur = parseInt(portInput?.value);
+      if (!cur || cur < 1024 || cur > 65535) {
+        randomizeCreateNodePort(true);
+      }
       updateCreateNodeDefaultName();
     }
 
@@ -5707,7 +5759,11 @@
         relayPort = rPortVal ? parseInt(rPortVal) : 0;
       }
 
-      const port = parseInt(document.getElementById('createNodePort').value) || 20082;
+      let port = parseInt(document.getElementById('createNodePort').value);
+      if (!port || port < 1 || port > 65535) {
+        port = getRandomUnusedPort(finalServerUuid, 10000, 60000);
+        document.getElementById('createNodePort').value = port;
+      }
 
       // Anti-collision check: Ensure relay port does not conflict with existing native Sing-box node or another relay node on relay server
       if (isRelay) {

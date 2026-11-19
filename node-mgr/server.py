@@ -1522,6 +1522,44 @@ def get_reality_keypair():
 def get_short_id():
     return secrets.token_hex(4) # 8 chars hex
 
+def get_random_free_port(target_server_uuid, min_port=10000, max_port=60000):
+    reserved = {22, 53, 80, 443, 8080, 8443, 9090, 25774, 25775}
+    if target_server_uuid and os.path.exists(NODES_DB):
+        try:
+            conn = sqlite3.connect(NODES_DB)
+            c = conn.cursor()
+            c.execute("""
+                SELECT port, relay_port, server_uuid, relay_server_uuid 
+                FROM nodes 
+                WHERE enabled = 1 AND (server_uuid = ? OR relay_server_uuid = ?)
+            """, (target_server_uuid, target_server_uuid))
+            for row in c.fetchall():
+                p, rp, s_uuid, rs_uuid = row
+                if s_uuid == target_server_uuid and p:
+                    try: reserved.add(int(p))
+                    except: pass
+                if rs_uuid == target_server_uuid:
+                    if rp:
+                        try: reserved.add(int(rp))
+                        except: pass
+                    elif p:
+                        try: reserved.add(int(p))
+                        except: pass
+            conn.close()
+        except Exception as e:
+            print(f"Error fetching used ports for {target_server_uuid}: {e}")
+
+    for _ in range(300):
+        cand = random.randint(min_port, max_port)
+        if cand not in reserved:
+            return cand
+
+    for cand in range(min_port, max_port + 1):
+        if cand not in reserved:
+            return cand
+
+    return 20082
+
 def parse_proxy_link(link):
     link = link.strip()
     if not link:
@@ -7801,7 +7839,12 @@ rules:
                 return
 
             protocol = body.get("protocol", "vless_reality")
-            port = int(body.get("port") or secrets.randbelow(45000) + 15000)
+            raw_port = body.get("port")
+            if not raw_port or int(raw_port or 0) <= 0:
+                port = get_random_free_port(server_uuid, 10000, 60000)
+            else:
+                port = int(raw_port)
+
             u = body.get("uuid_or_passwd") or str(uuid.uuid4())
             sni = body.get("sni") or "addons.mozilla.org"
             flow = body.get("flow", "xtls-rprx-vision") if protocol == "vless_reality" else ""
@@ -7816,7 +7859,14 @@ rules:
             relay_server_uuid = str(body.get("relay_server_uuid") or "").strip()
             relay_server_name = str(body.get("relay_server_name") or "").strip()
             relay_server_ip = str(body.get("relay_server_ip") or "").strip()
-            relay_port = int(body.get("relay_port") or port)
+            raw_relay_port = body.get("relay_port")
+            if is_relay:
+                if not raw_relay_port or int(raw_relay_port or 0) <= 0:
+                    relay_port = get_random_free_port(relay_server_uuid, 10000, 60000)
+                else:
+                    relay_port = int(raw_relay_port)
+            else:
+                relay_port = port
             source_node_id = body.get("source_node_id")
 
             # Inherit existing credentials if source_node_id is provided or landing server already has a node on this port

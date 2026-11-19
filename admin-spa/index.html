@@ -2071,13 +2071,18 @@
           </div>
           <div id="createNodePortRow">
             <div class="flex items-center justify-between mb-1">
-              <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400">服务端口</label>
+              <div class="flex items-center gap-2">
+                <label id="createNodePortLabel" class="block font-semibold text-slate-600 dark:text-slate-400">服务端口</label>
+                <button type="button" onclick="randomizeCreateNodePort(true)" class="text-[11px] text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 font-semibold flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded-md hover:bg-blue-50 dark:hover:bg-blue-950/30 btn-tap" title="随机一个10000-60000未使用的空闲端口">
+                  <span>🎲 换一个</span>
+                </button>
+              </div>
               <button type="button" onclick="checkCurrentNativePortReachability()" id="btnCheckNativePort" class="text-[11px] text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 font-semibold flex items-center gap-1 transition-colors px-2 py-0.5 rounded-lg hover:bg-purple-50 dark:hover:bg-purple-950/30 btn-tap" title="检测该端口公网映射与连通性">
                 <i data-lucide="zap" class="w-3.5 h-3.5"></i>
                 <span id="btnCheckNativePortText">测公网通不通</span>
               </button>
             </div>
-            <input type="number" id="createNodePort" oninput="const s=document.getElementById('createNodePortStatus'); if(s) s.innerHTML='';" placeholder="20082" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
+            <input type="number" id="createNodePort" oninput="const s=document.getElementById('createNodePortStatus'); if(s) s.innerHTML='';" placeholder="例如: 28419" class="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-800 focus:outline-none font-mono">
             <div id="createNodePortStatus" class="mt-1"></div>
           </div>
           <div>
@@ -2611,6 +2616,7 @@
       if (relayPortStatus) relayPortStatus.innerHTML = '';
 
       switchCreateNodeMode(initialMode, targetLandingNodeId);
+      randomizeCreateNodePort(true);
       openModal('modalCreateNode');
     }
     function openImportNodeModal() { openModal('modalImportNode'); }
@@ -5933,6 +5939,11 @@
         if (portStatus) portStatus.innerHTML = '';
         updateCreateNodeIpHint();
         updateCreateNodeDefaultName();
+        const curPort = parseInt(document.getElementById('createNodePort')?.value);
+        const used = getUsedPortsForServer(uuid);
+        if (!curPort || used.has(curPort)) {
+          randomizeCreateNodePort(true);
+        }
       } else if (currentPickerTarget === 'relay_entry') {
         const input = document.getElementById('createRelayServerUuid');
         const display = document.getElementById('createRelayServerName');
@@ -6156,31 +6167,52 @@
       }
     }
 
+    function getUsedPortsForServer(serverUuid) {
+      const used = new Set([22, 53, 80, 443, 8080, 8443, 9090, 25774, 25775]);
+      if (!serverUuid) return used;
+      (state.nodes || []).forEach(n => {
+        if (n.server_uuid === serverUuid && n.port) {
+          used.add(parseInt(n.port));
+        }
+        if (n.relay_server_uuid === serverUuid) {
+          if (n.relay_port) used.add(parseInt(n.relay_port));
+          else if (n.port) used.add(parseInt(n.port));
+        }
+      });
+      return used;
+    }
+
+    function getRandomUnusedPort(serverUuid, minPort = 10000, maxPort = 60000) {
+      const used = getUsedPortsForServer(serverUuid);
+      for (let i = 0; i < 200; i++) {
+        const p = Math.floor(Math.random() * (maxPort - minPort + 1)) + minPort;
+        if (!used.has(p)) return p;
+      }
+      for (let p = minPort; p <= maxPort; p++) {
+        if (!used.has(p)) return p;
+      }
+      return 20082;
+    }
+
+    function randomizeCreateNodePort(force = true) {
+      const srvUuid = document.getElementById('createNodeServerSelect')?.value;
+      const portInput = document.getElementById('createNodePort');
+      if (!portInput) return;
+      const cur = parseInt(portInput.value);
+      const used = getUsedPortsForServer(srvUuid);
+      if (!force && cur >= 10000 && cur <= 65535 && !used.has(cur)) {
+        return;
+      }
+      portInput.value = getRandomUnusedPort(srvUuid, 10000, 60000);
+      const portStatus = document.getElementById('createNodePortStatus');
+      if (portStatus) portStatus.innerHTML = '';
+    }
+
     function autoSuggestRelayPort() {
       const relayUuid = document.getElementById('createRelayServerUuid')?.value;
-      const targetId = parseInt(document.getElementById('createRelayTargetNodeSelect')?.value);
-      const targetNode = (state.nodes || []).find(n => n.id === targetId);
-      const landingPort = targetNode ? targetNode.port : 20082;
-
-      const usedPorts = new Set();
-      (state.nodes || []).forEach(n => {
-        if (n.server_uuid === relayUuid && !n.is_relay && n.port) usedPorts.add(n.port);
-        if (n.relay_server_uuid === relayUuid && (n.relay_port || n.port)) usedPorts.add(n.relay_port || n.port);
-      });
-
-      const candidates = [11101, 11102, 11103, 11104, 11105, 20082, 22202, 25776, 30082, 40082];
-      let recommended = candidates.find(p => !usedPorts.has(p));
-      if (!recommended) {
-        for (let p = 11100; p < 11300; p++) {
-          if (!usedPorts.has(p)) {
-            recommended = p;
-            break;
-          }
-        }
-      }
-
+      const recommended = getRandomUnusedPort(relayUuid, 10000, 60000);
       const portInput = document.getElementById('createRelayPort');
-      if (portInput) portInput.value = recommended || 11102;
+      if (portInput) portInput.value = recommended;
       onRelayPortInputChange();
     }
 
@@ -6368,13 +6400,11 @@
 
     function toggleProtocolFields() {
       // Automatic defaults
-      const p = document.getElementById('createNodeProtocol').value;
       const portInput = document.getElementById('createNodePort');
-      if (p === 'vless_reality') portInput.value = '20082';
-      else if (p === 'hysteria2') portInput.value = '20443';
-      else if (p === 'tuic') portInput.value = '20444';
-      else if (p === 'trojan') portInput.value = '20445';
-      else if (p === 'vmess_ws') portInput.value = '20080';
+      const cur = parseInt(portInput?.value);
+      if (!cur || cur < 1024 || cur > 65535) {
+        randomizeCreateNodePort(true);
+      }
       updateCreateNodeDefaultName();
     }
 
@@ -6390,7 +6420,11 @@
       }
       const serverName = srv.name || '';
       const serverIp = srv.custom_ip || srv.ipv4 || srv.ipv6 || '';
-      const port = parseInt(document.getElementById('createNodePort').value) || 20082;
+      let port = parseInt(document.getElementById('createNodePort').value);
+      if (!port || port < 1 || port > 65535) {
+        port = getRandomUnusedPort(srvUuid, 10000, 60000);
+        document.getElementById('createNodePort').value = port;
+      }
       const proto = document.getElementById('createNodeProtocol')?.value || 'vless_reality';
 
       // Anti-collision check on server (both direct and relay nodes)
