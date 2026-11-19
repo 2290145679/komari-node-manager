@@ -2880,6 +2880,9 @@
           updateProbeStats(res);
           renderServersGrid();
           document.getElementById('badgeServerCount').textContent = res.servers.length;
+          if (state.pingTasks && state.pingTasks.length > 0) {
+            renderPingTasks();
+          }
         }
       } catch (e) {
         if (!quiet) console.error('Load servers error:', e);
@@ -5133,6 +5136,9 @@
         const res = await fetch('/api/node-mgr/ping-tasks').then(r => r.json());
         if (res.ok && res.tasks) {
           state.pingTasks = res.tasks;
+          if (res.total_servers !== undefined) {
+            state.totalServers = res.total_servers;
+          }
           renderPingTasks();
           const badge = document.getElementById('badgePingCount');
           if (badge) badge.textContent = res.tasks.length;
@@ -5151,13 +5157,16 @@
         container.innerHTML = `<div class="p-8 text-center text-xs text-slate-400 col-span-full">暂无配置的延迟测速任务，点击上方按钮新建</div>`;
         return;
       }
-      const totalLiveServers = (state.servers || []).length;
+      const totalLiveServers = (state.servers && state.servers.length > 0)
+        ? state.servers.length
+        : (state.totalServers || (state.servers || []).length);
 
       container.innerHTML = state.pingTasks.map(t => {
         const validServers = (t.clients || []).map(u => (state.servers || []).find(s => s.uuid === u)).filter(Boolean);
         let clientDesc = '';
         if (t.all_clients) {
-          clientDesc = `全网所有在线服务器 (${totalLiveServers} 台)`;
+          const count = totalLiveServers > 0 ? totalLiveServers : ((t.clients && t.clients.length > 0) ? t.clients.length : 0);
+          clientDesc = count > 0 ? `全网所有在线服务器 (${count} 台)` : `全网所有在线服务器`;
         } else if (validServers.length > 0) {
           const namesStr = validServers.map(s => s.name).slice(0, 2).join(', ') + (validServers.length > 2 ? ` 等${validServers.length}台` : '');
           clientDesc = `已指定 ${validServers.length} 台 (${namesStr})`;

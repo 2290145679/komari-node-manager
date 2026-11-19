@@ -1177,14 +1177,7 @@ def sync_ping_tasks_all_clients():
 
         if updated_count > 0:
             conn_k.commit()
-            # Trigger background restart of komari so Go in-memory scheduler loads clean servers list
-            def _async_reload_komari():
-                time.sleep(1)
-                try:
-                    subprocess.run("sudo systemctl restart komari", shell=True)
-                except Exception as ex:
-                    print(f"Error restarting komari service: {ex}")
-            threading.Thread(target=_async_reload_komari, daemon=True).start()
+            print(f"[PingSync] Safely updated ping_tasks in DB (updated {updated_count} tasks, probe daemon kept running)")
         conn_k.close()
         return updated_count
     except Exception as e:
@@ -5832,6 +5825,7 @@ rules:
                 print(f"Error in sync_ping_tasks_all_clients: {e}")
 
             tasks = []
+            valid_uuids = set()
             if os.path.exists(KOMARI_DB):
                 conn_k = sqlite3.connect(KOMARI_DB)
                 c_k = conn_k.cursor()
@@ -5859,7 +5853,7 @@ rules:
                         "interval": r[7] or 60
                     })
                 conn_k.close()
-            self._send_json({"ok": True, "tasks": tasks})
+            self._send_json({"ok": True, "tasks": tasks, "total_servers": len(valid_uuids)})
             return
 
         if path in ["/api/system/configs", "/api/node-mgr/system/configs"]:
